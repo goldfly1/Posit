@@ -1,0 +1,254 @@
+---
+title: "Posit Architecture"
+type: architecture
+tags: [posit, architecture, pipeline, dafny]
+component: core
+version: 1.0.0
+last_updated: 2026-08-06
+---
+
+# Posit Architecture
+
+## Identity
+
+Posit is a spec compiler. The architect posits contracts (requires/ensures). Z3 confirms or denies. The code that survives is proven. Nothing ships unproven.
+
+## Design Principles
+
+1. **Spec before code** — Dafny contracts are written before implementation. The exoskeleton comes first.
+2. **Proof is the test** — Z3 verification replaces test generation for verified modules. No test stubs, no edge case patterns, no QA test code.
+3. **Pure logic in Dafny, I/O in C#** — The proof boundary is the function signature. Side effects stay outside the proof.
+4. **Partial verification is success** — Verified modules skip QA. Unverified modules fall through to traditional QA.
+5. **Deterministic judgment** — Z3 doesn't guess. It proves or it doesn't. No model quality lottery on verification.
+6. **Small modules** — 200 lines max per Dafny module. Forces decomposition. Tractable proofs.
+7. **Wiki-driven** — 2,147 proven Dafny examples in the wiki. The model learns by imitation, not by guessing.
+
+## Pipeline
+
+```
+Ideation → Architecture → API Definition → Pseudocode → Design Review
+  → Dafny Contracts (architect writes .dfy skeletons with requires/ensures)
+  → Implementation (Imp fills Dafny bodies, Z3 verifies, translate cs)
+  → QA (compile translated C#, test unverified modules only)
+  → Deployment → Observability → Documentation
+```
+
+### Phase Detail
+
+| Phase | Model | Input | Output | Notes |
+|-------|-------|-------|--------|-------|
+| Ideation | deepseek-v4-pro:cloud | User request | Requirements doc | Module registry pre-selection |
+| Architecture | deepseek-v4-pro:cloud | Requirements | Architecture contract with module classification (dafny/io-shell) + Dafny contracts | Architect writes .dfy skeletons |
+| API Definition | deterministic | Architecture | API spec | No model call |
+| Pseudocode | deterministic | Architecture + API | Module specs | No model call |
+| Design Review | deepseek-v4-pro:cloud | Accumulated design | Approve/reject | Independent review gate |
+| Dafny Contracts | deterministic + Z3 | Architecture | Verified .dfy skeleton files on disk | Z3 verifies the spec is sound (contracts without bodies) |
+| Implementation | deepseek-v4-pro:cloud | .dfy skeletons + wiki | Dafny bodies filled in, Z3 verified, translated C# | Multi-pass: skeleton check → body fill → Z3 verify → translate |
+| QA | glm-5.2:cloud | Translated C# + unverified modules | Build + test results | Verified modules: compile only. Unverified: full test generation. |
+| Deployment | deterministic | Implementation | Deployment manifest | No model call |
+| Observability | deterministic | Deployment | Observability config | No model call |
+| Documentation | deepseek-v4-pro:cloud | All artifacts | Docs | |
+
+### Model Calls: 4 (down from Shepherd's 4, but fundamentally different)
+- Ideation, Architecture, Implementation, QA (for unverified only)
+- Design Review, Documentation: 2 more if counted
+- 6 deterministic phases: API Definition, Pseudocode, Dafny Contracts, Deployment, Observability, + Z3 verification
+
+## Module Classification
+
+The architect classifies each module as one of:
+
+### `dafny` — Pure Logic (Verified)
+- Parsing, validation, transformation, generation, business rules
+- No I/O, no side effects, no external state
+- Gets a `.dfy` skeleton with contracts
+- Imp writes Dafny bodies
+- Z3 verifies
+- `dafny translate cs` produces C#
+- QA compiles only (no tests)
+
+### `io-shell` — I/O Wrapper (Unverified)
+- File reading, console output, database connection, HTTP client
+- Side effects, external state, framework calls
+- Gets a C# type shell (existing Shepherd pattern)
+- Imp writes C# bodies
+- Build judge checks compilation
+- QA generates tests (existing behavior)
+
+### `mixed` — Partial (Split into dafny + io-shell)
+- Config loader (file I/O + parsing)
+- Split into: `ConfigParser` (dafny — pure parsing) + `ConfigFileReader` (io-shell — file I/O)
+- Each piece goes through its respective pipeline
+
+## Dafny Contract Format
+
+```dafny
+// Module: CsvParser
+// Responsibility: Parse CSV lines into typed rows
+
+module CsvParser {
+
+  datatype DataType = Integer | Float | Date | Boolean | Varchar
+
+  class CsvParser {
+    var delimiter: char
+    var quote: char
+
+    predicate Valid() reads this
+      { delimiter != '\000' }
+
+    constructor(delimiter: char, quote: char)
+      ensures Valid()
+    { }
+
+    method ParseLine(line: string) returns (fields: seq<string>)
+      requires Valid()
+      requires |line| > 0
+      ensures |fields| >= 1
+      ensures forall i :: 0 <= i < |fields| ==> fields[i] != null
+    { } // Imp fills in the body
+  }
+}
+```
+
+## I/O Shell Pattern
+
+```csharp
+// io-shell module — C#, not verified
+public class CsvFileReader
+{
+    public string ReadAllText(string path)
+        => File.ReadAllText(path);
+}
+
+// dafny module — translated to C# by dafny translate cs
+// The translated code calls into the proof-verified logic
+// The I/O shell calls the translated code
+public class CsvProgram
+{
+    public void Run(string filePath)
+    {
+        var reader = new CsvFileReader();       // io-shell
+        var content = reader.ReadAllText(filePath); // io-shell
+        var parser = new CsvParser(',', '"');    // translated Dafny
+        var rows = parser.ParseLine(content);    // proven correct
+    }
+}
+```
+
+## Limits and Boundaries
+
+### Per-Module Dafny Source
+- Max 200 lines
+- Max 10 methods/functions
+- Max 5 classes/datatypes
+- Max 3 requires/ensures per method
+
+### Prompt Budgets
+| Phase | System Prompt Cap | Wiki Cap | Other |
+|-------|-------------------|----------|-------|
+| Architecture | 16K | 8K | — |
+| Dafny Contracts | 8K | 4K | Syntax ref 2K |
+| Implementation (Dafny) | 16K | 4K | Contract file on disk |
+| Implementation (C# I/O) | 32K | 8K | Type shell on disk |
+| QA | 32K | 4K | Edge cases 4K |
+
+### Z3 Verification
+- `--verification-time-limit 30` (default)
+- `--standard-libraries` (enable Std imports)
+- `--resource-limit` configurable
+
+### Output Tokens
+- Dafny generation: 16K max
+- C# generation: 64K max (existing)
+- QA generation: 64K max (existing)
+
+## Agent Model Assignments
+
+| Task | Model | Rationale |
+|------|-------|-----------|
+| Ideation | deepseek-v4-pro:cloud | Better reasoning for decomposition |
+| Architecture (Dafny contracts) | deepseek-v4-pro:cloud | Formal spec writing |
+| Design Review | deepseek-v4-pro:cloud | Independent review |
+| Implementation (Dafny bodies) | deepseek-v4-pro:cloud | Proven 2/5 on first run, improving with wiki |
+| Implementation (C# I/O shells) | glm-5.2:cloud | Existing behavior, works fine |
+| QA (test generation) | glm-5.2:cloud | Existing behavior |
+| Documentation | deepseek-v4-pro:cloud | Better prose |
+| File ops, wiki search | local ollama | Fast, no reasoning |
+
+## Project Structure
+
+```
+Posit/
+  src/
+    Posit.Contracts/        # Artifacts, enums, interfaces
+    Posit.Core/              # FSM, state machine, session
+    Posit.Data/              # DB, repositories, migrations
+    Posit.AI/                 # Model gateway, prompt registry, context manager
+    Posit.Phases/             # All phase implementations
+      DafnyContractsPhase.cs
+      ImplementationPhase.cs  # Modified for Dafny-first
+      QaPhase.cs             # Modified for verified module skip
+      ...
+    Posit.Tools/             # Build engine, staging, Z3 runner
+    Posit.Cli/                # CLI entry point
+    Posit.Web/                # Dashboard (Blazor)
+  tests/
+  prompts/
+    ideation/
+    architecture/            # Dafny contract writing prompt
+    dafny/                   # Dafny body writing prompt
+    implementation/          # C# I/O shell prompt
+    qa/
+    ...
+  wiki/
+    plans/
+    patterns/
+    architecture/
+    contracts/               # Dafny contract templates per module type
+  migrations/
+```
+
+## What's Different from Shepherd
+
+| Aspect | Shepherd | Posit |
+|--------|----------|-------|
+| Spec language | C# type signatures | Dafny contracts (requires/ensures) |
+| Implementation language | C# | Dafny (for logic) + C# (for I/O) |
+| Verification | Build judge (compilation) | Z3 (formal proof) + build judge |
+| QA | Generate tests for all modules | Compile translated C#, test unverified only |
+| Test stubs | All modules | Unverified modules only |
+| Edge cases | All modules | Unverified modules only |
+| Correction signal | Compiler errors | Z3 proof failures (exact clause + counterexample) |
+| Wiki | C# patterns + edge cases | C# patterns + 2,147 Dafny examples |
+| Module classification | None | dafny / io-shell / mixed |
+
+## Implementation Steps
+
+### Step 1: Project Structure
+- Solution, projects, build system
+- Reuse Shepherd's infrastructure (FSM, state machine, DB, migrations)
+- New: DafnyContractsPhase, modified ImplementationPhase, modified QaPhase
+
+### Step 2: Dafny Contracts Phase
+- Architect writes .dfy skeletons with contracts
+- Z3 verifies skeleton (contracts without bodies)
+- .dfy files written to disk
+
+### Step 3: Dafny-first Implementation
+- Imp fills in Dafny bodies
+- Z3 verifies complete program
+- `dafny translate cs` produces C#
+- C# I/O shells implemented normally
+
+### Step 4: Modified QA
+- Verified modules: compile translated C# only
+- Unverified modules: full test generation (existing behavior)
+
+### Step 5: Limits and Budgets
+- 200-line cap, 10 method cap, 5 class cap per Dafny module
+- Prompt budgets per phase
+
+### Step 6: Trial
+- End-to-end Dafny-first pipeline run
+- Compare: modules verified, verification rate, QA prompt size, total pipeline time

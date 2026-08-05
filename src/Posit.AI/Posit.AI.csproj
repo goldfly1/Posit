@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Posit.AI</RootNamespace>
+    <AssemblyName>Posit.AI</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

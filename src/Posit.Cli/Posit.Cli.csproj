@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Posit.Cli</RootNamespace>
+    <AssemblyName>Posit.Cli</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
+    <ProjectReference Include="..\Posit.Core\Posit.Core.csproj" />
+    <ProjectReference Include="..\Posit.Data\Posit.Data.csproj" />
+    <ProjectReference Include="..\Posit.AI\Posit.AI.csproj" />
+    <ProjectReference Include="..\Posit.Phases\Posit.Phases.csproj" />
+    <ProjectReference Include="..\Posit.Tools\Posit.Tools.csproj" />
+    <ProjectReference Include="..\Posit.Web\Posit.Web.csproj" />
+  </ItemGroup>
+
+</Project>

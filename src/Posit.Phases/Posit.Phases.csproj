@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Posit.Phases</RootNamespace>
+    <AssemblyName>Posit.Phases</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
+    <ProjectReference Include="..\Posit.AI\Posit.AI.csproj" />
+    <ProjectReference Include="..\Posit.Tools\Posit.Tools.csproj" />
+  </ItemGroup>
+
+</Project>

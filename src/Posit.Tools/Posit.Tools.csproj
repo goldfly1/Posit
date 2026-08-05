@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Posit.Tools</RootNamespace>
+    <AssemblyName>Posit.Tools</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
+    <ProjectReference Include="..\Posit.Data\Posit.Data.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,11 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.cache
+
+# Rider/VS
+.idea/
+*.swp
