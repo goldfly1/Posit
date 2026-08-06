@@ -67,6 +67,15 @@ Implementation is split into two passes. One spec, two passes. The architect's D
 - For unverified modules: full test generation (existing behavior)
 - `IsVerified` flag already wired — QA already skips stubs/edges
 
+### Imp Appeal Process (NEW)
+- When QA fails an io-shell module, Imp can appeal with a reason
+- Appeal goes to kimi-2.7-code:cloud (independent — hasn't touched code or tests)
+- Kimi reads architect spec + Imp code + QA test + appeal reason
+- Decision: test wrong (QA rewrites) OR code wrong (Imp fixes) OR both
+- Max 1 appeal per module, then REVIEW_GATE (human)
+- Only io-shell modules — Dafny modules have Z3 as judge, no appeal possible
+- Tracking: monitor if appeal improves workflow, mitigates tokens, both, or neither
+
 ## Module Classification
 
 | Type | Dafny? | Example |
@@ -137,6 +146,7 @@ The I/O is outside the proof boundary.
 | C# shell writing (Pass 2) | glm-5.2:cloud | Plugs into extern portals, wires I/O to translated Dafny |
 | File operations, wiki search | local ollama | Fast, no reasoning needed |
 | QA test generation | glm-5.2:cloud | Tests unprovable modules, knows module intent |
+| Imp appeal reviewer | kimi-2.7-code:cloud | Independent arbiter — hasn't touched io-shell code or QA tests |
 
 ## Implementation Steps
 
@@ -187,3 +197,4 @@ The I/O is outside the proof boundary.
 10. **FSM inherits Shepherd's states** — same escalation chain, new transitions for Dafny skeleton/body verification.
 11. **C# only** — multi-target is future. No target-language abstraction now.
 12. **Determinism is target-specific** — not a core property. Only relevant if Rust target is added.
+13. **Imp appeal process for io-shell modules** — kimi-2.7-code:cloud reviews appeals. Max 1 per module. Architect spec is the source of truth. Under observation: does it improve workflow, mitigate tokens, or neither?

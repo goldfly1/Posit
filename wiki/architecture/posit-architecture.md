@@ -227,6 +227,7 @@ public class CsvProgram
 | Implementation (Dafny bodies — Pass 1) | deepseek-v4-pro:cloud | Proven 2/5, understands architect's contract intent |
 | Implementation (C# shells — Pass 2) | glm-5.2:cloud | Plugs into extern portals, wires I/O to translated Dafny |
 | QA (test generation) | glm-5.2:cloud | Architect knows module intent, well-positioned for unprovable module tests |
+| Imp appeal reviewer | kimi-2.7-code:cloud | Independent — hasn't touched io-shell code or QA tests. Reads architect spec as arbiter. |
 | Documentation | deepseek-v4-pro:cloud | Better prose |
 | File ops, wiki search | local ollama | Fast, no reasoning |
 
@@ -311,6 +312,10 @@ Idle → Planning → Active → Validating → Retry → CheckpointRollback →
 | `dafny.body_verified` | Validating | Planning | Advances to QA |
 | `module.downgraded` | Active | Active | Module reclassified io-shell, pipeline continues |
 | `dafny.translated_cs` | Validating | Planning | Translated C# dropped into project, advances |
+| `qa.appeal_filed` | Validating | Active | Imp appeals QA failure on io-shell module — appeal reviewer called |
+| `qa.appeal_upheld` | Active | Planning | Appeal reviewer says test is wrong — QA rewrites test, re-runs |
+| `qa.appeal_denied` | Active | Retry | Appeal reviewer says code is wrong — Imp fixes code, QA re-runs |
+| `qa.appeal_exhausted` | Retry | ReviewGate | Max 1 appeal per module reached — human review gate |
 
 **Loopback counter:** `LoopbackCount` on `SessionState` tracks Architecture→Dafny Contracts round-trips. Capped at 2.
 
@@ -321,6 +326,49 @@ C# now. Multi-target (Rust, Go, Java, JS, Python) is a future aspiration, not a 
 ## Determinism Stance
 
 Determinism is a target-specific concern, not a core property of Posit. The `--enforce-determinism` flag is relevant only if/when a Rust target is added. For C# output, standard Dafny translation is sufficient. Proofs are deterministic (Z3); translated code follows the target language's semantics.
+
+## Imp Appeal Process
+
+When QA fails an io-shell module and Imp believes the test is wrong (not the code), Imp can appeal. The appeal goes to an independent reviewer model that wasn't involved in writing the code or the test.
+
+**Only io-shell modules can appeal.** Dafny modules have no QA tests — Z3 is the judge, the proof is the test, there's nothing to dispute.
+
+### Flow
+
+```
+QA fails io-shell module
+  → Imp appeals with reason ("test expects X but spec says Y")
+  → Appeal reviewer (kimi-2.7-code:cloud) reads:
+      - Architect's Component spec (responsibility, test cases, public surface)
+      - Imp's C# code
+      - QA's test
+      - Imp's appeal reason
+  → Decision: test is wrong (QA rewrites test) OR code is wrong (Imp fixes) OR both
+  → Max 1 appeal per module, then REVIEW_GATE (human)
+```
+
+### Model Assignment
+
+| Role | Model | Why |
+|------|-------|-----|
+| Appeal reviewer | kimi-2.7-code:cloud | Already the independent reviewer (Design Review). Hasn't touched io-shell code or QA tests. Reads the spec as arbiter. |
+
+### Constraints
+
+- One extra model call, only on appeal, only for io-shell modules
+- Max 1 appeal per module — second failure goes to REVIEW_GATE
+- The appeal reviewer sees the architect's spec as the source of truth, not Imp's interpretation or QA's test
+- Traffic goes through the same Ollama interface — no new infrastructure
+
+### Tracking
+
+We will monitor whether the appeal process:
+- Improves workflow (fewer false QA failures, less rework)
+- Mitigates token use (cheaper to appeal than to retry the full QA loop)
+- Both
+- Neither (appeal cost exceeds retry cost, and we remove it)
+
+This is an investment under observation, not a permanent fixture.
 
 ## What's Different from Shepherd
 
