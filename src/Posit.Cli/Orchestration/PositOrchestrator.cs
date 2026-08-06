@@ -49,8 +49,14 @@ public sealed class PositOrchestrator
 
         // Build dependency graph from phase dependencies
         var phaseIds = profile.Phases;
+        // Only include dependencies that are in the profile's phase set.
+        // This allows running a subset of phases (e.g., just architecture)
+        // without requiring all upstream phases to be included.
+        var phaseSet = phaseIds.ToHashSet();
         var deps = phaseIds
-            .Select(p => _phases.TryGetValue(p, out var phase) ? phase.Dependencies : [])
+            .Select(p => _phases.TryGetValue(p, out var phase)
+                ? phase.Dependencies.Where(d => phaseSet.Contains(d)).ToArray()
+                : [])
             .ToArray();
         var graph = _graphEngine.Build(phaseIds, deps);
 
