@@ -1,0 +1,83 @@
+# AGENTS.md
+
+## Project
+
+**Posit** — a spec compiler. The architect posits contracts (requires/ensures). Z3 confirms or denies. The code that survives is proven. Nothing ships unproven.
+
+## Repos
+
+- **Posit:** `C:\Users\goldf\Posit\` — this repo
+- **Shepherd (reference):** `C:\Users\goldf\orch\` — working pipeline with Dafny phase, QA budget fix, wiki search
+
+## Status
+
+18+ commits, 8 projects, build clean (0 errors, 0 warnings). 6 of 11 phases built. Pipeline runs end-to-end with DB persistence. Data capture live (prompts_log, audit_events, artifacts, sessions).
+
+## Git
+
+- Git repo root: `C:\Users\goldf\Posit\` (separate from Shepherd)
+- Remote: `https://github.com/goldfly1/Posit.git`
+- Branch: `master`
+
+## Toolchain
+
+- **.NET SDK 10.0.302** — target framework `net10.0`
+- **Dafny:** 4.11.0 at `C:\Users\goldf\.dotnet\tools\dafny.exe`
+- **Z3:** 4.12.1 at `C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe`
+- **Ollama:** localhost:11434 — all model calls go through here
+- **PostgreSQL 18 + pgvector:** Docker container on port 5434, `shepherd` database (shared with Posit for wiki)
+- **Shell:** git-bash (MSYS), POSIX syntax. NOT PowerShell.
+- **Kill dotnet:** `powershell.exe -Command "Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`
+
+## Locked Decisions
+
+1. **Ollama-only** — all model calls through localhost:11434. No provider abstraction. `:cloud` suffix is just an Ollama tag.
+2. **Models:** `deepseek-v4-pro:cloud` (Architecture, Dafny Implementation), `kimi-2.7-code:cloud` (Design Review, Imp Appeal — NOT YET REGISTERED in Ollama), `glm-5.2:cloud` (C# Implementation, QA)
+3. **Bodyless methods with `{:axiom}`** — skeletons have no method bodies. Empty `{ }` fails verification.
+4. **`{:extern}` portals** — I/O stubs in Dafny. Z3 assumes contract. `dafny translate cs` produces `partial class` holes.
+5. **Two-pass implementation** — Pass 1: Dafny bodies (dsv4pro). Pass 2: C# plugs into extern portals (glm).
+6. **C# only** — multi-target is future. No target-language abstraction.
+7. **Determinism is target-specific** — not a core property.
+8. **Skeleton correction loops back to Architecture** — max 2 loopbacks, then downgrade to io-shell.
+9. **Mixed modules split at Architecture** — architect outputs two Component records.
+10. **Imp appeal for io-shell only** — Dafny modules have Z3 as judge, no appeal. Kimi reviews appeals (max 1 per module).
+
+## Pipeline
+
+```
+Ideation → Architecture → API Definition → Pseudocode → Design Review
+  → Dafny Contracts (Z3 verifies skeletons)
+  → Dafny Implementation (Pass 1: fill bodies, Z3 verify, translate cs)
+  → C# Implementation (Pass 2: plug into extern portals, wire I/O)
+  → QA (compile verified, test unverified)
+  → Deployment → Observability → Documentation
+```
+
+## Project Structure
+
+```
+Posit/
+  src/
+    Posit.Contracts/     # Artifacts, enums, interfaces, IDs, DesignContext
+    Posit.Core/           # FSM, state machine, dependency graph
+    Posit.Data/           # DB, repositories, migrations, PromptLogger
+    Posit.AI/              # OllamaModelGateway
+    Posit.Phases/          # 6 phases built (Architecture, DafnyContracts, DafnyImpl, C#Impl, QA)
+    Posit.Tools/           # Z3Runner, BuildJudge
+    Posit.Cli/             # CLI + Orchestrator
+    Posit.Web/             # Blazor dashboard (stub)
+  prompts/                 # Phase prompts (copied to build output)
+  migrations/              # 6 SQL migrations
+  wiki/                    # Architecture, plans, contracts, handoff
+```
+
+## Data Capture
+
+Every model call is captured to `posit_qa.prompts_log`. Every phase transition to `posit_audit.events`. Every artifact to `posit_artifacts.artifacts`. Session state to `posit_state.sessions`. Dafny results to `posit_qa.dafny_results`.
+
+## Key Documents
+
+- `wiki/architecture/posit-architecture.md` — full pipeline, phases, limits, model assignments, built infrastructure
+- `wiki/plans/dafny-first-pipeline-plan.md` — implementation steps (1-3d done, 4-5 remaining)
+- `wiki/contracts/dafny-contract-templates.md` — contract patterns + rules for the architect
+- `wiki/handoff-2026-08-07.md` — handoff sheet with commit history, proven items, roadmap

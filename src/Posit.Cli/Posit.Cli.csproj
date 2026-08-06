@@ -16,4 +16,8 @@
     <ProjectReference Include="..\Posit.Web\Posit.Web.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\prompts\**\*" CopyToOutputDirectory="PreserveNewest" Link="prompts\%(RecursiveDir)%(FileName)%(Extension)" />
+  </ItemGroup>
+
 </Project>

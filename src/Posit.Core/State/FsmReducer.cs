@@ -28,6 +28,7 @@ public sealed class FsmReducer
                 "phase.failed" => ApplyPhaseFailed(state, result),
                 "retry.dispatch" => ApplyRetryDispatch(state),
                 "rollback.to_phase" => ApplyRollbackToPhase(state),
+                "rollback.to_architecture" => ApplyRollbackToArchitecture(state),
                 "session.complete" => ApplySessionComplete(state),
                 "session.abort" => ApplySessionAbort(state),
                 _ => Reject(state, eventName, $"Unknown event: {eventName}")
@@ -139,13 +140,50 @@ public sealed class FsmReducer
         if (state.Status != SessionStatus.CheckpointRollback)
             return Reject(state, "rollback.to_phase", "Invalid event for state");
 
-        // Rollback to the phase that's being retried (current phase stays,
-        // attempt resets, correction signal is already set)
         var newState = state
             .WithStatus(SessionStatus.Active)
             .WithAttempt(1);
 
         return Ok(newState, ["rollback.completed"]);
+    }
+
+    /// <summary>
+    /// Rollback to Architecture phase. Used when Dafny Contracts skeleton
+    /// verification fails and the correction signal needs to go back to the
+    /// architect. Removes Architecture from completed phases so the dependency
+    /// graph re-schedules it. Increments LoopbackCount (max 2).
+    /// </summary>
+    private FsmTransitionResult ApplyRollbackToArchitecture(SessionState state)
+    {
+        if (state.Status != SessionStatus.CheckpointRollback)
+            return Reject(state, "rollback.to_architecture", "Invalid event for state");
+
+        if (state.LoopbackCount >= 2)
+        {
+            // Exhausted loopbacks — don't roll back, let the module downgrade to io-shell
+            var newState = state
+                .WithStatus(SessionStatus.Active)
+                .WithAttempt(1);
+            return Ok(newState, ["rollback.exhausted", "module.downgraded"]);
+        }
+
+        // Remove architecture from completed phases so it gets re-scheduled
+        var newCompleted = state.CompletedPhases
+            .Where(p => p.Value != "architecture")
+            .Where(p => p.Value != "dafny-contracts") // dafny-contracts too — it depends on architecture
+            .ToArray();
+
+        var rollbackState = state with
+        {
+            Status = SessionStatus.Planning,
+            CompletedPhases = newCompleted,
+            CurrentPhaseId = null,
+            CurrentPhaseStatus = null,
+            CurrentAttempt = 0,
+            LoopbackCount = state.LoopbackCount + 1
+        };
+
+        return Ok(rollbackState, ["rollback.to_architecture", "phase.checkpoint_rollback"]);
     }
 
     private FsmTransitionResult ApplySessionComplete(SessionState state)

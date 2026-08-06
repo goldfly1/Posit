@@ -117,11 +117,37 @@ public sealed class Z3Runner
         }
     }
 
+    /// <summary>
+    /// Staging directory for .dfy files and generated C#. Persists across
+    /// phases so Imp can find skeleton files from a prior phase. Uses
+    /// .posit/staging/ relative to the working directory.
+    /// </summary>
+    public static string StagingDirectory =>
+        Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging");
+
+    /// <summary>
+    /// Ensures the staging directory exists.
+    /// </summary>
+    public static void EnsureStagingDirectory()
+    {
+        Directory.CreateDirectory(StagingDirectory);
+    }
+
+    /// <summary>
+    /// Creates a staging path for a .dfy file.
+    /// </summary>
+    public static string GetDafnyStagingPath(string moduleName)
+    {
+        EnsureStagingDirectory();
+        var safeName = moduleName.Replace(".", "_").Replace("/", "_").Replace("\\", "_");
+        return Path.Combine(StagingDirectory, $"{safeName}.dfy");
+    }
+
     private string BuildVerifyArguments(string dafnyPath) =>
         $"verify \"{dafnyPath}\" --solver-path \"{_z3SolverPath}\"" +
         $" --verification-time-limit {_verificationTimeoutSeconds}" +
         " --standard-libraries";
 
     private string BuildTranslateArguments(string dafnyPath) =>
-        $"translate cs \"{dafnyPath}\" --solver-path \"{_z3SolverPath}\"";
+        $"translate cs \"{dafnyPath}\" --solver-path \"{_z3SolverPath}\" --include-runtime";
 }

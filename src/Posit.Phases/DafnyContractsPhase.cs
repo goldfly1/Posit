@@ -27,7 +27,7 @@ public sealed class DafnyContractsPhase : IPhase
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
     };
 
     private readonly Z3Runner _z3Runner;
@@ -176,8 +176,7 @@ public sealed class DafnyContractsPhase : IPhase
         string dafnySource,
         CancellationToken ct)
     {
-        var safeName = moduleName.Replace(".", "_").Replace("/", "_").Replace("\\", "_");
-        var dafnyPath = Path.Combine(Path.GetTempPath(), $"posit-dafny-{safeName}.dfy");
+        var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{moduleName}");
 
         await File.WriteAllTextAsync(dafnyPath, dafnySource, ct);
 

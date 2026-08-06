@@ -176,6 +176,9 @@ public sealed class PositOrchestrator
                 _artifacts[sessionId].Add(phaseResult.Artifacts);
                 Console.Error.WriteLine($"[Posit] Phase '{phaseId.Value}' completed. Artifacts: {_artifacts[sessionId].Count}");
 
+                // Snowball: update DesignContext with this phase's output
+                state = SnowballDesignContext(state, phaseId.Value, phaseResult.Artifacts);
+
                 // Persist artifact to DB
                 if (_artifactRepo is not null)
                 {
@@ -279,4 +282,105 @@ public sealed class PositOrchestrator
         "documentation" => "deepseek-v4-pro:cloud",
         _ => "glm-5.2:cloud" // default
     };
+
+    /// <summary>
+    /// Snowball: update DesignContext with each phase's output.
+    /// Architecture populates components. Dafny Contracts adds contract entries.
+    /// Dafny Implementation adds verification results. This is the compact
+    /// structured context that downstream phases read instead of raw JSON artifacts.
+    /// </summary>
+    private static SessionState SnowballDesignContext(SessionState state, string phaseId, ArtifactBundle artifact)
+    {
+        var current = state.DesignContext ?? new DesignContext();
+
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
+            var opts = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true
+            };
+
+            if (phaseId == "architecture" && artifact.Kind == ArtifactKind.ArchitectureContract)
+            {
+                var arch = JsonSerializer.Deserialize<ArchitectureContract>(json, opts);
+                if (arch?.Components is not null)
+                {
+                    current = current with
+                    {
+                        Components = arch.Components.Select(c => new DesignComponent(
+                            c.Id, c.Name, c.Responsibility, c.Tech,
+                            c.PublicSurface, c.Internals, c.Dependencies)
+                        {
+                            Classification = c.Classification,
+                            DafnyContractSource = c.DafnyContractSource,
+                            TestCases = c.TestCases?.Select(tc => new DesignTestCase(
+                                tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray() ?? []
+                        }).ToArray(),
+                        DataStores = arch.DataStores?.Select(ds => new DesignDataStore(
+                            ds.Id, ds.Name, ds.Kind.ToString(), ds.Schema)).ToArray() ?? [],
+                        DeploymentTopology = arch.DeploymentTopology,
+                        QualityAttributes = arch.QualityAttributes?.Select(qa =>
+                            new DesignQualityAttribute(qa.Attribute, qa.Target)).ToArray() ?? []
+                    };
+                    Console.Error.WriteLine($"[Posit] Snowball: DesignContext updated with {current.Components.Length} components from Architecture");
+                }
+            }
+            else if (phaseId == "dafny-contracts" && artifact.Kind == ArtifactKind.DafnyContract)
+            {
+                var contracts = JsonSerializer.Deserialize<DafnyContractResult[]>(json, opts);
+                if (contracts is not null)
+                {
+                    current = current with
+                    {
+                        DafnyContracts = contracts.Select(c => new DafnyContractEntry
+                        {
+                            ModuleName = c.ModuleName,
+                            DafnySource = c.DafnySource,
+                            IsVerified = c.IsVerified,
+                            VerificationOutput = c.VerificationOutput
+                        }).ToArray()
+                    };
+                    Console.Error.WriteLine($"[Posit] Snowball: DesignContext updated with {current.DafnyContracts.Length} Dafny contracts");
+                }
+            }
+            else if (phaseId == "dafny-implementation" && artifact.Kind == ArtifactKind.DafnyVerification)
+            {
+                var results = JsonSerializer.Deserialize<DafnyVerificationResult[]>(json, opts);
+                if (results is not null)
+                {
+                    // Update DafnyContracts with verification + translation results
+                    var existing = current.DafnyContracts?.ToDictionary(c => c.ModuleName) ?? new();
+                    foreach (var r in results)
+                    {
+                        if (existing.TryGetValue(r.ModuleName, out var entry))
+                            existing[r.ModuleName] = entry with
+                            {
+                                IsVerified = r.IsVerified,
+                                VerificationOutput = r.VerificationOutput,
+                                TranslatedCSharp = r.TranslatedCSharp
+                            };
+                        else
+                            existing[r.ModuleName] = new DafnyContractEntry
+                            {
+                                ModuleName = r.ModuleName,
+                                DafnySource = r.DafnySource,
+                                IsVerified = r.IsVerified,
+                                VerificationOutput = r.VerificationOutput,
+                                TranslatedCSharp = r.TranslatedCSharp
+                            };
+                    }
+                    current = current with { DafnyContracts = existing.Values.ToArray() };
+                    Console.Error.WriteLine($"[Posit] Snowball: DesignContext updated with {results.Length} Dafny verification results");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Posit] Snowball failed for {phaseId} (ignored): {ex.Message}");
+        }
+
+        return state.WithDesignContext(current);
+    }
 }

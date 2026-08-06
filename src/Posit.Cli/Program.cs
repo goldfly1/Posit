@@ -137,6 +137,8 @@ static async Task<int> RunCommand(string[] args)
         Console.Error.WriteLine($"[Posit] {applied.Count} migrations applied");
         artifactRepo = new ArtifactRepository(dataSource);
         stateStore = new StateStore(dataSource);
+        PromptLogger.Initialize(dataSource);
+        AuditRepository.Initialize(dataSource);
     }
     catch (Exception ex)
     {
@@ -189,6 +191,11 @@ static async Task<int> RunCommand(string[] args)
     Console.Error.WriteLine($"[Posit] === PIPELINE COMPLETE ===");
     Console.Error.WriteLine($"[Posit] Final status: {finalState.Status}");
     Console.Error.WriteLine($"[Posit] Completed phases: {string.Join(", ", finalState.CompletedPhases.Select(p => p.Value))}");
+
+    // Cost tracking
+    Console.Error.WriteLine($"[Posit] Total cost: {finalState.RunningCosts.AmountUsd:C}");
+    Console.Error.WriteLine($"[Posit] Input tokens: {finalState.RunningCosts.InputTokens:N0}");
+    Console.Error.WriteLine($"[Posit] Output tokens: {finalState.RunningCosts.OutputTokens:N0}");
 
     var artifacts = orchestrator.GetArtifacts(sessionId);
     Console.Error.WriteLine($"[Posit] Artifacts produced: {artifacts.Count}");

@@ -25,7 +25,7 @@ public sealed class DafnyImplementationPhase : IPhase
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
     };
 
     private readonly IModelGateway _gateway;
@@ -169,8 +169,7 @@ public sealed class DafnyImplementationPhase : IPhase
             }
 
             // Write Dafny source to temp file and verify
-            var safeName = moduleName.Replace(".", "_").Replace("/", "_").Replace("\\", "_");
-            var dafnyPath = Path.Combine(Path.GetTempPath(), $"posit-impl-{safeName}.dfy");
+            var dafnyPath = Z3Runner.GetDafnyStagingPath($"impl-{moduleName}");
             await File.WriteAllTextAsync(dafnyPath, result.DafnySource, ct);
 
             var (verified, output) = await _z3Runner.VerifyAsync(dafnyPath, ct);

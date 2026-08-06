@@ -11,6 +11,17 @@ namespace Posit.Data.Repositories;
 /// </summary>
 public static class AuditRepository
 {
+    private static NpgsqlDataSource? _dataSource;
+
+    public static void Initialize(NpgsqlDataSource? dataSource) => _dataSource = dataSource;
+
+    private static NpgsqlConnection CreateConnection()
+    {
+        if (_dataSource is not null)
+            return _dataSource.OpenConnectionAsync().GetAwaiter().GetResult();
+        return new NpgsqlConnection(DbConnectionProvider.GetConnectionString());
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -26,7 +37,7 @@ public static class AuditRepository
     {
         try
         {
-            await using var conn = new NpgsqlConnection(DbConnectionProvider.GetConnectionString());
+            await using var conn = CreateConnection();
             await conn.OpenAsync(ct);
 
             var payloadJson = payload is not null

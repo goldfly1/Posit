@@ -44,6 +44,122 @@ public record DesignContext
         InterfaceMappings.Length == 0 &&
         DafnyContracts.Length == 0 &&
         string.IsNullOrWhiteSpace(CompiledApi);
+
+    /// <summary>
+    /// Renders a compact per-module prompt block for injection into a single
+    /// module's implementation prompt. Only includes context relevant to the
+    /// named module — not all modules' worth of architecture. Keeps prompts
+    /// at ~2-5K instead of ~50K.
+    /// </summary>
+    public string ToModulePromptBlock(string moduleName)
+    {
+        if (IsEmpty)
+            return string.Empty;
+
+        var lines = new List<string>();
+        lines.Add("--- DESIGN CONTEXT (for this module only) ---");
+
+        var component = Components.FirstOrDefault(c =>
+            c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase) ||
+            c.Name.Contains(moduleName, StringComparison.OrdinalIgnoreCase) ||
+            moduleName.Contains(c.Name, StringComparison.OrdinalIgnoreCase));
+
+        if (component is not null)
+        {
+            lines.Add($"Component: {component.Name} [{component.Tech}]");
+            lines.Add($"  Responsibility: {component.Responsibility}");
+            lines.Add($"  Classification: {component.Classification}");
+            if (component.PublicSurface is { Length: > 0 })
+                lines.Add($"  Public Surface: {string.Join(", ", component.PublicSurface)}");
+            if (!string.IsNullOrWhiteSpace(component.Internals))
+                lines.Add($"  Internals: {component.Internals}");
+            if (component.Dependencies is { Length: > 0 })
+                lines.Add($"  Dependencies: {string.Join(", ", component.Dependencies)}");
+            if (!string.IsNullOrWhiteSpace(component.DafnyContractSource))
+                lines.Add($"  Dafny Contract Source: (available on disk in staging)");
+            if (component.TestCases is { Length: > 0 })
+            {
+                lines.Add("  Test Cases (from architect — these are the acceptance criteria):");
+                foreach (var tc in component.TestCases)
+                    lines.Add($"    - {tc.Id}: {tc.Name} (target: {tc.TargetType}) — {tc.Description} → {tc.ExpectedBehavior}");
+            }
+        }
+
+        // Include the Dafny contract for this module if available
+        var dafnyContract = DafnyContracts?.FirstOrDefault(c =>
+            c.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+        if (dafnyContract is not null)
+        {
+            lines.Add($"  Dafny Contract: {(dafnyContract.IsVerified ? "VERIFIED" : "UNVERIFIED")}");
+            if (!string.IsNullOrWhiteSpace(dafnyContract.VerificationOutput))
+                lines.Add($"  Z3 Output: {dafnyContract.VerificationOutput[..Math.Min(200, dafnyContract.VerificationOutput.Length)]}...");
+        }
+
+        // Dependency modules' public surfaces only
+        var depNames = component?.Dependencies ?? [];
+        if (depNames.Length > 0)
+        {
+            lines.Add("Dependency Modules (public surface only):");
+            foreach (var depName in depNames)
+            {
+                var dep = Components.FirstOrDefault(c =>
+                    c.Name.Equals(depName, StringComparison.OrdinalIgnoreCase));
+                if (dep is not null && dep.PublicSurface is { Length: > 0 })
+                    lines.Add($"  {dep.Name}: {string.Join(", ", dep.PublicSurface)}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(DeploymentTopology))
+            lines.Add($"Deployment Topology: {DeploymentTopology}");
+
+        lines.Add("--- END DESIGN CONTEXT ---");
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>
+    /// Renders a QA-focused prompt block. Includes module list with public
+    /// surfaces, test cases from the architect, and Dafny verification status.
+    /// QA tests against the public surface and the architect's test cases,
+    /// not the full architecture.
+    /// </summary>
+    public string ToQaPromptBlock()
+    {
+        if (IsEmpty)
+            return string.Empty;
+
+        var lines = new List<string>();
+        lines.Add("--- DESIGN CONTEXT (for QA test generation) ---");
+
+        if (Components.Length > 0)
+        {
+            lines.Add("Modules:");
+            foreach (var c in Components)
+            {
+                lines.Add($"  - {c.Name}: {c.Responsibility} [{c.Classification}]");
+                if (c.PublicSurface is { Length: > 0 })
+                    lines.Add($"    Public Surface: {string.Join(", ", c.PublicSurface)}");
+                if (c.TestCases is { Length: > 0 })
+                {
+                    lines.Add("    Test Cases (acceptance criteria from architect):");
+                    foreach (var tc in c.TestCases)
+                        lines.Add($"      - {tc.Id}: {tc.Name} (target: {tc.TargetType}) — {tc.Description} → {tc.ExpectedBehavior}");
+                }
+            }
+        }
+
+        // Dafny verification status — QA needs to know which modules are verified
+        if (DafnyContracts is { Length: > 0 })
+        {
+            lines.Add("Dafny Verification Status:");
+            foreach (var dc in DafnyContracts)
+            {
+                lines.Add($"  - {dc.ModuleName}: {(dc.IsVerified ? "VERIFIED (compile only, no tests)" : "UNVERIFIED (needs tests)")}");
+            }
+        }
+
+        lines.Add("--- END DESIGN CONTEXT ---");
+        return string.Join("\n", lines);
+    }
 }
 
 // Compact summaries of each artifact type
