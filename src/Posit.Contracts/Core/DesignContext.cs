@@ -75,8 +75,8 @@ public record DesignContext
                 lines.Add($"  Internals: {component.Internals}");
             if (component.Dependencies is { Length: > 0 })
                 lines.Add($"  Dependencies: {string.Join(", ", component.Dependencies)}");
-            if (!string.IsNullOrWhiteSpace(component.DafnyContractSource))
-                lines.Add($"  Dafny Contract Source: (available on disk in staging)");
+            if (!string.IsNullOrWhiteSpace(component.DafnyContractPath))
+                lines.Add($"  Dafny Skeleton: {component.DafnyContractPath} (read this file — names, types, contracts are the authority)");
             if (component.TestCases is { Length: > 0 })
             {
                 lines.Add("  Test Cases (from architect — these are the acceptance criteria):");
@@ -175,10 +175,9 @@ public record DesignComponent(string Id, string Name, string Responsibility, str
     public ModuleClassification Classification { get; init; } = ModuleClassification.IoShell;
 
     /// <summary>
-    /// Dafny contract source (.dfy skeleton) written by the architect.
-    /// Only populated for dafny and mixed modules.
+    /// Path to the .dfy skeleton file on disk. The file is the authority.
     /// </summary>
-    public string? DafnyContractSource { get; init; }
+    public string? DafnyContractPath { get; init; }
 
     /// <summary>
     /// True when this module has been verified by Dafny. Verified modules
@@ -222,8 +221,9 @@ public record DesignInterfaceMapping(string InterfaceId, string ModuleId, string
 public record DafnyContractEntry
 {
     public required string ModuleName { get; init; }
-    public required string DafnySource { get; init; }
+    public string DafnySource { get; init; } = "";  // kept for DB logging
+    public required string DafnyPath { get; init; }  // file on disk — the authority
     public required bool IsVerified { get; init; }
     public string? VerificationOutput { get; init; }
-    public string? TranslatedCSharp { get; init; }
+    public string? TranslatedCSharpPath { get; init; }  // translated C# file path
 }

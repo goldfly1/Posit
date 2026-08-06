@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Posit.AI.Models;
 using Posit.Data.Repositories;
+using Posit.Tools;
 
 namespace Posit.Phases;
 
@@ -97,7 +98,30 @@ public sealed class ArchitecturePhase : IPhase
         var dafnyCount = contract.Components.Count(c => c.Classification == ModuleClassification.Dafny);
         var ioShellCount = contract.Components.Count(c => c.Classification == ModuleClassification.IoShell);
         var mixedCount = contract.Components.Count(c => c.Classification == ModuleClassification.Mixed);
-        var withDafnySource = contract.Components.Count(c => !string.IsNullOrWhiteSpace(c.DafnyContractSource));
+
+        // Write .dfy skeletons to staging. The model returns source as a JSON string;
+        // we write it to disk and store the path. The file is the authority.
+        var componentsWithPath = new List<Component>();
+        foreach (var comp in contract.Components)
+        {
+            if ((comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
+                && !string.IsNullOrWhiteSpace(comp.DafnyContractPath))
+            {
+                // Model returned the source in DafnyContractPath (legacy field name from JSON)
+                // Write it to staging and replace with the file path
+                var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{comp.Name}");
+                await File.WriteAllTextAsync(dafnyPath, comp.DafnyContractPath!, ct);
+                componentsWithPath.Add(comp with { DafnyContractPath = dafnyPath });
+                Console.Error.WriteLine($"[Posit] Architecture — skeleton written: {dafnyPath}");
+            }
+            else
+            {
+                componentsWithPath.Add(comp);
+            }
+        }
+        contract = contract with { Components = [.. componentsWithPath] };
+
+        var withDafnySource = contract.Components.Count(c => !string.IsNullOrWhiteSpace(c.DafnyContractPath));
 
         Console.Error.WriteLine(
             $"[Posit] Architecture — {contract.Components.Length} components: " +
@@ -161,7 +185,8 @@ public sealed class ArchitecturePhase : IPhase
                        .Replace("\"deployment_topology\"", "\"deploymentTopology\"")
                        .Replace("\"quality_attributes\"", "\"qualityAttributes\"")
                        .Replace("\"open_risks\"", "\"openRisks\"")
-                       .Replace("\"dafny_contract_source\"", "\"dafnyContractSource\"")
+                       .Replace("\"dafny_contract_source\"", "\"dafnyContractPath\"")
+                       .Replace("\"dafny_contract_path\"", "\"dafnyContractPath\"")
                        .Replace("\"test_cases\"", "\"testCases\"")
                        .Replace("\"target_type\"", "\"targetType\"")
                        .Replace("\"expected_behavior\"", "\"expectedBehavior\"");

@@ -38,21 +38,11 @@ public record DafnyContractResult
 public record DafnyVerificationResult
 {
     public string ModuleName { get; init; } = "";
-    public string DafnySource { get; init; } = "";
+    public string DafnySource { get; init; } = "";  // kept for DB logging
+    public string DafnyPath { get; init; } = "";  // file on disk — the authority
     public string[] VerifiedTypes { get; init; } = [];
     public string ContractSummary { get; init; } = "";
-
-    /// <summary>
-    /// True when `dafny verify` succeeded with 0 errors on the complete program
-    /// (skeleton + bodies). Set by the Implementation phase after Z3 verification.
-    /// </summary>
     public bool IsVerified { get; init; }
-
     public string? VerificationOutput { get; init; }
-
-    /// <summary>
-    /// C# code translated from Dafny via `dafny translate cs`.
-    /// Only populated when IsVerified is true.
-    /// </summary>
-    public string? TranslatedCSharp { get; init; }
+    public string? TranslatedCSharpPath { get; init; }  // translated C# file path on disk
 }

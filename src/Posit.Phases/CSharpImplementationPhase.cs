@@ -132,7 +132,7 @@ public sealed class CSharpImplementationPhase : IPhase
     /// Extract translated C# from Pass 1 (DafnyVerification artifacts)
     /// and io-shell module specs from Architecture artifacts.
     /// </summary>
-    private static (List<(string ModuleName, string CSharp)> Translated, List<Component> IoShells) ExtractInputs(PhaseContext context)
+    private static (List<(string ModuleName, string CSharpPath)> Translated, List<Component> IoShells) ExtractInputs(PhaseContext context)
     {
         var translated = new List<(string, string)>();
         var ioShells = new List<Component>();
@@ -150,8 +150,9 @@ public sealed class CSharpImplementationPhase : IPhase
                     {
                         foreach (var r in results)
                         {
-                            if (r.IsVerified && !string.IsNullOrWhiteSpace(r.TranslatedCSharp))
-                                translated.Add((r.ModuleName, r.TranslatedCSharp!));
+                            if (r.IsVerified && !string.IsNullOrWhiteSpace(r.TranslatedCSharpPath)
+                                && File.Exists(r.TranslatedCSharpPath))
+                                translated.Add((r.ModuleName, r.TranslatedCSharpPath!));
                         }
                     }
                 }
@@ -178,15 +179,17 @@ public sealed class CSharpImplementationPhase : IPhase
     }
 
     private async Task<(List<SourceCodeFile>, int, int)> ImplementExternPortalsAsync(
-        PhaseContext context, List<(string ModuleName, string CSharp)> translatedFiles, CancellationToken ct)
+        PhaseContext context, List<(string ModuleName, string CSharpPath)> translatedFiles, CancellationToken ct)
     {
         var files = new List<SourceCodeFile>();
         var totalInput = 0;
         var totalOutput = 0;
 
-        foreach (var (moduleName, csharp) in translatedFiles)
+        foreach (var (moduleName, csharpPath) in translatedFiles)
         {
-            var systemPrompt = BuildExternPrompt(moduleName, csharp);
+            // Read the translated C# from disk — the file is the authority
+            var csharp = await File.ReadAllTextAsync(csharpPath, ct);
+            var systemPrompt = BuildExternPrompt(moduleName, csharpPath, csharp);
             var prompt = context.Prompt with { SystemPrompt = systemPrompt };
 
             var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
@@ -249,7 +252,7 @@ public sealed class CSharpImplementationPhase : IPhase
         return (files, totalInput, totalOutput);
     }
 
-    private static string BuildExternPrompt(string moduleName, string translatedCSharp)
+    private static string BuildExternPrompt(string moduleName, string csharpPath, string translatedCSharp)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are the C# Implementation phase (Pass 2). Fill in the extern portal holes in this translated Dafny C#.");
@@ -257,7 +260,8 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine("Do NOT modify the translated Dafny code — write only the partial class implementations.");
         sb.AppendLine();
         sb.AppendLine($"--- MODULE: {moduleName} ---");
-        sb.AppendLine("--- TRANSLATED C# (fill the extern holes) ---");
+        sb.AppendLine($"The translated C# file is at: {csharpPath}");
+        sb.AppendLine("--- TRANSLATED C# (fill the extern holes — names and types are the authority) ---");
         sb.AppendLine(translatedCSharp);
         sb.AppendLine();
         sb.AppendLine("Respond with a JSON array of {path, content} file objects.");

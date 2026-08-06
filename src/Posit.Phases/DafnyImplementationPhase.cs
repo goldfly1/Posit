@@ -129,9 +129,12 @@ public sealed class DafnyImplementationPhase : IPhase
     /// Retries up to MaxRetries times on Z3 failure with correction signal.
     /// </summary>
     private async Task<(DafnyVerificationResult, int, int, bool)> ImplementModuleAsync(
-        PhaseContext context, string moduleName, string skeletonSource, CancellationToken ct)
+        PhaseContext context, string moduleName, string skeletonPath, CancellationToken ct)
     {
-        var systemPrompt = BuildPrompt(context, moduleName, skeletonSource);
+        // Read the skeleton from disk — the file is the authority
+        var skeletonSource = await File.ReadAllTextAsync(skeletonPath, ct);
+
+        var systemPrompt = BuildPrompt(context, moduleName, skeletonPath, skeletonSource);
         var prompt = context.Prompt with { SystemPrompt = systemPrompt };
 
         for (int attempt = 0; attempt <= MaxRetries; attempt++)
@@ -168,21 +171,24 @@ public sealed class DafnyImplementationPhase : IPhase
                 continue;
             }
 
-            // Write Dafny source to temp file and verify
-            var dafnyPath = Z3Runner.GetDafnyStagingPath($"impl-{moduleName}");
+            // Write completed Dafny source back to the SAME file — the carapace is updated in place
+            var dafnyPath = string.IsNullOrWhiteSpace(result.DafnyPath)
+                ? skeletonPath  // write back to the skeleton's path
+                : result.DafnyPath;
             await File.WriteAllTextAsync(dafnyPath, result.DafnySource, ct);
 
             var (verified, output) = await _z3Runner.VerifyAsync(dafnyPath, ct);
 
             if (verified)
             {
-                // Translate to C# on success
-                var csharpCode = await _z3Runner.TranslateToCSharpAsync(dafnyPath, ct);
+                // Translate to C# on success — output goes to a file on disk
+                var csharpPath = await _z3Runner.TranslateToCSharpAsync(dafnyPath, ct);
                 var finalResult = result with
                 {
                     IsVerified = true,
                     VerificationOutput = output,
-                    TranslatedCSharp = csharpCode
+                    DafnyPath = dafnyPath,
+                    TranslatedCSharpPath = csharpPath
                 };
                 Console.Error.WriteLine($"[Posit] Dafny Implementation — '{moduleName}' VERIFIED ✓");
                 return (finalResult, generation.InputTokens, generation.OutputTokens, true);
@@ -223,7 +229,7 @@ public sealed class DafnyImplementationPhase : IPhase
     /// Only verified skeletons are passed to Implementation — failed skeletons
     /// should have been downgraded to io-shell by the correction loopback.
     /// </summary>
-    private static List<(string ModuleName, string DafnySource)> ExtractSkeletons(PhaseContext context)
+    private static List<(string ModuleName, string DafnyPath)> ExtractSkeletons(PhaseContext context)
     {
         var skeletons = new List<(string, string)>();
 
@@ -251,10 +257,23 @@ public sealed class DafnyImplementationPhase : IPhase
             }
         }
 
+        // Also check DesignContext for skeleton paths (snowballed)
+        if (context.DesignContext?.DafnyContracts is { Length: > 0 } dafnyContracts)
+        {
+            foreach (var dc in dafnyContracts)
+            {
+                if (dc.IsVerified && !string.IsNullOrWhiteSpace(dc.DafnyPath) && File.Exists(dc.DafnyPath))
+                {
+                    if (!skeletons.Any(s => s.Item1 == dc.ModuleName))
+                        skeletons.Add((dc.ModuleName, dc.DafnyPath));
+                }
+            }
+        }
+
         return skeletons;
     }
 
-    private static string BuildPrompt(PhaseContext context, string moduleName, string skeletonSource)
+    private static string BuildPrompt(PhaseContext context, string moduleName, string skeletonPath, string skeletonSource)
     {
         var sb = new StringBuilder();
 
@@ -270,11 +289,12 @@ public sealed class DafnyImplementationPhase : IPhase
 
         sb.AppendLine();
         sb.AppendLine($"--- MODULE: {moduleName} ---");
+        sb.AppendLine($"The skeleton file is at: {skeletonPath}");
         sb.AppendLine("Fill in the method and constructor bodies in this Dafny skeleton.");
         sb.AppendLine("Do NOT modify requires, ensures, predicates, {:extern} methods, or datatype declarations.");
-        sb.AppendLine("Return the COMPLETE .dfy file with bodies filled in.");
+        sb.AppendLine("Return the COMPLETE .dfy file with bodies filled in. The names, types, and contracts are the authority — do not change them.");
         sb.AppendLine();
-        sb.AppendLine("--- SKELETON ---");
+        sb.AppendLine("--- SKELETON (read this — names and contracts are tattooed on the carapace) ---");
         sb.AppendLine(skeletonSource);
 
         return sb.ToString();

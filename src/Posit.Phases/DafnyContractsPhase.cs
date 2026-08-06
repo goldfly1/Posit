@@ -71,11 +71,11 @@ public sealed class DafnyContractsPhase : IPhase
         var results = new List<DafnyContractResult>();
         var anyFailed = false;
 
-        foreach (var (moduleName, dafnySource) in contractSources)
+        foreach (var (moduleName, dafnyPath) in contractSources)
         {
-            Console.Error.WriteLine($"[Posit] Dafny Contracts — verifying skeleton for '{moduleName}'...");
+            Console.Error.WriteLine($"[Posit] Dafny Contracts — verifying skeleton for '{moduleName}' at {dafnyPath}...");
 
-            var result = await VerifySkeletonAsync(moduleName, dafnySource, ct);
+            var result = await VerifySkeletonAsync(moduleName, dafnyPath, ct);
             results.Add(result);
 
             if (!result.IsVerified)
@@ -118,7 +118,7 @@ public sealed class DafnyContractsPhase : IPhase
     /// in the input artifacts. Only modules classified as Dafny or Mixed have
     /// .dfy skeletons — io-shell modules are skipped.
     /// </summary>
-    private static List<(string ModuleName, string DafnySource)> ExtractContractSources(PhaseContext context)
+    private static List<(string ModuleName, string DafnyPath)> ExtractContractSources(PhaseContext context)
     {
         var sources = new List<(string, string)>();
 
@@ -128,10 +128,10 @@ public sealed class DafnyContractsPhase : IPhase
             foreach (var comp in components)
             {
                 if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed
-                    && !string.IsNullOrWhiteSpace(comp.DafnyContractSource))
+                    && !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
+                    && File.Exists(comp.DafnyContractPath))
                 {
-                    // DafnyContractSource is on the DesignComponent, but that record
-                    // doesn't have it — we need to check the ArchitectureContract artifact
+                    sources.Add((comp.Name, comp.DafnyContractPath!));
                 }
             }
         }
@@ -152,9 +152,10 @@ public sealed class DafnyContractsPhase : IPhase
                 foreach (var comp in archContract.Components)
                 {
                     if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed
-                        && !string.IsNullOrWhiteSpace(comp.DafnyContractSource))
+                        && !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
+                        && File.Exists(comp.DafnyContractPath))
                     {
-                        sources.Add((comp.Name, comp.DafnyContractSource!));
+                        sources.Add((comp.Name, comp.DafnyContractPath!));
                     }
                 }
             }
@@ -173,19 +174,18 @@ public sealed class DafnyContractsPhase : IPhase
     /// </summary>
     private async Task<DafnyContractResult> VerifySkeletonAsync(
         string moduleName,
-        string dafnySource,
+        string dafnyPath,
         CancellationToken ct)
     {
-        var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{moduleName}");
-
-        await File.WriteAllTextAsync(dafnyPath, dafnySource, ct);
+        // Read the skeleton from disk — the file is the authority
+        var dafnySource = await File.ReadAllTextAsync(dafnyPath, ct);
 
         var (verified, output) = await _z3Runner.VerifyAsync(dafnyPath, ct);
 
         return new DafnyContractResult
         {
             ModuleName = moduleName,
-            DafnySource = dafnySource,
+            DafnySource = dafnySource,  // kept for DB logging
             IsVerified = verified,
             VerificationOutput = output,
             ContractSummary = verified

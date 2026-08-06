@@ -11,3 +11,4 @@ global using Posit.Core.Graph;
 global using Posit.Phases;
 global using Posit.Data.Repositories;
 global using Posit.Contracts.Artifacts;
+global using Posit.Tools;

@@ -314,7 +314,7 @@ public sealed class PositOrchestrator
                             c.PublicSurface, c.Internals, c.Dependencies)
                         {
                             Classification = c.Classification,
-                            DafnyContractSource = c.DafnyContractSource,
+                            DafnyContractPath = c.DafnyContractPath,
                             TestCases = c.TestCases?.Select(tc => new DesignTestCase(
                                 tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray() ?? []
                         }).ToArray(),
@@ -337,7 +337,8 @@ public sealed class PositOrchestrator
                         DafnyContracts = contracts.Select(c => new DafnyContractEntry
                         {
                             ModuleName = c.ModuleName,
-                            DafnySource = c.DafnySource,
+                            DafnySource = c.DafnySource,  // for DB logging
+                            DafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{c.ModuleName}"),
                             IsVerified = c.IsVerified,
                             VerificationOutput = c.VerificationOutput
                         }).ToArray()
@@ -359,16 +360,17 @@ public sealed class PositOrchestrator
                             {
                                 IsVerified = r.IsVerified,
                                 VerificationOutput = r.VerificationOutput,
-                                TranslatedCSharp = r.TranslatedCSharp
+                                TranslatedCSharpPath = r.TranslatedCSharpPath
                             };
                         else
                             existing[r.ModuleName] = new DafnyContractEntry
                             {
                                 ModuleName = r.ModuleName,
                                 DafnySource = r.DafnySource,
+                                DafnyPath = r.DafnyPath,
                                 IsVerified = r.IsVerified,
                                 VerificationOutput = r.VerificationOutput,
-                                TranslatedCSharp = r.TranslatedCSharp
+                                TranslatedCSharpPath = r.TranslatedCSharpPath
                             };
                     }
                     current = current with { DafnyContracts = existing.Values.ToArray() };

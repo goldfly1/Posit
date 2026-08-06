@@ -74,8 +74,9 @@ public sealed class Z3Runner
     }
 
     /// <summary>
-    /// Runs `dafny translate cs` on a verified .dfy file. Returns the
-    /// translated C# source code, or null on failure.
+    /// Runs `dafny translate cs` on a verified .dfy file. Writes the translated
+    /// C# to a file in the staging directory and returns the file path.
+    /// Uses --include-runtime to embed the Dafny runtime in the output.
     /// </summary>
     public async Task<string?> TranslateToCSharpAsync(
         string dafnyFilePath,
@@ -83,10 +84,11 @@ public sealed class Z3Runner
     {
         try
         {
+            var outputPath = Path.ChangeExtension(dafnyFilePath, ".cs");
             var psi = new ProcessStartInfo
             {
                 FileName = _dafnyExecutable,
-                Arguments = BuildTranslateArguments(dafnyFilePath),
+                Arguments = $"{BuildTranslateArguments(dafnyPath: dafnyFilePath)} --output \"{outputPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -108,7 +110,13 @@ public sealed class Z3Runner
                 return null;
             }
 
-            return stdout;
+            // If the file wasn't created, fall back to stdout
+            if (!File.Exists(outputPath))
+            {
+                await File.WriteAllTextAsync(outputPath, stdout, ct);
+            }
+
+            return outputPath;
         }
         catch (Exception ex)
         {

@@ -32,10 +32,12 @@ public record Component(
     public ModuleClassification Classification { get; init; } = ModuleClassification.IoShell;
 
     /// <summary>
-    /// Dafny contract source (.dfy skeleton) written by the architect.
-    /// Only populated for dafny and mixed modules.
+    /// Path to the .dfy skeleton file on disk (in staging directory).
+    /// Only populated for dafny and mixed modules. The file is the authority —
+    /// names, types, contracts, dependencies, all tattooed on the carapace.
+    /// Downstream phases read from and write to this file.
     /// </summary>
-    public string? DafnyContractSource { get; init; }
+    public string? DafnyContractPath { get; init; }
 
     /// <summary>
     /// True when this module has been verified by Dafny. Verified modules
