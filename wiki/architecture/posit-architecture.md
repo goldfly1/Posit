@@ -169,10 +169,10 @@ public class CsvProgram
 |------|-------|-----------|
 | Ideation | deepseek-v4-pro:cloud | Better reasoning for decomposition |
 | Architecture (Dafny contracts) | deepseek-v4-pro:cloud | Formal spec writing |
-| Design Review | deepseek-v4-pro:cloud | Independent review |
-| Implementation (Dafny bodies) | deepseek-v4-pro:cloud | Proven 2/5 on first run, improving with wiki |
+| Design Review | kimi-2.7-code:cloud | Independent review — separation from architect |
+| Implementation (Dafny bodies) | deepseek-v4-pro:cloud | Proven 2/5, understands architect's contract intent |
 | Implementation (C# I/O shells) | glm-5.2:cloud | Existing behavior, works fine |
-| QA (test generation) | glm-5.2:cloud | Existing behavior |
+| QA (test generation) | glm-5.2:cloud | Architect knows module intent, well-positioned for unprovable module tests |
 | Documentation | deepseek-v4-pro:cloud | Better prose |
 | File ops, wiki search | local ollama | Fast, no reasoning |
 

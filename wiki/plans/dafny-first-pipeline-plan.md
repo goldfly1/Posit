@@ -115,10 +115,11 @@ The I/O is outside the proof boundary.
 | Task | Model | Why |
 |------|-------|-----|
 | Dafny contract writing (architect) | deepseek-v4-pro:cloud | Better at formal reasoning |
-| Dafny body writing (imp) | deepseek-v4-pro:cloud | Proven 2/5 on first run |
+| Design Review | kimi-2.7-code:cloud | Independent review — separation from architect |
+| Dafny body writing (imp) | deepseek-v4-pro:cloud | Proven 2/5, understands architect's contract intent |
 | C# I/O shell writing (imp) | glm-5.2:cloud | Existing behavior, works fine |
 | File operations, wiki search | local ollama | Fast, no reasoning needed |
-| QA test generation | glm-5.2:cloud | Existing behavior |
+| QA test generation | glm-5.2:cloud | Tests unprovable modules, knows module intent |
 
 ## Implementation Steps
 
