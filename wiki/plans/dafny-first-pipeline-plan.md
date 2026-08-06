@@ -150,28 +150,58 @@ The I/O is outside the proof boundary.
 
 ## Implementation Steps
 
-### Step 1: Dafny Contracts Phase (NEW)
-- [ ] Create `DafnyContractsPhase` — architect writes .dfy skeletons
-- [ ] Create `DafnyContractArtifact` type
-- [ ] Wire into pipeline between Design Review and Implementation
-- [ ] Add `dafny` / `io-shell` flag to `Component` record
+### Step 1: Dafny Contracts Phase ✅
+- [x] Create `DafnyContractsPhase` — Z3 verifies .dfy skeletons
+- [x] Create `DafnyContractResult` type
+- [x] Wire into pipeline between Design Review and Implementation
+- [x] Add `ModuleClassification` (dafny/io-shell/mixed) to `Component` record
+- [x] Z3Runner: `dafny verify` with `--standard-libraries` + `--allow-warnings`
 
-### Step 2: Dafny Implementation Phase (Pass 1)
-- [ ] For `dafny` modules: write .dfy bodies instead of .cs files
-- [ ] Run Z3 verify on completed .dfy files
-- [ ] On success: `dafny translate cs` → C# with partial class + extern holes
-- [ ] `{:extern}` methods stay bodyless — they become holes for Pass 2
+### Step 2: Dafny Implementation Phase (Pass 1) ✅
+- [x] For `dafny` modules: model fills .dfy bodies, Z3 verifies
+- [x] On success: `dafny translate cs` → C# with partial class + extern holes
+- [x] `{:extern}` methods stay bodyless — they become holes for Pass 2
+- [x] Retry on Z3 failure with correction signal (max 2)
+- [x] PromptLogger captures every model call
 
-### Step 2b: C# Implementation Phase (Pass 2)
-- [ ] Imp gets translated C# from Pass 1
-- [ ] Write C# that plugs into `partial class` extern holes
-- [ ] Wire I/O shells to call translated Dafny methods
-- [ ] Build judge checks compilation (existing Shepherd pattern)
+### Step 2b: C# Implementation Phase (Pass 2) ✅
+- [x] Imp gets translated C# from Pass 1
+- [x] Write C# that plugs into `partial class` extern holes
+- [x] Wire I/O shells to call translated Dafny methods
+- [x] PromptLogger captures every model call
 
-### Step 3: Modify Architecture Phase
-- [ ] Architect prompt: write Dafny contracts for pure-logic modules
-- [ ] Architect prompt: mark modules as `dafny` or `io-shell`
-- [ ] Output Dafny contract source in architecture artifact
+### Step 3: Architecture Phase ✅
+- [x] Architect prompt: write Dafny contracts for pure-logic modules
+- [x] Architect prompt: mark modules as `dafny` or `io-shell`
+- [x] Output Dafny contract source in architecture artifact
+- [x] OllamaModelGateway (Ollama-only, localhost:11434)
+- [x] JSON parsing with reasoning tag stripping + snake_case normalization
+- [x] PromptLogger captures every model call
+
+### Step 3b: QA Phase ✅
+- [x] Verified modules: compile only (no test generation)
+- [x] Unverified modules: full test generation via glm-5.2:cloud
+- [x] Imp appeal process documented (kimi reviews, max 1 per module)
+- [x] PromptLogger captures test generation calls
+
+### Step 3c: Orchestrator + CLI ✅
+- [x] FsmReducer (state transitions, retry, rollback, escalation)
+- [x] DependencyGraphEngine (phase ordering, cycle detection)
+- [x] PhaseController (initialize + execute)
+- [x] PositOrchestrator (pipeline runner, artifact storage)
+- [x] CLI: `posit run <request> --phase=...`
+- [x] Subset phase runs (dependency filtering)
+- [x] 30-minute timeout
+
+### Step 3d: Data Capture ✅
+- [x] 6 migrations (schemas, artifacts, sessions, prompts_log, audit, dafny_results)
+- [x] ArtifactRepository (stage, get, listBySession)
+- [x] StateStore (saveSession, loadSession)
+- [x] PromptLogger (logPromptAsync, logDafnyResultAsync)
+- [x] AuditRepository (logEventAsync, getEventsAsync)
+- [x] All model-calling phases wired to PromptLogger
+- [x] Orchestrator persists artifacts + state + audit events
+- [x] Verified: 2 prompt logs, 2 audit events, 1 artifact, 1 session in DB
 
 ### Step 4: Limits and Budgets
 - [ ] 200-line cap on Dafny source per module
@@ -179,9 +209,10 @@ The I/O is outside the proof boundary.
 - [ ] 10 method / 5 class limits per module
 
 ### Step 5: Testing
-- [ ] Run trial with Dafny-first pipeline
-- [ ] Verify: architect writes contracts → Z3 verifies skeleton → Imp fills bodies → Z3 verifies → translate cs → QA compiles
+- [ ] Run trial with full Dafny-first pipeline (all phases)
+- [ ] Verify: architect writes contracts → Z3 verifies skeleton → Imp fills bodies → Z3 verifies → translate cs → C# plugs in → QA compiles
 - [ ] Compare success rate vs current pipeline
+- [ ] Compare: modules verified, verification rate, QA prompt size, total pipeline time
 
 ## Key Decisions
 

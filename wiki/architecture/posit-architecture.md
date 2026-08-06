@@ -370,6 +370,59 @@ We will monitor whether the appeal process:
 
 This is an investment under observation, not a permanent fixture.
 
+## Built Infrastructure
+
+As of Aug 6, 2026 (18 commits):
+
+### Phases (6 of 11 built)
+
+| Phase | Status | Model | Type |
+|-------|--------|-------|------|
+| Architecture | ✅ Built + verified | deepseek-v4-pro:cloud | AI |
+| Dafny Contracts | ✅ Built | — (Z3 only) | Deterministic |
+| Dafny Implementation (Pass 1) | ✅ Built | deepseek-v4-pro:cloud | AI |
+| C# Implementation (Pass 2) | ✅ Built | glm-5.2:cloud | AI |
+| QA | ✅ Built | glm-5.2:cloud | AI |
+| Ideation | ❌ Not built | deepseek-v4-pro:cloud | AI |
+| API Definition | ❌ Not built | — | Deterministic |
+| Pseudocode | ❌ Not built | — | Deterministic |
+| Design Review | ❌ Not built | kimi-2.7-code:cloud | AI |
+| Deployment | ❌ Not built | — | Deterministic |
+| Observability | ❌ Not built | — | Deterministic |
+| Documentation | ❌ Not built | deepseek-v4-pro:cloud | AI |
+
+### Infrastructure
+
+| Component | Status |
+|-----------|--------|
+| OllamaModelGateway | ✅ Ollama-only, localhost:11434 |
+| Z3Runner | ✅ `dafny verify` + `dafny translate cs` |
+| FsmReducer | ✅ State transitions, retry, rollback |
+| DependencyGraphEngine | ✅ Phase ordering, cycle detection |
+| PhaseController | ✅ Initialize + execute |
+| PositOrchestrator | ✅ Pipeline runner, DB persistence |
+| CLI | ✅ `posit run <request> --phase=...` |
+
+### Data Capture
+
+| Table | Schema | Captures |
+|-------|--------|----------|
+| `posit_artifacts.artifacts` | ArtifactRepository | Every phase output (JSONB) |
+| `posit_artifacts.artifact_lineage` | ArtifactRepository | Artifact dependency graph |
+| `posit_state.sessions` | StateStore | Session state (JSONB) |
+| `posit_qa.prompts_log` | PromptLogger | Every prompt→response pair (the data harvest) |
+| `posit_audit.events` | AuditRepository | Append-only event log |
+| `posit_qa.dafny_results` | PromptLogger | Z3 verification output + translated C# |
+
+### Prompts
+
+| Prompt | Status |
+|--------|--------|
+| `prompts/architecture/1.0.0.md` | ✅ Dafny sidewalk, extern portals, bodyless methods |
+| `prompts/dafny/1.0.0.md` | ✅ Body filling, don't touch contracts, Z3 hints |
+| `prompts/csharp-implementation/1.0.0.md` | ✅ Portal pattern, Dafny→C# type mapping |
+| `prompts/qa/1.0.0.md` | ✅ Verified vs unverified split, appeal process |
+
 ## What's Different from Shepherd
 
 | Aspect | Shepherd | Posit |
