@@ -15,6 +15,7 @@ public record SessionState
     public int CurrentAttempt { get; init; }
     public PhaseId[] CompletedPhases { get; init; } = [];
     public PhaseId[] InProgressPhases { get; init; } = [];
+    public DependencyGraph? DependencyGraph { get; init; }
     public ContextSummary? LastContextSummary { get; init; }
     public CostSnapshot RunningCosts { get; init; } = CostSnapshot.Zero;
 
@@ -80,4 +81,5 @@ public record SessionState
     public SessionState WithContextSummary(ContextSummary summary) => this with { LastContextSummary = summary };
     public SessionState WithCorrectionSignal(string[] correctionSignal) => this with { CorrectionSignal = correctionSignal };
     public SessionState WithDesignContext(DesignContext? designContext) => this with { DesignContext = designContext };
+    public SessionState WithDependencyGraph(DependencyGraph? graph) => this with { DependencyGraph = graph };
 }
