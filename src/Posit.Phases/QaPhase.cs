@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Posit.AI.Models;
+using Posit.Data.Repositories;
 
 namespace Posit.Phases;
 
@@ -219,6 +220,17 @@ public sealed class QaPhase : IPhase
         Console.Error.WriteLine($"[Posit] QA — calling model for test generation...");
 
         var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
+
+        // Capture the prompt→response pair
+        await PromptLogger.LogPromptAsync(
+            context.SessionId.Value, Id.Value, context.AttemptNumber,
+            null, "generate",
+            context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+            systemPrompt, null,
+            generation.Text,
+            generation.InputTokens, generation.OutputTokens,
+            generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+            null, null, ct);
 
         var testFiles = ParseTestOutput(generation.Text);
         Console.Error.WriteLine($"[Posit] QA — model returned {testFiles.Count} test files");

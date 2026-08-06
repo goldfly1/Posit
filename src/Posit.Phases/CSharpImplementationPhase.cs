@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Posit.AI.Models;
+using Posit.Data.Repositories;
 
 namespace Posit.Phases;
 
@@ -192,6 +193,17 @@ public sealed class CSharpImplementationPhase : IPhase
             totalInput += generation.InputTokens;
             totalOutput += generation.OutputTokens;
 
+            // Capture the prompt→response pair
+            await PromptLogger.LogPromptAsync(
+                context.SessionId.Value, Id.Value, context.AttemptNumber,
+                moduleName, "generate",
+                context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+                systemPrompt, null,
+                generation.Text,
+                generation.InputTokens, generation.OutputTokens,
+                generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+                null, null, ct);
+
             var parsedFiles = ParseFileOutput(generation.Text, moduleName);
             files.AddRange(parsedFiles);
 
@@ -216,6 +228,17 @@ public sealed class CSharpImplementationPhase : IPhase
             var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
             totalInput += generation.InputTokens;
             totalOutput += generation.OutputTokens;
+
+            // Capture the prompt→response pair
+            await PromptLogger.LogPromptAsync(
+                context.SessionId.Value, Id.Value, context.AttemptNumber,
+                shell.Name, "generate",
+                context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+                systemPrompt, null,
+                generation.Text,
+                generation.InputTokens, generation.OutputTokens,
+                generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+                null, null, ct);
 
             var parsedFiles = ParseFileOutput(generation.Text, shell.Name);
             files.AddRange(parsedFiles);

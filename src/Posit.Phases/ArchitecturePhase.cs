@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Posit.AI.Models;
+using Posit.Data.Repositories;
 
 namespace Posit.Phases;
 
@@ -58,6 +59,17 @@ public sealed class ArchitecturePhase : IPhase
         Console.Error.WriteLine($"[Posit] Architecture — calling model '{context.ModelRoute.ModelId}'...");
 
         var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
+
+        // Capture the prompt→response pair (the data harvest)
+        await PromptLogger.LogPromptAsync(
+            context.SessionId.Value, Id.Value, context.AttemptNumber,
+            null, "generate",
+            context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+            systemPrompt, null,
+            generation.Text,
+            generation.InputTokens, generation.OutputTokens,
+            generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+            null, null, ct);
 
         var (contract, parseError) = ParseArchitectureContract(generation.Text);
 

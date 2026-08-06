@@ -115,6 +115,34 @@ static async Task<int> RunCommand(string[] args)
     var graphEngine = new DependencyGraphEngine();
     var phaseController = new PhaseController();
 
+    // Database layer — run migrations, then create repos
+    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
+    var migrationRunner = new Posit.Data.Migrations.MigrationRunner(
+        dataSource,
+        Path.Combine(AppContext.BaseDirectory, "migrations"));
+    // Try to find migrations relative to working directory too
+    if (!Directory.Exists(Path.Combine(AppContext.BaseDirectory, "migrations")))
+    {
+        migrationRunner = new Posit.Data.Migrations.MigrationRunner(
+            dataSource,
+            Path.Combine(Directory.GetCurrentDirectory(), "migrations"));
+    }
+
+    ArtifactRepository? artifactRepo = null;
+    StateStore? stateStore = null;
+    try
+    {
+        Console.Error.WriteLine("[Posit] Running migrations...");
+        var applied = await migrationRunner.ApplyAsync();
+        Console.Error.WriteLine($"[Posit] {applied.Count} migrations applied");
+        artifactRepo = new ArtifactRepository(dataSource);
+        stateStore = new StateStore(dataSource);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[Posit] DB not available (running in-memory): {ex.Message}");
+    }
+
     var phases_impl = new IPhase[]
     {
         new ArchitecturePhase(gateway),
@@ -124,7 +152,7 @@ static async Task<int> RunCommand(string[] args)
         new QaPhase(gateway)
     };
 
-    var orchestrator = new PositOrchestrator(reducer, graphEngine, phaseController, phases_impl);
+    var orchestrator = new PositOrchestrator(reducer, graphEngine, phaseController, phases_impl, artifactRepo, stateStore);
 
     // Create profile
     var profile = new ProjectProfile
@@ -148,7 +176,7 @@ static async Task<int> RunCommand(string[] args)
     };
 
     // Start session
-    var sessionId = orchestrator.StartSession(profile, initialRequest);
+    var sessionId = await orchestrator.StartSessionAsync(profile, initialRequest);
     Console.Error.WriteLine($"[Posit] Session: {sessionId.Value}");
     Console.Error.WriteLine();
 

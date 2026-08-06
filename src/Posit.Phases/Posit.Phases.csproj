@@ -9,6 +9,7 @@
     <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
     <ProjectReference Include="..\Posit.AI\Posit.AI.csproj" />
     <ProjectReference Include="..\Posit.Tools\Posit.Tools.csproj" />
+    <ProjectReference Include="..\Posit.Data\Posit.Data.csproj" />
   </ItemGroup>
 
 </Project>

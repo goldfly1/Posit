@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Posit.Contracts.Core;
 using Posit.Core.Graph;
 using Posit.Core.State;
+using Posit.Data.Repositories;
 
 namespace Posit.Cli.Orchestration;
 
@@ -19,6 +20,8 @@ public sealed class PositOrchestrator
     private readonly IReadOnlyDictionary<PhaseId, IPhase> _phases;
     private readonly Dictionary<SessionId, SessionState> _sessions = new();
     private readonly Dictionary<SessionId, List<ArtifactBundle>> _artifacts = new();
+    private readonly ArtifactRepository? _artifactRepo;
+    private readonly StateStore? _stateStore;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -31,18 +34,22 @@ public sealed class PositOrchestrator
         FsmReducer reducer,
         IDependencyGraphEngine graphEngine,
         IPhaseController phaseController,
-        IEnumerable<IPhase> phases)
+        IEnumerable<IPhase> phases,
+        ArtifactRepository? artifactRepo = null,
+        StateStore? stateStore = null)
     {
         _reducer = reducer ?? throw new ArgumentNullException(nameof(reducer));
         _graphEngine = graphEngine ?? throw new ArgumentNullException(nameof(graphEngine));
         _phaseController = phaseController ?? throw new ArgumentNullException(nameof(phaseController));
         _phases = phases.ToDictionary(p => p.Id);
+        _artifactRepo = artifactRepo;
+        _stateStore = stateStore;
     }
 
     /// <summary>
     /// Start a new session with the given profile and request.
     /// </summary>
-    public SessionId StartSession(ProjectProfile profile, InitialRequest? request = null)
+    public async Task<SessionId> StartSessionAsync(ProjectProfile profile, InitialRequest? request = null)
     {
         var sessionId = SessionId.New();
         var state = SessionState.Create(sessionId, profile, request);
@@ -71,6 +78,11 @@ public sealed class PositOrchestrator
 
         _sessions[sessionId] = startResult.State;
         _artifacts[sessionId] = [];
+
+        // Audit log: session started
+        await AuditRepository.LogEventAsync(sessionId.Value, "session.started", null, "info",
+            new { profileId = profile.Id.Value, phaseCount = profile.Phases.Length });
+
         return sessionId;
     }
 
@@ -163,6 +175,17 @@ public sealed class PositOrchestrator
             {
                 _artifacts[sessionId].Add(phaseResult.Artifacts);
                 Console.Error.WriteLine($"[Posit] Phase '{phaseId.Value}' completed. Artifacts: {_artifacts[sessionId].Count}");
+
+                // Persist artifact to DB
+                if (_artifactRepo is not null)
+                {
+                    try { await _artifactRepo.StageAsync(phaseResult.Artifacts, ct); }
+                    catch (Exception ex) { Console.Error.WriteLine($"[Posit] Artifact persist failed (ignored): {ex.Message}"); }
+                }
+
+                // Audit log
+                await AuditRepository.LogEventAsync(sessionId.Value, "phase.completed", phaseId.Value, "info",
+                    new { artifactId = phaseResult.Artifacts.Id.Value, kind = phaseResult.Artifacts.Kind.ToString() }, ct);
             }
             else
             {
@@ -177,6 +200,13 @@ public sealed class PositOrchestrator
             }
 
             _sessions[sessionId] = state;
+
+            // Persist session state to DB
+            if (_stateStore is not null)
+            {
+                try { await _stateStore.SaveSessionAsync(sessionId, state, ct); }
+                catch (Exception ex) { Console.Error.WriteLine($"[Posit] State persist failed (ignored): {ex.Message}"); }
+            }
         }
 
         _sessions[sessionId] = state;

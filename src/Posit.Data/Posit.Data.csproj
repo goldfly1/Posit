@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
+    <ProjectReference Include="..\Posit.Core\Posit.Core.csproj" />
   </ItemGroup>
 
 </Project>

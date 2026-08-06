@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Posit.AI.Models;
+using Posit.Data.Repositories;
 using Posit.Tools;
 
 namespace Posit.Phases;
@@ -137,6 +138,18 @@ public sealed class DafnyImplementationPhase : IPhase
         {
             var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
             var (result, parseError) = ParseDafnyResult(generation.Text, moduleName);
+
+            // Capture the prompt→response pair
+            await PromptLogger.LogPromptAsync(
+                context.SessionId.Value, Id.Value, context.AttemptNumber,
+                moduleName, attempt == 0 ? "generate" : "retry",
+                context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+                systemPrompt, null,
+                generation.Text,
+                generation.InputTokens, generation.OutputTokens,
+                generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+                result?.IsVerified == true ? "success" : "fallback",
+                parseError, ct);
 
             if (result is null || string.IsNullOrWhiteSpace(result.DafnySource))
             {
