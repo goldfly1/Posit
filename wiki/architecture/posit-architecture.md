@@ -41,7 +41,7 @@ Ideation → Architecture → API Definition → Pseudocode → Design Review
 | Architecture | deepseek-v4-pro:cloud | Requirements | Architecture contract with module classification (dafny/io-shell) + Dafny contracts | Architect writes .dfy skeletons |
 | API Definition | deterministic | Architecture | API spec | No model call |
 | Pseudocode | deterministic | Architecture + API | Module specs | No model call |
-| Design Review | deepseek-v4-pro:cloud | Accumulated design | Approve/reject | Independent review gate |
+| Design Review | kimi-2.7-code:cloud | Accumulated design | Approve/reject | Independent review gate |
 | Dafny Contracts | deterministic + Z3 | Architecture | Verified .dfy skeleton files on disk | Z3 verifies the spec is sound (contracts without bodies) |
 | Implementation | deepseek-v4-pro:cloud | .dfy skeletons + wiki | Dafny bodies filled in, Z3 verified, translated C# | Multi-pass: skeleton check → body fill → Z3 verify → translate |
 | QA | glm-5.2:cloud | Translated C# + unverified modules | Build + test results | Verified modules: compile only. Unverified: full test generation. |
@@ -80,6 +80,8 @@ The architect classifies each module as one of:
 - Split into: `ConfigParser` (dafny — pure parsing) + `ConfigFileReader` (io-shell — file I/O)
 - Each piece goes through its respective pipeline
 
+**Mixed module splitting:** The architect outputs two separate `Component` records — one `dafny`, one `io-shell` — with a dependency from the io-shell to the dafny. The pipeline does not split modules. The architect is responsible for decomposition at design time.
+
 ## Dafny Contract Format
 
 ```dafny
@@ -99,14 +101,13 @@ module CsvParser {
 
     constructor(delimiter: char, quote: char)
       ensures Valid()
-    { }
 
     method ParseLine(line: string) returns (fields: seq<string>)
       requires Valid()
       requires |line| > 0
       ensures |fields| >= 1
       ensures forall i :: 0 <= i < |fields| ==> fields[i] != null
-    { } // Imp fills in the body
+    // Bodyless — Imp fills in the body during Implementation
   }
 }
 ```
@@ -147,8 +148,8 @@ public class CsvProgram
 ### Prompt Budgets
 | Phase | System Prompt Cap | Wiki Cap | Other |
 |-------|-------------------|----------|-------|
-| Architecture | 16K | 8K | — |
-| Dafny Contracts | 8K | 4K | Syntax ref 2K |
+| Architecture | 16K | 8K | Dafny syntax ref 2K |
+| Dafny Contracts | N/A — deterministic | N/A | Z3 only, no model call |
 | Implementation (Dafny) | 16K | 4K | Contract file on disk |
 | Implementation (C# I/O) | 32K | 8K | Type shell on disk |
 | QA | 32K | 4K | Edge cases 4K |
@@ -208,6 +209,64 @@ Posit/
     contracts/               # Dafny contract templates per module type
   migrations/
 ```
+
+## Skeleton Verification Semantics
+
+Dafny distinguishes between **bodyless methods** and **methods with empty bodies**:
+
+- **Bodyless** (`method Foo() ensures ... ` with no `{ }`): Z3 treats as abstract specification. Checks contracts are well-formed and self-consistent. No proof obligation for the body. This is what skeletons use.
+- **Empty body** (`method Foo() ensures ... { }`): Z3 tries to prove postconditions from default return values. Almost always fails. Do NOT use.
+
+All `.dfy` skeletons use bodyless declarations. Predicates are the exception — `predicate Valid() reads this { ... }` has a body because it's a definition, not a proof obligation.
+
+## Cross-File Dafny Dependencies
+
+Each module gets its own `.dfy` file. If a module needs types defined in another module, it uses:
+
+```dafny
+include "OtherModule.dfy"
+```
+
+Z3 verifies each file independently. `dafny translate cs` handles multi-file projects — it produces a single C# output per compilation. The DafnyContractsPhase writes all `.dfy` files to a staging directory and verifies them as a batch with `dafny verify *.dfy`.
+
+## Correction Signal — Dafny Contracts Loopback
+
+When a skeleton fails Z3 verification, the correction signal loops **back to the Architecture phase**, not within Dafny Contracts. The FSM rolls back to Architecture with the Z3 error attached. The architect re-runs with the correction signal and produces a fixed `.dfy` skeleton.
+
+- **Max loopbacks:** 2 (same as Shepherd's Implementation→Architecture loopback cap)
+- **After exhausting loopbacks:** the module is downgraded to `io-shell` and proceeds through the C# pipeline with QA test generation
+- **Partial success:** verified skeletons are preserved; only failed modules loop back
+
+## FSM Design
+
+Posit inherits Shepherd's FSM states and escalation chain:
+
+```
+Idle → Planning → Active → Validating → Retry → CheckpointRollback → Recovery → ReviewGate → Paused → Completed → Aborted
+```
+
+**Escalation chain:** retry in-phase → rollback to checkpoint → recovery with backoff → review gate (human) → abort to Idle.
+
+**New transitions for Dafny-first:**
+
+| Event | From | To | Notes |
+|-------|------|----|-------|
+| `dafny.skeleton_failed` | Validating | CheckpointRollback | Rolls back to Architecture with Z3 error |
+| `dafny.skeleton_verified` | Validating | Planning | Advances to Implementation |
+| `dafny.body_failed` | Validating | Retry | Retries within Implementation (Imp fixes body) |
+| `dafny.body_verified` | Validating | Planning | Advances to QA |
+| `module.downgraded` | Active | Active | Module reclassified io-shell, pipeline continues |
+| `dafny.translated_cs` | Validating | Planning | Translated C# dropped into project, advances |
+
+**Loopback counter:** `LoopbackCount` on `SessionState` tracks Architecture→Dafny Contracts round-trips. Capped at 2.
+
+## Multi-Target Stance
+
+C# now. Multi-target (Rust, Go, Java, JS, Python) is a future aspiration, not a current design goal. The plan, project structure, and all phases target C# only. `dafny translate cs` is the only translation path. When multi-target becomes a real requirement, a target-language abstraction will be added — but not before.
+
+## Determinism Stance
+
+Determinism is a target-specific concern, not a core property of Posit. The `--enforce-determinism` flag is relevant only if/when a Rust target is added. For C# output, standard Dafny translation is sufficient. Proofs are deterministic (Z3); translated code follows the target language's semantics.
 
 ## What's Different from Shepherd
 

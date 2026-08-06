@@ -26,16 +26,21 @@ Ideation → Architecture → API Definition → Pseudocode → Design Review
 - Architect writes Dafny contract files (`.dfy`) instead of C# type signatures
 - Each module gets a `.dfy` file with:
   - `datatype` for enums/records
-  - `class` with `var` fields and `predicate Valid()`
-  - `method` signatures with `requires`/`ensures` (no bodies — just `{ }`)
-  - `function` signatures with `requires`/`ensures` (no bodies)
+  - `class` with `var` fields and `predicate Valid()` (predicate HAS a body — it's a definition)
+  - `method` signatures with `requires`/`ensures` — **bodyless, no `{ }`**
+  - `function` signatures with `requires`/`ensures` — **bodyless, no `{ }`**
+  - `constructor` signatures with `ensures` — **bodyless, no `{ }`**
+  - `include "OtherModule.dfy"` if cross-file types are needed
 - Contracts written to disk as `.dfy` files (same pattern as type shells)
+- Mixed modules: architect outputs two Component records (one dafny, one io-shell)
 
 ### Dafny Contracts Phase (NEW — between Design Review and Implementation)
 - Materializes `.dfy` skeleton files to staging
-- Runs `dafny verify` on skeletons (contracts only, no bodies) — verifies the spec is sound
-- If skeleton verification fails, correction signal back to architect
-- Produces `DafnyContractArtifact` with contract source per module
+- Runs `dafny verify` on skeletons (bodyless methods — Z3 checks contract well-formedness)
+- If skeleton verification fails, correction signal loops **back to Architecture** (max 2 loopbacks)
+- After exhausting loopbacks, module is downgraded to `io-shell`
+- Produces `DafnyContractResult` with contract source + verification status per module
+- Verified skeletons preserved; only failed modules loop back
 
 ### Implementation Phase (modified)
 - Imp gets `.dfy` skeleton files on disk (already exist with contracts)
@@ -154,6 +159,13 @@ The I/O is outside the proof boundary.
 
 1. **Partial verification is success** — already implemented. Verified modules skip QA, unverified fall through.
 2. **Dafny for pure logic only** — I/O shells stay in C#. The proof boundary is the function signature.
-3. **deepseek-v4-pro:cloud for all Dafny work** — proven better than glm-5.2:cloud for Dafny.
+3. **deepseek-v4-pro:cloud for Dafny contracts and bodies** — proven better than glm-5.2:cloud for Dafny. Design Review uses kimi-2.7-code:cloud for separation.
 4. **Translated C# may need post-processing** — strip Dafny runtime wrappers, add using statements. Acceptable for now.
 5. **Module decomposition is enforced by line count** — 200 lines max forces small, focused modules.
+6. **Skeletons use bodyless methods** — no `{ }` after method/constructor signatures. Empty bodies create proof obligations that fail. Bodyless methods are abstract specs; Z3 checks contract well-formedness only.
+7. **Cross-file dependencies use `include`** — each .dfy file is independent. Z3 verifies as a batch.
+8. **Mixed modules split at Architecture** — the architect outputs two Component records (one dafny, one io-shell). The pipeline does not split modules.
+9. **Skeleton correction loops back to Architecture** — max 2 loopbacks, then downgrade to io-shell.
+10. **FSM inherits Shepherd's states** — same escalation chain, new transitions for Dafny skeleton/body verification.
+11. **C# only** — multi-target is future. No target-language abstraction now.
+12. **Determinism is target-specific** — not a core property. Only relevant if Rust target is added.

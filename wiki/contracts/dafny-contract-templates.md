@@ -27,14 +27,12 @@ module CsvParser_Module {
 
     constructor(delimiter: char, quote: char)
       ensures Valid()
-    { }
 
     method ParseLine(line: string) returns (fields: seq<string>, error: ParseError?)
       requires Valid()
       requires |line| > 0
       ensures |fields| >= 0
       ensures error == null ==> |fields| >= 1
-    { }
   }
 }
 ```
@@ -51,7 +49,6 @@ module Validator_Module {
     method Validate(value: string, type: DataType) returns (result: ValidationResult)
       requires |value| >= 0
       ensures result.Valid? || result.Invalid?
-    { }
   }
 }
 ```
@@ -73,14 +70,12 @@ module SqlGenerator_Module {
     constructor(dialect: DatabaseDialect, tableName: string)
       requires |tableName| > 0
       ensures Valid()
-    { }
 
     method BuildInsert(columns: seq<string>, values: seq<string>) returns (sql: string)
       requires Valid()
       requires |columns| == |values|
       requires |columns| > 0
       ensures |sql| > 0
-    { }
   }
 }
 ```
@@ -102,7 +97,6 @@ module SchemaMapper_Module {
       requires |columns| > 0
       requires |header| > 0
       ensures valid ==> |errors| == 0
-    { }
   }
 }
 ```
@@ -126,8 +120,10 @@ public class FileService
 3. Every `class` with mutable state gets a `predicate Valid()`.
 4. Constructors must `ensures Valid()`.
 5. Mutating methods must `requires Valid()` and `ensures Valid()` and `modifies this`.
-6. Keep it minimal — types and signatures only. No bodies (just `{ }`).
-7. Max 200 lines, 10 methods, 5 classes per module.
-8. Use `datatype` for enums and records. Use `class` for stateful types.
-9. Use `string` for text (not `seq<char>` — Dafny maps it automatically).
-10. Use `int` for numbers (not `BigInteger` — Dafny's `int` is arbitrary precision).
+6. Keep it minimal — types and signatures only. **No method or constructor bodies — bodyless declarations only.** Do NOT write `{ }` after a method or constructor. An empty body is NOT a missing body — empty bodies create proof obligations that fail (Z3 tries to prove postconditions from default values). Bodyless methods are treated as abstract specifications — Z3 checks the contracts are well-formed and self-consistent without requiring a body.
+7. Predicates DO have bodies — `predicate Valid() reads this { ... }` is a definition, not a proof obligation. The predicate body defines what "valid" means.
+8. Max 200 lines, 10 methods, 5 classes per module.
+9. Use `datatype` for enums and records. Use `class` for stateful types.
+10. Use `string` for text (not `seq<char>` — Dafny maps it automatically).
+11. Use `int` for numbers (not `BigInteger` — Dafny's `int` is arbitrary precision).
+12. If a module needs types defined in another module, use `include "OtherModule.dfy"` at the top of the file. Each .dfy file is verified independently by Z3.
