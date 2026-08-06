@@ -15,7 +15,8 @@ public static class KnownPhases
     public static readonly PhaseId Pseudocode = new("pseudocode");
     public static readonly PhaseId DesignReview = new("design-review");
     public static readonly PhaseId DafnyContracts = new("dafny-contracts");
-    public static readonly PhaseId Implementation = new("implementation");
+    public static readonly PhaseId DafnyImplementation = new("dafny-implementation");
+    public static readonly PhaseId CSharpImplementation = new("csharp-implementation");
     public static readonly PhaseId Qa = new("qa");
     public static readonly PhaseId Deployment = new("deployment");
     public static readonly PhaseId Observability = new("observability");
@@ -29,7 +30,8 @@ public static class KnownPhases
         Pseudocode,
         DesignReview,
         DafnyContracts,
-        Implementation,
+        DafnyImplementation,
+        CSharpImplementation,
         Qa,
         Deployment,
         Observability,
