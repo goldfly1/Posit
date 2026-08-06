@@ -42,13 +42,25 @@ Ideation → Architecture → API Definition → Pseudocode → Design Review
 - Produces `DafnyContractResult` with contract source + verification status per module
 - Verified skeletons preserved; only failed modules loop back
 
-### Implementation Phase (modified)
-- Imp gets `.dfy` skeleton files on disk (already exist with contracts)
+### Implementation Phase — Two Passes
+
+Implementation is split into two passes. One spec, two passes. The architect's Dafny sidewalk runs until it can't, stubs the I/O with `{:extern}` portals, and keeps walking. Pass 1 fills the Dafny bodies. Pass 2 plugs C# into the extern portals.
+
+#### Pass 1: Dafny Implementation (deepseek-v4-pro:cloud)
+- Imp gets `.dfy` skeleton files on disk (already verified by Dafny Contracts)
 - Imp fills in method/function bodies in Dafny (not C#)
-- Multi-pass: skeleton verify → body fill → Z3 verify
-- On Z3 failure: correction signal with exact proof error
-- On Z3 success: `dafny translate cs` produces C#
-- Translated C# drops into project alongside I/O shell modules
+- Z3 verifies complete program (skeleton contracts + Imp's bodies)
+- On Z3 failure: correction signal with exact proof error (retry within phase)
+- On Z3 success: `dafny translate cs` produces C# with `partial class` + extern holes
+- `{:extern}` methods stay bodyless — they become holes in the partial class
+- Translated C# drops into staging alongside I/O shell modules
+
+#### Pass 2: C# Implementation (glm-5.2:cloud)
+- Imp gets translated C# (from Pass 1) + extern holes + type shells
+- Imp writes C# that plugs into the `partial class` extern holes
+- Imp wires I/O shells to call translated Dafny methods
+- Build judge checks compilation (no Z3 — this is unverified I/O)
+- On build failure: correction signal with compiler errors (existing Shepherd pattern)
 
 ### QA Phase (modified)
 - For verified modules: compile translated C# only (no test generation)
@@ -121,8 +133,8 @@ The I/O is outside the proof boundary.
 |------|-------|-----|
 | Dafny contract writing (architect) | deepseek-v4-pro:cloud | Better at formal reasoning |
 | Design Review | kimi-2.7-code:cloud | Independent review — separation from architect |
-| Dafny body writing (imp) | deepseek-v4-pro:cloud | Proven 2/5, understands architect's contract intent |
-| C# I/O shell writing (imp) | glm-5.2:cloud | Existing behavior, works fine |
+| Dafny body writing (Pass 1) | deepseek-v4-pro:cloud | Proven 2/5, understands architect's contract intent |
+| C# shell writing (Pass 2) | glm-5.2:cloud | Plugs into extern portals, wires I/O to translated Dafny |
 | File operations, wiki search | local ollama | Fast, no reasoning needed |
 | QA test generation | glm-5.2:cloud | Tests unprovable modules, knows module intent |
 
@@ -134,11 +146,17 @@ The I/O is outside the proof boundary.
 - [ ] Wire into pipeline between Design Review and Implementation
 - [ ] Add `dafny` / `io-shell` flag to `Component` record
 
-### Step 2: Modify Implementation Phase
+### Step 2: Dafny Implementation Phase (Pass 1)
 - [ ] For `dafny` modules: write .dfy bodies instead of .cs files
 - [ ] Run Z3 verify on completed .dfy files
-- [ ] On success: `dafny translate cs` → drop C# into project
-- [ ] For `io-shell` modules: existing C# path unchanged
+- [ ] On success: `dafny translate cs` → C# with partial class + extern holes
+- [ ] `{:extern}` methods stay bodyless — they become holes for Pass 2
+
+### Step 2b: C# Implementation Phase (Pass 2)
+- [ ] Imp gets translated C# from Pass 1
+- [ ] Write C# that plugs into `partial class` extern holes
+- [ ] Wire I/O shells to call translated Dafny methods
+- [ ] Build judge checks compilation (existing Shepherd pattern)
 
 ### Step 3: Modify Architecture Phase
 - [ ] Architect prompt: write Dafny contracts for pure-logic modules
