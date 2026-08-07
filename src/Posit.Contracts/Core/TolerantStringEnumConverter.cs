@@ -68,6 +68,14 @@ public sealed class TolerantStringEnumConverter : JsonConverterFactory
     {
         public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
+            if (reader.TokenType == JsonTokenType.Number)
+            {
+                var value = reader.GetInt32();
+                if (Enum.IsDefined(typeof(T), value))
+                    return (T)(object)value;
+                return default;
+            }
+
             var raw = reader.GetString()?.Trim() ?? "";
             if (string.IsNullOrEmpty(raw))
                 return default;
