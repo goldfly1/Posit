@@ -430,13 +430,23 @@ public sealed class CSharpImplementationPhase : IPhase
                 && file.Content.TrimStart().StartsWith("<Project", StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            // Reject paths whose first directory is not the current module (or Shared).
+            // Files belong to exactly one module; do not pull strays from sibling modules.
+            var firstDir = StripDirectoryNoise(parts[0]);
+            if (!string.Equals(firstDir, moduleName, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(firstDir, "Shared", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': first directory '{firstDir}' is not module '{moduleName}'");
+                continue;
+            }
+
             // Reject paths that nest another authorized component as a subdirectory.
-            // e.g. "Contracts/Core/..." when both Contracts and Core are components.
+            // e.g. "Shared/Core/..." when Core is a component is also disallowed.
             bool nestsAnotherComponent = false;
-            for (int i = 0; i < parts.Length - 1; i++)
+            for (int i = 1; i < parts.Length - 1; i++)
             {
                 var dir = StripDirectoryNoise(parts[i]);
-                if (i != 0 && componentNames.Contains(dir) && !string.Equals(dir, moduleName, StringComparison.OrdinalIgnoreCase))
+                if (componentNames.Contains(dir) && !string.Equals(dir, moduleName, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': nests component '{dir}' inside '{moduleName}'");
                     nestsAnotherComponent = true;
@@ -455,14 +465,14 @@ public sealed class CSharpImplementationPhase : IPhase
             cleanedParts.Add(parts[^1]);
 
             // Coerce back to module root if the path strayed into a sibling project
-            var firstDir = cleanedParts[0];
-            var isStrayProject = firstDir.EndsWith(".Implementation", StringComparison.OrdinalIgnoreCase)
-                || firstDir.EndsWith(".Implementations", StringComparison.OrdinalIgnoreCase)
-                || firstDir.EndsWith(".extern", StringComparison.OrdinalIgnoreCase);
+            var rootDir = cleanedParts[0];
+            var isStrayProject = rootDir.EndsWith(".Implementation", StringComparison.OrdinalIgnoreCase)
+                || rootDir.EndsWith(".Implementations", StringComparison.OrdinalIgnoreCase)
+                || rootDir.EndsWith(".extern", StringComparison.OrdinalIgnoreCase);
 
             if (isStrayProject)
             {
-                cleanedParts[0] = StripDirectoryNoise(firstDir);
+                cleanedParts[0] = StripDirectoryNoise(rootDir);
             }
 
             // Avoid class/namespace collision for io-shell modules
