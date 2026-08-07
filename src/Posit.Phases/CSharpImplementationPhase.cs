@@ -35,18 +35,28 @@ public sealed class CSharpImplementationPhase : IPhase
 
     private static string FindPatternsDirectory()
     {
-        var dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 10; i++)
+        var searchRoots = new[]
         {
-            var candidate = Path.Combine(dir, "patterns");
-            if (Directory.Exists(candidate))
-                return candidate;
-            var parent = Directory.GetParent(dir);
-            if (parent is null)
-                break;
-            dir = parent.FullName;
+            Environment.CurrentDirectory,
+            AppContext.BaseDirectory
+        };
+
+        foreach (var root in searchRoots)
+        {
+            var dir = root;
+            for (int i = 0; i < 10; i++)
+            {
+                var candidate = Path.Combine(dir, "patterns");
+                if (Directory.Exists(candidate))
+                    return candidate;
+                var parent = Directory.GetParent(dir);
+                if (parent is null)
+                    break;
+                dir = parent.FullName;
+            }
         }
-        throw new DirectoryNotFoundException("Could not locate patterns/ directory relative to assembly.");
+
+        throw new DirectoryNotFoundException($"Could not locate patterns/ directory relative to assembly (base={AppContext.BaseDirectory}, cwd={Environment.CurrentDirectory}).");
     }
 
     public PhaseId Id => new("csharp-implementation");
