@@ -434,8 +434,8 @@ public sealed class ArchitecturePhase : IPhase
 
         bool Dfs(string node)
         {
-            if (!visiting.Add(node)) return false; // cycle
             if (visited.Contains(node)) return true;
+            if (!visiting.Add(node)) return false; // cycle
 
             if (graph.TryGetValue(node, out var deps))
             {
