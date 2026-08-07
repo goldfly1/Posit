@@ -1,39 +1,13 @@
 @page "/"
-@using Posit.Contracts.Core
-@using Posit.Data.Repositories
-@inject ArtifactRepository ArtifactRepo
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
 
-<h1>Posit Desktop</h1>
-
-<p>Live sessions from the posit_artifacts store.</p>
-
-@if (_sessions == null)
-{
-    <p>Loading...</p>
-}
-else if (_sessions.Count == 0)
-{
-    <p>No sessions found.</p>
-}
-else
-{
-    <ul>
-        @foreach (var s in _sessions)
-        {
-            <li>
-                <strong>@s.Value</strong>
-                <a href="/sessions/@s.Key">View artifacts</a>
-            </li>
-        }
-    </ul>
-}
+<PageTitle>Redirecting…</PageTitle>
 
 @code {
-    private Dictionary<string, string>? _sessions;
+    [Inject] NavigationManager Nav { get; set; } = default!;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        var list = await ArtifactRepo.ListSessionsAsync();
-        _sessions = list.ToDictionary(s => s.Value, s => s.Value);
+        Nav.NavigateTo("/sessions", forceLoad: false);
     }
 }

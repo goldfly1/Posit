@@ -1,0 +1,99 @@
+@page "/sessions"
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@inject PositDashboardRepository Repo
+
+<PageTitle>Sessions — Posit</PageTitle>
+
+<div class="page-header">
+    <h1 style="color:#89b4fa; margin:0;">Sessions</h1>
+    <button @onclick="RefreshAsync" class="btn btn-primary">
+        ↻ Refresh
+    </button>
+</div>
+
+@if (loading)
+{
+    <p>Loading sessions…</p>
+}
+else if (sessions.Count == 0)
+{
+    <p>No sessions found.</p>
+}
+else
+{
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Session ID</th>
+                <th>Status</th>
+                <th>Current Phase</th>
+                <th>Attempt</th>
+                <th>Description</th>
+                <th>Started</th>
+                <th>Last Advanced</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in sessions)
+            {
+                <tr>
+                    <td>
+                        <a href="/pipeline/@s.SessionId" class="link-primary">
+                            @(s.SessionId.Length > 12 ? s.SessionId[..12] + "…" : s.SessionId)
+                        </a>
+                    </td>
+                    <td>
+                        <span style="@GetStatusStyle(s.Status)" class="badge">
+                            @s.Status
+                        </span>
+                    </td>
+                    <td>@(s.CurrentPhaseId ?? "—")</td>
+                    <td>@s.CurrentAttempt</td>
+                    <td>@(s.Description ?? "—")</td>
+                    <td class="timestamp">@s.StartedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="timestamp">@(s.LastAdvancedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<PositSessionSummary> sessions = new();
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            sessions = await Repo.GetSessionsAsync();
+        }
+        catch (Exception ex)
+        {
+            sessions = new();
+            Console.Error.WriteLine($"Failed to load sessions: {ex}");
+        }
+        loading = false;
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync();
+    }
+
+    private static string GetStatusStyle(string status) => status.ToLowerInvariant() switch
+    {
+        "active" or "validating" or "running" => "background:#a6e3a1; color:#1e1e2e;",
+        "completed" or "success" => "background:#a6e3a1; color:#1e1e2e;",
+        "aborted" or "abandoned" or "failed" or "error" => "background:#f38ba8; color:#1e1e2e;",
+        "paused" or "idle" or "planning" => "background:#f9e2af; color:#1e1e2e;",
+        "retry" or "checkpointrollback" or "recovery" or "reviewgate" => "background:#fab387; color:#1e1e2e;",
+        _ => "background:#313244; color:#cdd6f4;"
+    };
+}

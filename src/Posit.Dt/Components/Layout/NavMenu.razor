@@ -1,0 +1,37 @@
+<div class="top-row ps-3 navbar" style="background:#11111b; border-bottom:1px solid #313244;">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/" style="color:#89b4fa; font-weight:700;">Posit</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="sessions" Match="NavLinkMatch.All">
+                <span style="color:#89b4fa;">▣</span> Sessions
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="prompts" Match="NavLinkMatch.All">
+                <span style="color:#89b4fa;">⟨⟩</span> Prompt Harvest
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="impl-trace" Match="NavLinkMatch.All">
+                <span style="color:#89b4fa;">⚙</span> Impl Trace
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="trials" Match="NavLinkMatch.All">
+                <span style="color:#89b4fa;">⚡</span> Trials
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="guide" Match="NavLinkMatch.All">
+                <span style="color:#89b4fa;">📖</span> User Guide
+            </NavLink>
+        </div>
+    </nav>
+</div>
