@@ -425,10 +425,23 @@ public sealed class CSharpImplementationPhase : IPhase
             if (lastPart.Contains("Test", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // Skip files whose content is actually a project file but misnamed .cs
-            if (lastPart.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                && file.Content.TrimStart().StartsWith("<Project", StringComparison.OrdinalIgnoreCase))
+            // Carapace rule: the C# Implementation phase inlays FUNCTION only.
+            // Project files (.csproj), solution files (.sln), and MSBuild imports (.props/.targets)
+            // are prefabricated by the orchestrator/verifier from the architecture contract.
+            // Drop any such files the model emits, regardless of path.
+            var ext = Path.GetExtension(lastPart).ToLowerInvariant();
+            if (ext is ".csproj" or ".sln" or ".props" or ".targets")
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': project/solution/MSBuild files are prefabricated, not emitted by C# Implementation");
                 continue;
+            }
+
+            // Also drop any source file whose content is actually a project file body.
+            if (file.Content.TrimStart().StartsWith("\u003cProject", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': content is a project file body, not C# source");
+                continue;
+            }
 
             // Reject paths whose first directory is not the current module (or Shared).
             // Files belong to exactly one module; do not pull strays from sibling modules.

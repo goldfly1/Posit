@@ -386,26 +386,19 @@ public sealed class PositOrchestrator
                     continue;
                 }
 
-                // Project/solution files must be placed in their own component directory.
-                // A .csproj belongs to the component named in the file (after stripping any solution prefix).
-                // A .sln must live at the generated root, never inside a component folder.
+                // C# Implementation inlays FUNCTION only. Project/solution/MSBuild files
+                // are prefabricated by the verifier from the architecture contract.
                 var lastPart = parts[^1];
                 var ext = Path.GetExtension(lastPart).ToLowerInvariant();
-                if (ext == ".csproj")
+                if (ext is ".csproj" or ".sln" or ".props" or ".targets")
                 {
-                    var projectName = InferProjectNameFromCsprojFileName(lastPart);
-                    if (!allowedRoots.Contains(projectName))
-                    {
-                        errors.Add($"carapace.misplaced.csproj: '{rel}' names project '{projectName}', which is not an authorized component");
-                    }
-                    else if (!string.Equals(projectName, firstDir, StringComparison.OrdinalIgnoreCase))
-                    {
-                        errors.Add($"carapace.misplaced.csproj: '{rel}' belongs to component '{projectName}', not '{firstDir}'; move it to '{projectName}/'");
-                    }
+                    errors.Add($"carapace.prefab_file: '{rel}' .csproj/.sln/.props/.targets are prefabricated, not emitted by C# Implementation");
                 }
-                else if (ext == ".sln")
+
+                // Project file bodies smuggled inside .cs files are also rejected.
+                if (file.Content?.TrimStart().StartsWith("\u003cProject", StringComparison.OrdinalIgnoreCase) == true)
                 {
-                    errors.Add($"carapace.misplaced.sln: '{rel}' solution files must be at the generated root, not inside a component directory");
+                    errors.Add($"carapace.prefab_file: '{rel}' content is a project file body, not C# source");
                 }
 
                 // No other authorized component may appear as an intermediate directory.
@@ -419,6 +412,22 @@ public sealed class PositOrchestrator
                     }
                 }
             }
+
+            // Every authorized component must be represented by at least one file.
+            // Missing a component means the C# phase failed to inlay its stub cap.
+            var presentRoots = new HashSet<string>(
+                bundle.Files
+                    .Where(f => !string.IsNullOrWhiteSpace(f.Path))
+                    .Select(f => f.Path!.Replace('\\', '/').TrimStart('/').Split('/')[0]),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var component in allowedRoots.Where(c => !string.Equals(c, "Shared", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!presentRoots.Contains(component))
+                {
+                    errors.Add($"carapace.missing_component: '{component}' is in the architecture contract but has no files in the C# Implementation output");
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -430,20 +439,6 @@ public sealed class PositOrchestrator
             IsValid = errors.Count == 0,
             Errors = errors.ToArray()
         };
-    }
-
-    /// <summary>
-    /// Infer the canonical component/project name from a .csproj file name.
-    /// Strips a leading solution prefix such as "WorkflowEngine." so that
-    /// "WorkflowEngine.Contracts.csproj" maps to "Contracts".
-    /// </summary>
-    private static string InferProjectNameFromCsprojFileName(string fileName)
-    {
-        var name = Path.GetFileNameWithoutExtension(fileName);
-        var dot = name.IndexOf('.');
-        if (dot > 0 && dot < name.Length - 1)
-            return name[(dot + 1)..];
-        return name;
     }
 
     /// <summary>

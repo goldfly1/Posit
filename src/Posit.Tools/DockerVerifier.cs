@@ -39,6 +39,7 @@ public sealed class DockerVerifier
             var sourceBundle = artifacts.LastOrDefault(a => a.Kind == ArtifactKind.SourceCodeBundle);
             var testSuite = artifacts.LastOrDefault(a => a.Kind == ArtifactKind.TestSuite);
             var dafnyVerification = artifacts.LastOrDefault(a => a.Kind == ArtifactKind.DafnyVerification);
+            var architectureContract = artifacts.LastOrDefault(a => a.Kind == ArtifactKind.ArchitectureContract);
 
             if (sourceBundle is null)
                 return (false, "No SourceCodeBundle artifact found.");
@@ -46,6 +47,15 @@ public sealed class DockerVerifier
             var source = JsonSerializer.Deserialize<SourceCodeBundle>(sourceBundle.PayloadJson, Options);
             if (source?.Files is null or { Length: 0 })
                 return (false, "SourceCodeBundle contains no files.");
+
+            ArchitectureContract? arch = null;
+            if (architectureContract is not null)
+                arch = JsonSerializer.Deserialize<ArchitectureContract>(architectureContract.PayloadJson, Options);
+            var archRefs = arch?.Components?.DistinctBy(c => c.Name, StringComparer.OrdinalIgnoreCase)?.ToDictionary(
+                c => c.Name,
+                c => (IReadOnlySet<string>)(c.Dependencies ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase)
+                ?? new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase);
 
             var tests = testSuite is not null
                 ? JsonSerializer.Deserialize<TestSuite>(testSuite.PayloadJson, Options)
@@ -108,7 +118,7 @@ public sealed class DockerVerifier
                 var csprojPath = Path.Combine(projectDir, $"{projectName}.csproj");
                 var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
                 var isTest = IsTestProjectDirectory(projectDir, projectName);
-                var refs = InferReferences(projectName, candidateProjectDirs, contextDir);
+                var refs = InferReferencesFromArchitecture(projectName, archRefs);
                 var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
                 await File.WriteAllTextAsync(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, pkgs, fws, isTest), ct);
             }
@@ -122,12 +132,12 @@ public sealed class DockerVerifier
                 var projectName = Path.GetFileNameWithoutExtension(csproj);
                 var isTest = IsTestProjectDirectory(projectDir, projectName);
                 var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
-                MergeMissingRefsIntoCsproj(csproj, projectName, candidateProjectDirs, contextDir, pkgs, fws);
+                MergeMissingRefsIntoCsproj(csproj, projectName, candidateProjectDirs, contextDir, pkgs, fws, archRefs);
             }
 
             // Generate solution
             var sln = Path.Combine(contextDir, "PositGenerated.sln");
-            await File.WriteAllTextAsync(sln, GenerateSolution(contextDir, targetFramework), ct);
+            await File.WriteAllTextAsync(sln, GenerateSolution(contextDir, targetFramework, archRefs), ct);
 
             // Dockerfile
             var dockerfile = Path.Combine(contextDir, "Dockerfile");
@@ -282,6 +292,19 @@ public sealed class DockerVerifier
         return null;
     }
 
+    private static HashSet<string> InferReferencesFromArchitecture(string projectName, Dictionary<string, IReadOnlySet<string>>? archRefs)
+    {
+        // The architecture contract is the sole authority for inter-component connections.
+        // Project references are prefabricated from that DAG; C# source usage does not create new ones.
+        if (archRefs is not null && archRefs.TryGetValue(projectName, out var deps))
+            return new HashSet<string>(deps, StringComparer.OrdinalIgnoreCase);
+        return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Legacy heuristic inference kept for fallback when no architecture contract is present.
+    /// Prefer InferReferencesFromArchitecture when the contract is available.
+    /// </summary>
     private static HashSet<string> InferReferences(string projectName, List<string> allProjects, string contextDir)
     {
         var refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -560,10 +583,12 @@ public sealed class DockerVerifier
         string contextDir,
         HashSet<string> inferredPackages,
         HashSet<string> inferredFrameworks,
-        HashSet<string>? inferredProjectRefs = null)
+        Dictionary<string, IReadOnlySet<string>>? archRefs = null)
     {
         var xml = File.ReadAllText(csprojPath);
-        var refs = inferredProjectRefs ?? InferReferences(projectName, allProjects, contextDir);
+        var refs = archRefs is not null
+            ? InferReferencesFromArchitecture(projectName, archRefs)
+            : InferReferences(projectName, allProjects, contextDir);
 
         // Helper: parse existing package references by name.
         var existingPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -708,7 +733,7 @@ public sealed class DockerVerifier
         File.WriteAllText(csprojPath, xml);
     }
 
-    private static string GenerateSolution(string contextDir, string targetFramework)
+    private static string GenerateSolution(string contextDir, string targetFramework, Dictionary<string, IReadOnlySet<string>>? archRefs = null)
     {
         var projectDirs = Directory.GetDirectories(contextDir, "*", SearchOption.TopDirectoryOnly)
             .Where(d => Directory.GetFiles(d, "*.cs", SearchOption.AllDirectories).Any())
@@ -725,7 +750,7 @@ public sealed class DockerVerifier
             var csprojPath = Path.Combine(projectDir, $"{projectName}.csproj");
             var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
             var isTest = IsTestProjectDirectory(projectDir, projectName);
-            var refs = InferReferences(projectName, projectDirs, contextDir);
+            var refs = InferReferencesFromArchitecture(projectName, archRefs);
             var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
             File.WriteAllText(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, pkgs, fws, isTest));
         }
@@ -766,9 +791,9 @@ public sealed class DockerVerifier
             var projectDir = Path.GetDirectoryName(csproj)!;
             var projectName = Path.GetFileNameWithoutExtension(csproj);
             var isTest = IsTestProjectDirectory(projectDir, projectName);
-            var refs = InferReferences(projectName, uniqueProjects.Select(p => p.Name).ToList(), contextDir);
+            var refs = InferReferencesFromArchitecture(projectName, archRefs);
             var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
-            MergeMissingRefsIntoCsproj(csproj, projectName, uniqueProjects.Select(p => p.Name).ToList(), contextDir, pkgs, fws, refs);
+            MergeMissingRefsIntoCsproj(csproj, projectName, uniqueProjects.Select(p => p.Name).ToList(), contextDir, pkgs, fws, archRefs);
         }
 
         var sb = new StringBuilder();
