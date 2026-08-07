@@ -386,6 +386,28 @@ public sealed class PositOrchestrator
                     continue;
                 }
 
+                // Project/solution files must be placed in their own component directory.
+                // A .csproj belongs to the component named in the file (after stripping any solution prefix).
+                // A .sln must live at the generated root, never inside a component folder.
+                var lastPart = parts[^1];
+                var ext = Path.GetExtension(lastPart).ToLowerInvariant();
+                if (ext == ".csproj")
+                {
+                    var projectName = InferProjectNameFromCsprojFileName(lastPart);
+                    if (!allowedRoots.Contains(projectName))
+                    {
+                        errors.Add($"carapace.misplaced.csproj: '{rel}' names project '{projectName}', which is not an authorized component");
+                    }
+                    else if (!string.Equals(projectName, firstDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        errors.Add($"carapace.misplaced.csproj: '{rel}' belongs to component '{projectName}', not '{firstDir}'; move it to '{projectName}/'");
+                    }
+                }
+                else if (ext == ".sln")
+                {
+                    errors.Add($"carapace.misplaced.sln: '{rel}' solution files must be at the generated root, not inside a component directory");
+                }
+
                 // No other authorized component may appear as an intermediate directory.
                 for (int i = 1; i < parts.Length - 1; i++)
                 {
@@ -408,6 +430,20 @@ public sealed class PositOrchestrator
             IsValid = errors.Count == 0,
             Errors = errors.ToArray()
         };
+    }
+
+    /// <summary>
+    /// Infer the canonical component/project name from a .csproj file name.
+    /// Strips a leading solution prefix such as "WorkflowEngine." so that
+    /// "WorkflowEngine.Contracts.csproj" maps to "Contracts".
+    /// </summary>
+    private static string InferProjectNameFromCsprojFileName(string fileName)
+    {
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        var dot = name.IndexOf('.');
+        if (dot > 0 && dot < name.Length - 1)
+            return name[(dot + 1)..];
+        return name;
     }
 
     /// <summary>

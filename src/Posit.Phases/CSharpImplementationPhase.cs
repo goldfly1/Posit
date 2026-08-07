@@ -440,6 +440,26 @@ public sealed class CSharpImplementationPhase : IPhase
                 continue;
             }
 
+            // Reject project/solution files that are not placed in their own component directory.
+            // e.g. "Contracts/CLI.csproj" is a stray skeleton; a CLI project file must live under "CLI/".
+            // Solution files must live at the root, never inside a component folder.
+            var fileExt = Path.GetExtension(lastPart).ToLowerInvariant();
+            if (fileExt == ".csproj")
+            {
+                var projectName = InferProjectNameFromCsproj(lastPart);
+                if (!string.Equals(projectName, moduleName, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(projectName, firstDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': .csproj '{lastPart}' belongs to project '{projectName}', not module '{moduleName}'");
+                    continue;
+                }
+            }
+            else if (fileExt == ".sln")
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': solution files must be at the generated root, not inside a component directory");
+                continue;
+            }
+
             // Reject paths that nest another authorized component as a subdirectory.
             // e.g. "Shared/Core/..." when Core is a component is also disallowed.
             bool nestsAnotherComponent = false;
@@ -511,6 +531,23 @@ public sealed class CSharpImplementationPhase : IPhase
             if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                 return name[..^suffix.Length];
         }
+        return name;
+    }
+
+    /// <summary>
+    /// Infer the canonical component/project name from a .csproj file name.
+    /// Strips common solution prefixes such as "WorkflowEngine." so that
+    /// "WorkflowEngine.Contracts.csproj" maps to "Contracts".
+    /// </summary>
+    private static string InferProjectNameFromCsproj(string fileName)
+    {
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        // Strip the longest known solution prefix if present.
+        // We accept any "Word." prefix as a solution name and keep the trailing token,
+        // because the model may invent arbitrary solution names.
+        var dot = name.IndexOf('.');
+        if (dot > 0 && dot < name.Length - 1)
+            return name[(dot + 1)..];
         return name;
     }
 
