@@ -80,14 +80,15 @@ public sealed class DockerVerifier
                     AddFile(filesByRelPath, file);
             }
 
-            var targetFramework = DetectTargetFramework(filesByRelPath.Values) ?? "net8.0";
+            var targetFramework = DetectTargetFramework(filesByRelPath.Values) ?? "net9.0";
 
             // Materialize files
             foreach (var file in filesByRelPath.Values)
             {
                 var fullPath = Path.Combine(contextDir, file.Path);
                 Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-                await File.WriteAllTextAsync(fullPath, file.Content, ct);
+                var content = SanitizeSourceFile(file.Content);
+                await File.WriteAllTextAsync(fullPath, content, ct);
             }
 
             // Build project directory list and create missing .csproj files.
@@ -147,6 +148,51 @@ public sealed class DockerVerifier
                 Console.Error.WriteLine($"[Posit] Preserved verify context: {contextDir}");
             }
         }
+    }
+
+    /// <summary>
+    /// Bounded source repairs for common model omissions that would otherwise fail
+    /// deterministic compilation. These are standard-library extension methods whose
+    /// namespace the QA model often forgets to import.
+    /// </summary>
+    private static string SanitizeSourceFile(string content)
+    {
+        var usesDiNamespace = content.Contains("using Microsoft.Extensions.DependencyInjection;") ||
+                              content.Contains("using Microsoft.Extensions.DependencyInjection"); // trailing whitespace variants handled below
+
+        var needsExtensionsNamespace = content.Contains("RemoveAll") ||
+                                       content.Contains("TryAdd") ||
+                                       content.Contains(".Replace(") ||
+                                       content.Contains("AddLogging");
+
+        if (usesDiNamespace && needsExtensionsNamespace &&
+            !content.Contains("using Microsoft.Extensions.DependencyInjection.Extensions;"))
+        {
+            // Find the line with the DI using and insert the extension using right after it.
+            var diUsingIndex = content.IndexOf("using Microsoft.Extensions.DependencyInjection;");
+            if (diUsingIndex >= 0)
+            {
+                var endOfLine = content.IndexOf('\n', diUsingIndex);
+                if (endOfLine < 0) endOfLine = content.Length;
+                content = content.Insert(endOfLine + 1, "using Microsoft.Extensions.DependencyInjection.Extensions;\n");
+            }
+            else
+            {
+                var lastUsing = content.LastIndexOf("using ");
+                if (lastUsing >= 0)
+                {
+                    var endOfLine = content.IndexOf('\n', lastUsing);
+                    if (endOfLine < 0) endOfLine = content.Length;
+                    content = content.Insert(endOfLine + 1, "using Microsoft.Extensions.DependencyInjection.Extensions;\n");
+                }
+                else
+                {
+                    content = "using Microsoft.Extensions.DependencyInjection.Extensions;\n" + content;
+                }
+            }
+        }
+
+        return content;
     }
 
     private static void AddFile(Dictionary<string, SourceCodeFile> filesByRelPath, SourceCodeFile file)
@@ -360,16 +406,19 @@ public sealed class DockerVerifier
             frameworks.Add("Microsoft.AspNetCore.App");
         }
 
-        var efVersion = tfmMajor >= 10 ? "10.0.0" : $"{tfmMajor}.0.8";
-        var aspVersion = tfmMajor >= 10 ? "10.0.0" : $"{tfmMajor}.0.8";
-        var extVersion = tfmMajor >= 10 ? "10.0.0" : $"{tfmMajor}.0.1";
+        // Use the latest stable package versions for inferred references, regardless of
+        // target framework. Newer packages are backward-compatible and this avoids the
+        // endless downgrade/version-mismatch dance.
+        const string EfVersion = "9.0.0";
+        const string AspNetVersion = "9.0.0";
+        const string ExtensionsVersion = "9.0.0";
 
         // ASP.NET Core integration testing
         if (allSource.Contains("WebApplicationFactory") || allSource.Contains("CustomWebApplicationFactory"))
-            packages.Add($"Microsoft.AspNetCore.Mvc.Testing|{aspVersion}");
+            packages.Add($"Microsoft.AspNetCore.Mvc.Testing|{AspNetVersion}");
 
         if (allSource.Contains("TestServer"))
-            packages.Add($"Microsoft.AspNetCore.TestHost|{aspVersion}");
+            packages.Add($"Microsoft.AspNetCore.TestHost|{AspNetVersion}");
 
         // Entity Framework Core
         if (allSource.Contains("Microsoft.EntityFrameworkCore") ||
@@ -378,7 +427,7 @@ public sealed class DockerVerifier
             allSource.Contains("MigrationBuilder") ||
             allSource.Contains("ModelBuilder"))
         {
-            packages.Add($"Microsoft.EntityFrameworkCore|{efVersion}");
+            packages.Add($"Microsoft.EntityFrameworkCore|{EfVersion}");
         }
 
         // EF Core Relational (MigrateAsync, ToTable, HasColumnName, annotations)
@@ -389,7 +438,7 @@ public sealed class DockerVerifier
             allSource.Contains("UseIdentityByDefaultColumns") ||
             allSource.Contains("NpgsqlModelBuilderExtensions"))
         {
-            packages.Add($"Microsoft.EntityFrameworkCore.Relational|{efVersion}");
+            packages.Add($"Microsoft.EntityFrameworkCore.Relational|{EfVersion}");
         }
 
         // PostgreSQL / Npgsql
@@ -397,7 +446,7 @@ public sealed class DockerVerifier
             allSource.Contains("UseNpgsql") ||
             allSource.Contains("NpgsqlDbContextOptionsExtensions"))
         {
-            packages.Add($"Npgsql.EntityFrameworkCore.PostgreSQL|{efVersion}");
+            packages.Add($"Npgsql.EntityFrameworkCore.PostgreSQL|{EfVersion}");
         }
         else if (allSource.Contains("Npgsql"))
         {
@@ -409,23 +458,27 @@ public sealed class DockerVerifier
 
         if (allSource.Contains("Microsoft.Extensions.Hosting") || allSource.Contains("IHost"))
         {
-            packages.Add($"Microsoft.Extensions.Hosting|{extVersion}");
+            packages.Add($"Microsoft.Extensions.Hosting|{ExtensionsVersion}");
             mayProvideLoggingAbstractions = true;
         }
 
         if (allSource.Contains("Microsoft.Extensions.DependencyInjection") || allSource.Contains("IServiceCollection"))
-            packages.Add($"Microsoft.Extensions.DependencyInjection|{extVersion}");
+        {
+            packages.Add($"Microsoft.Extensions.DependencyInjection|{ExtensionsVersion}");
+            // IServiceCollection extension methods such as RemoveAll live in the abstractions package.
+            packages.Add($"Microsoft.Extensions.DependencyInjection.Abstractions|{ExtensionsVersion}");
+        }
 
         if (allSource.Contains("Microsoft.Extensions.Logging") || allSource.Contains("ILogger"))
         {
             // Only add Logging.Abstractions explicitly if nothing else is already going to bring it in
             // at a higher version (Npgsql, EF Core, and Hosting all reference it transitively).
             if (!mayProvideLoggingAbstractions && !packages.Any(p => p.StartsWith("Npgsql", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)))
-                packages.Add($"Microsoft.Extensions.Logging.Abstractions|{extVersion}");
+                packages.Add($"Microsoft.Extensions.Logging.Abstractions|{ExtensionsVersion}");
         }
 
         if (allSource.Contains("Microsoft.Extensions.Configuration"))
-            packages.Add($"Microsoft.Extensions.Configuration|{extVersion}");
+            packages.Add($"Microsoft.Extensions.Configuration|{ExtensionsVersion}");
 
         return (packages, frameworks);
     }
