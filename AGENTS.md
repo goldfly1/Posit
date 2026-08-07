@@ -41,6 +41,9 @@
 8. **Skeleton correction loops back to Architecture** — max 2 loopbacks, then downgrade to io-shell.
 9. **Mixed modules split at Architecture** — architect outputs two Component records.
 10. **Imp appeal for io-shell only** — Dafny modules have Z3 as judge, no appeal. Kimi reviews appeals (max 1 per module).
+11. **Architect writes the tests** — the architect is enjoined to write test cases for every module. These are the acceptance criteria. QA tests against the architect's test cases and the module's public surface, not against the full architecture. This minimizes the QA context snowball — QA doesn't need the whole design, just the test cases and the skeleton for namespace access. Test cases are hung on the skeleton (`// test: ParseLine("a,b,c") returns ["a","b","c"]`) and carried in the `Component.TestCases` field.
+12. **Skeleton is the carapace** — the .dfy file on disk is the authority. The artifact carries the path, not the content. Names, types, contracts, dependencies are tattooed on the carapace. No guessing, no making it up. Imp inlays the function within the pre-cut shape.
+13. **Pattern registry** — the architect selects from a pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. `PatternRegistry.ComposeSkeleton()` bolts stubs onto patterns. 2 from column A, 6 from column B.
 
 ## Pipeline
 

@@ -229,3 +229,6 @@ The I/O is outside the proof boundary.
 11. **C# only** — multi-target is future. No target-language abstraction now.
 12. **Determinism is target-specific** — not a core property. Only relevant if Rust target is added.
 13. **Imp appeal process for io-shell modules** — kimi-2.7-code:cloud reviews appeals. Max 1 per module. Architect spec is the source of truth. Under observation: does it improve workflow, mitigate tokens, or neither?
+14. **Architect writes the tests** — the architect is enjoined to write test cases for every module. These are the acceptance criteria. QA tests against the architect's test cases and the module's public surface, not the full architecture. This minimizes the QA context snowball. Test cases are hung on the skeleton as comments and carried in `Component.TestCases`.
+15. **Skeleton is the carapace** — the .dfy file on disk is the authority. Artifact carries the path, not the content. Names, types, contracts, dependencies tattooed on the carapace. No guessing, no making it up. Imp inlays the function within the pre-cut shape.
+16. **Pattern registry** — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.
