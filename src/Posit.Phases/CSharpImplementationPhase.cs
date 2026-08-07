@@ -180,6 +180,7 @@ public sealed class CSharpImplementationPhase : IPhase
         var files = new List<SourceCodeFile>();
         var totalInput = 0;
         var totalOutput = 0;
+        var componentNames = GetComponentNames(context);
 
         foreach (var (moduleName, csharpPath) in translatedFiles)
         {
@@ -207,7 +208,7 @@ public sealed class CSharpImplementationPhase : IPhase
                     generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
                     null, null, ct);
 
-                var parsedFiles = ParseFileOutput(generation.Text, moduleName);
+                var parsedFiles = ParseFileOutput(generation.Text, moduleName, componentNames);
                 if (parsedFiles.Count > 0)
                 {
                     files.AddRange(parsedFiles);
@@ -230,6 +231,7 @@ public sealed class CSharpImplementationPhase : IPhase
         var files = new List<SourceCodeFile>();
         var totalInput = 0;
         var totalOutput = 0;
+        var componentNames = GetComponentNames(context);
 
         foreach (var shell in ioShells)
         {
@@ -254,7 +256,7 @@ public sealed class CSharpImplementationPhase : IPhase
                     generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
                     null, null, ct);
 
-                var parsedFiles = ParseFileOutput(generation.Text, shell.Name);
+                var parsedFiles = ParseFileOutput(generation.Text, shell.Name, componentNames);
                 if (parsedFiles.Count > 0)
                 {
                     files.AddRange(parsedFiles);
@@ -271,6 +273,14 @@ public sealed class CSharpImplementationPhase : IPhase
         return (files, totalInput, totalOutput);
     }
 
+    private static IReadOnlySet<string> GetComponentNames(PhaseContext context)
+    {
+        var components = context.DesignContext?.Components;
+        if (components is null || components.Length == 0)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return new HashSet<string>(components.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+    }
+
     private static string BuildExternPrompt(string moduleName, string csharpPath, string translatedCSharp)
     {
         var sb = new StringBuilder();
@@ -278,6 +288,8 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine("The translated file below already contains all verified types, namespaces, and method signatures. Do NOT redeclare them.");
         sb.AppendLine("Do NOT emit a copy of the translated skeleton. Do NOT create a separate project or folder.");
         sb.AppendLine("Do NOT invent new module names or directories that are not in the architecture contract.");
+        sb.AppendLine("Do NOT nest component directories inside other component directories (e.g. 'Contracts/Core/'). Each component is a top-level directory only.");
+        sb.AppendLine("Do NOT emit duplicate implementations for the same component. One component = one directory.");
         sb.AppendLine("Do NOT emit test files, xUnit attributes, or test classes — QA handles tests.");
         sb.AppendLine("Do NOT emit .csproj files or project files with .cs extensions.");
         sb.AppendLine("Emit files ONLY under the canonical module directory for this extern portal.");
@@ -317,7 +329,8 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine($"You are authorized to emit files ONLY under the '{shell.Name}/' directory.");
         sb.AppendLine("Do NOT create new project directories (e.g. MigrationRunner, TodoApiImplementation, etc.) that are not explicitly in the architecture contract.");
         sb.AppendLine("Do NOT move the entry point (Program.cs) to a different directory or namespace.");
-        sb.AppendLine("IMPORTANT: avoid namespace/class name collisions. The project root namespace will match the module name.");
+        sb.AppendLine("Do NOT nest component directories inside other component directories (e.g. 'Contracts/Core/'). Each component is a top-level directory only.");
+        sb.AppendLine("Do NOT emit duplicate implementations for the same component. One component = one directory.");
         sb.AppendLine($"Therefore the main class MUST NOT be named exactly '{shell.Name}'; use '{shell.Name}Service' or '{shell.Name}Impl' instead.");
         sb.AppendLine("Do NOT emit test files, xUnit attributes, or test classes — QA handles tests.");
         sb.AppendLine("Do NOT emit .csproj files or project files with .cs extensions.");
@@ -357,7 +370,7 @@ public sealed class CSharpImplementationPhase : IPhase
     /// The gateway already stripped reasoning tags and extracted JSON, so we
     /// try direct parsing first and only fall back to extraction on failure.
     /// </summary>
-    private static List<SourceCodeFile> ParseFileOutput(string text, string moduleName)
+    private static List<SourceCodeFile> ParseFileOutput(string text, string moduleName, IReadOnlySet<string> componentNames)
     {
         var files = new List<SourceCodeFile>();
 
@@ -368,7 +381,7 @@ public sealed class CSharpImplementationPhase : IPhase
         // Try the provided text directly first.
         if (TryParseFiles(text, files))
         {
-            files = NormalizeAndFilter(files, moduleName);
+            files = NormalizeAndFilter(files, moduleName, componentNames);
             return files;
         }
 
@@ -381,7 +394,7 @@ public sealed class CSharpImplementationPhase : IPhase
             files.Clear();
             if (TryParseFiles(json, files))
             {
-                files = NormalizeAndFilter(files, moduleName);
+                files = NormalizeAndFilter(files, moduleName, componentNames);
                 return files;
             }
         }
@@ -393,8 +406,10 @@ public sealed class CSharpImplementationPhase : IPhase
     /// <summary>
     /// Normalize generated paths so extern/implementation fragments land in the
     /// parent module folder. Drop raw skeleton duplicates the model sometimes emits.
+    /// Drop files that nest another authorized component as a subdirectory — that
+    /// is a stray/duplicate implementation, not part of this module.
     /// </summary>
-    private static List<SourceCodeFile> NormalizeAndFilter(List<SourceCodeFile> files, string moduleName)
+    private static List<SourceCodeFile> NormalizeAndFilter(List<SourceCodeFile> files, string moduleName, IReadOnlySet<string> componentNames)
     {
         var normalized = new List<SourceCodeFile>();
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -412,7 +427,23 @@ public sealed class CSharpImplementationPhase : IPhase
 
             // Skip files whose content is actually a project file but misnamed .cs
             if (lastPart.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                && file.Content.TrimStart().StartsWith("\u003cProject", StringComparison.OrdinalIgnoreCase))
+                && file.Content.TrimStart().StartsWith("<Project", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Reject paths that nest another authorized component as a subdirectory.
+            // e.g. "Contracts/Core/..." when both Contracts and Core are components.
+            bool nestsAnotherComponent = false;
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                var dir = StripDirectoryNoise(parts[i]);
+                if (i != 0 && componentNames.Contains(dir) && !string.Equals(dir, moduleName, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Error.WriteLine($"[Posit] C# Implementation — dropping '{rel}': nests component '{dir}' inside '{moduleName}'");
+                    nestsAnotherComponent = true;
+                    break;
+                }
+            }
+            if (nestsAnotherComponent)
                 continue;
 
             // Strip implementation/extern noise from intermediate directories

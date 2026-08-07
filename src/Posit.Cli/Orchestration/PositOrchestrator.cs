@@ -351,6 +351,8 @@ public sealed class PositOrchestrator
     /// Carapace enforcement for C# Implementation output. Every generated file must
     /// live under an authorized component directory from the Architecture contract.
     /// New directories invented by the model (e.g. "MigrationRunner") are rejected.
+    /// A component directory may not contain another authorized component as a
+    /// subdirectory — each component is a top-level directory only.
     /// </summary>
     private static ValidationResult ValidateCSharpCarapace(SessionState state, ArtifactBundle artifact)
     {
@@ -373,13 +375,26 @@ public sealed class PositOrchestrator
             foreach (var file in bundle.Files)
             {
                 var rel = file.Path?.Replace('\\', '/').TrimStart('/') ?? "";
-                var firstDir = rel.Split('/').FirstOrDefault();
-                if (string.IsNullOrWhiteSpace(firstDir))
+                var parts = rel.Split('/').Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+                if (parts.Length == 0)
                     continue;
 
+                var firstDir = parts[0];
                 if (!allowedRoots.Contains(firstDir))
                 {
                     errors.Add($"carapace.off_list.directory: '{firstDir}' is not an authorized component directory ({string.Join(", ", allowedRoots.OrderBy(n => n))})");
+                    continue;
+                }
+
+                // No other authorized component may appear as an intermediate directory.
+                for (int i = 1; i < parts.Length - 1; i++)
+                {
+                    var dir = parts[i];
+                    if (allowedRoots.Contains(dir) && !string.Equals(dir, firstDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        errors.Add($"carapace.nested_component: '{rel}' nests component '{dir}' inside '{firstDir}'; each component must be a top-level directory");
+                        break;
+                    }
                 }
             }
         }

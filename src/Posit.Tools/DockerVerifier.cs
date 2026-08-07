@@ -453,6 +453,17 @@ public sealed class DockerVerifier
             packages.Add("Npgsql|9.0.2");
         }
 
+        // Microsoft.Data.SqlClient (SQL Server ADO.NET)
+        if (allSource.Contains("SqlConnection") ||
+            allSource.Contains("SqlCommand") ||
+            allSource.Contains("SqlTransaction") ||
+            allSource.Contains("SqlDataReader") ||
+            allSource.Contains("SqlParameter") ||
+            allSource.Contains("Microsoft.Data.SqlClient"))
+        {
+            packages.Add("Microsoft.Data.SqlClient|5.2.2");
+        }
+
         // Generic host / DI / logging / configuration
         var mayProvideLoggingAbstractions = false;
 
