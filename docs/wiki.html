@@ -186,19 +186,19 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-11905159">Posit Architecture</a></li>
+<li class="page"><a href="#page-16253126">Posit Architecture</a></li>
 </ul>
 </li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-9264319">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-10993594">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-7601792">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-16273835">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-5438574">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-15331299">Handoff 2026 08 08</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-2822511">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-7137746">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
     </ul>
@@ -209,7 +209,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-7601792" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-5438574" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -548,10 +548,10 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-16273835" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-15331299" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
-            <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
+            <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
             <h1 id="posit-handoff-sheet-aug-8-2026">Posit Handoff Sheet — Aug 8, 2026</h1>
 
 <h2 id="project">Project</h2>
@@ -571,6 +571,7 @@ body {
 <li style="margin-left:0ch"><strong>T3 (TaskApi / ASP.NET Core CRUD + Postgres + Docker Compose) is the first real failure:</strong> pipeline completed exit 0, but Docker verification failed.</li>
 <li style="margin-left:0ch"><code class="inline">posit resume &lt;session-id&gt;</code> is implemented and verified.</li>
 <li style="margin-left:0ch">Blazor desktop UI (<code class="inline">Posit.Dt</code>) lists live sessions from Postgres and serves HTTP directly in Development.</li>
+<li style="margin-left:0ch"><strong>Carapace enforcement is now deterministic:</strong> Architecture and C# Implementation outputs are gated by must-have and not-a-thing checklists.</li>
 
 </ul><h2 id="recent-changes">Recent Changes</h2>
 
@@ -579,6 +580,21 @@ body {
 <th>Change</th>
 <th>File</th>
 <th>Why</th>
+</tr>
+<tr>
+<td>Architecture deterministic checklist</td>
+<td><code class="inline">src/Posit.Phases/ArchitecturePhase.cs</code>, <code class="inline">prompts/architecture/1.0.0.md</code></td>
+<td>Reject incomplete carapace contracts before they reach downstream phases</td>
+</tr>
+<tr>
+<td>C# carapace enforcement</td>
+<td><code class="inline">src/Posit.Cli/Orchestration/PositOrchestrator.cs</code></td>
+<td>Reject generated directories that are not authorized by the architecture contract</td>
+</tr>
+<tr>
+<td>C# phase prompt hardening</td>
+<td><code class="inline">src/Posit.Phases/CSharpImplementationPhase.cs</code></td>
+<td>Forbid inventing new project directories or moving the entry point</td>
 </tr>
 <tr>
 <td>Docker verifier</td>
@@ -678,7 +694,7 @@ body {
 
 </ul><h3 id="t2-priority-queue">T2 — Priority Queue</h3>
 
-<ul><li style="margin-left:0ch">Session: <code class="inline">KgCMmAcgWE2YbFbfLBSzdg0000</code></li>
+<ul><li style="margin-left:0ch">Session: <code class="inline">DgrruGRL1U-UzrQxS-nlsg0000</code> (first run) and <code class="inline">KgCMmAcgWE2YbFbfLBSzdg0000</code> (resumed run)</li>
 <li style="margin-left:0ch">Result: Completed, 5 phases</li>
 <li style="margin-left:0ch">Docker build: 0 errors, 87 warnings</li>
 <li style="margin-left:0ch">Tests: 24 passed, 0 failed</li>
@@ -693,21 +709,48 @@ body {
 </ul><p>Final Docker error after systemic verifier improvements:</p>
 
 <pre><code class="language-">
-Skipping project &quot;/src/MigrationRunner/MigrationRunner.csproj&quot; because it was not found.
-error MSB4006: There is a circular dependency in the target dependency graph
-  involving target &quot;_GenerateRestoreProjectPathWalk&quot;.
-  [/src/TodoRepositoryLogic/TodoRepositoryLogic.csproj]
+NU1605: Detected package downgrade: Microsoft.EntityFrameworkCore from 8.0.8 to 8.0.0
+  [/src/MigrationRunner/TodoApi.csproj]
 </code></pre>
 
-<p>Remaining root causes:</p>
+<p>Root cause diagnosis:</p>
 
-<ul><li><strong>Wrong project file name assumption.</strong> The verifier assumes each project directory contains <code class="inline">{dirName}.csproj</code>. T3&#x27;s C# Implementation phase put the API inside a directory named <code class="inline">MigrationRunner</code> but named the project file <code class="inline">TodoApi.csproj</code>. The inferred <code class="inline">ProjectReference</code> then points to a non-existent <code class="inline">MigrationRunner.csproj</code>.</li>
-<li><strong>Circular project references.</strong> The type-name heuristic inferred a bidirectional reference between <code class="inline">TodoValidator</code> and <code class="inline">TodoRepositoryLogic</code>.</li>
-<li><strong>Structural misplacement.</strong> The API, migrations, integration test factory, and repository I/O shell were all emitted into the <code class="inline">MigrationRunner</code> module instead of being separated into <code class="inline">TodoApi</code>, <code class="inline">TodoRepositoryDb</code>, etc.</li>
+<ul><li><strong>&quot;Mr. Imp off-list.&quot;</strong> The C# Implementation phase invented a <code class="inline">MigrationRunner</code> directory that was not in the architecture contract and placed the API entry point there. The verifier can now reject this deterministically (<code class="inline">carapace.off_list.directory</code>).</li>
+<li><strong>Misnamed project file.</strong> <code class="inline">MigrationRunner/TodoApi.csproj</code> breaks the assumption that directory name equals project name, leading to unresolved project references. The architecture checklist now requires <code class="inline">Program</code> to be listed in the Web/API io-shell component&#x27;s <code class="inline">publicSurface</code>, making the entry point a first-class contract term.</li>
+<li><strong>Package downgrade conflict.</strong> Model-authored <code class="inline">Microsoft.EntityFrameworkCore 8.0.0</code> conflicts with transitive <code class="inline">&gt;= 8.0.8</code> from <code class="inline">Microsoft.EntityFrameworkCore.Relational 8.0.8</code>. The verifier infers and merges package references, but the model-authored version must align.</li>
+<li><strong>QA parse failure.</strong> The QA model emitted unescaped newlines inside a JSON string, producing 0 test files. This needs a more tolerant JSON sanitizer on the gateway/parser side.</li>
 
-</ul><p>These are model-output structural issues, not per-dependency band-aids. The verifier can be made more defensive, but the clean fix is in the C# Implementation / architecture prompts: enforce one module per bounded context and forbid nested projects with mismatched directory/file names.</p>
+</ul><p>These are model-quality / structural issues, not per-dependency band-aids.</p>
 
-<h2 id="model-assignments">Model Assignments</h2>
+<h2 id="carapace-enforcement">Carapace Enforcement</h2>
+
+<p>Two deterministic gates now exist:</p>
+
+<h3 id="1-must-have-list-architecture-phase-">1. Must-have list (Architecture phase)</h3>
+
+<p>Enforced by <code class="inline">ArchitecturePhase.ValidateOutputAsync</code>:</p>
+
+<ul><li style="margin-left:0ch"><code class="inline">systemContext</code> is non-empty.</li>
+<li style="margin-left:0ch">At least one component exists.</li>
+<li style="margin-left:0ch">Every component has non-empty <code class="inline">id</code>, <code class="inline">name</code>, <code class="inline">responsibility</code>.</li>
+<li style="margin-left:0ch">Every component has at least one test case.</li>
+<li style="margin-left:0ch">Component <code class="inline">name</code>s are unique and do not end in implementation noise (<code class="inline">.Implementation</code>, <code class="inline">.Implementations</code>, <code class="inline">.extern</code>, etc.).</li>
+<li style="margin-left:0ch"><code class="inline">classification</code> is exactly <code class="inline">dafny</code>, <code class="inline">io-shell</code>, or <code class="inline">mixed</code>.</li>
+<li style="margin-left:0ch"><code class="inline">dafny</code>/<code class="inline">mixed</code> components declare a <code class="inline">patternName</code>.</li>
+<li style="margin-left:0ch"><code class="inline">io-shell</code> components declare a <code class="inline">tech</code>.</li>
+<li style="margin-left:0ch">Web / ASP.NET / HTTP <code class="inline">io-shell</code> components list <code class="inline">Program</code> in <code class="inline">publicSurface</code>.</li>
+<li style="margin-left:0ch">Dependencies resolve to other components; no cycles.</li>
+<li style="margin-left:0ch"><code class="inline">dataStores</code>, <code class="inline">interfaces</code>, <code class="inline">qualityAttributes</code>, <code class="inline">decisions</code> are present.</li>
+
+</ul><h3 id="2-not-a-thing-list-c-implementation-phase-">2. Not-a-thing list (C# Implementation phase)</h3>
+
+<p>Enforced by <code class="inline">PositOrchestrator.ValidateCSharpCarapace</code> after phase success:</p>
+
+<ul><li style="margin-left:0ch">Every generated file path must start with an authorized component directory from the architecture contract.</li>
+<li style="margin-left:0ch">Invented directories (e.g., <code class="inline">MigrationRunner</code>) are rejected with <code class="inline">carapace.off_list.directory</code>.</li>
+<li style="margin-left:0ch"><code class="inline">Shared/</code> is allowed as a common utilities directory.</li>
+
+</ul><h2 id="model-assignments">Model Assignments</h2>
 
 <table>
 <tr>
@@ -761,17 +804,19 @@ posit verify &lt;session-id&gt;
 <li>Patterns are objects cut from whole cloth, not partial classes to fill later.</li>
 <li>Imp only inlays function into pre-cut <code class="inline">{:extern}</code> portals.</li>
 <li>If a phase makes up names, the fix is contract enforcement, not more tolerant parsing.</li>
+<li><strong>New:</strong> The shell is tattooed with the entry point; Imp may not move it.</li>
+<li><strong>New:</strong> The architecture contract is the authoritative directory list; Imp may not add directories.</li>
 
 </ul><h2 id="next">Next</h2>
 
-<ul><li style="margin-left:0ch">Decide whether to (a) harden the verifier further (actual csproj name resolution, cycle breaking) or (b) fix the C# Implementation / Architecture prompts so T3&#x27;s module structure is correct on the first pass.</li>
-<li style="margin-left:0ch">The failure is real; per the trial directive, stop at the first real failure and report. Reporting now.</li>
-<li style="margin-left:0ch">Generate a structured Dafny language reference manual from the 2,126 Dafny examples in <code class="inline">orch/wiki/patterns/dafny-examples/</code> (on user request).</li>
-<li style="margin-left:0ch">Open Blazor DT for live session inspection (already running at <code class="inline">http://localhost:5002</code>).</li>
+<ul><li style="margin-left:0ch">Rerun T3 with the new carapace gates; expect either (a) Architecture phase now fails cleanly with a structured validation error, or (b) C# Implementation phase fails with <code class="inline">carapace.off_list.directory</code>.</li>
+<li style="margin-left:0ch">After T3 passes, proceed to T4.</li>
+<li style="margin-left:0ch">Generate a structured Dafny language reference manual from the Dafny examples in <code class="inline">orch/wiki/patterns/dafny-examples/</code> (on user request).</li>
+<li style="margin-left:0ch">Port the richer Shepherd.Web dashboard framework into <code class="inline">Posit.Dt</code> to fix broken links.</li>
 </ul>
         </div>
 
-        <div class="page" id="page-8198145" data-title="Posit Architecture">
+        <div class="page" id="page-4674519" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -1629,7 +1674,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-8948535" data-title="Dafny Contract Templates">
+        <div class="page" id="page-638081" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -1795,7 +1840,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-397136" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-6364248" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             

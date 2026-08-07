@@ -242,7 +242,7 @@ public sealed class DockerVerifier
         var projectDir = Path.Combine(contextDir, projectName);
         if (!Directory.Exists(projectDir)) return refs;
 
-        // Only reference projects whose directory (and generated .csproj) actually exists.
+        // Only reference projects whose directory actually contains a .csproj file.
         var validProjects = allProjects
             .Where(p => !string.Equals(p, projectName, StringComparison.OrdinalIgnoreCase))
             .Where(p => Directory.Exists(Path.Combine(contextDir, p)) && Directory.GetFiles(Path.Combine(contextDir, p), "*.csproj", SearchOption.AllDirectories).Any())
@@ -250,6 +250,9 @@ public sealed class DockerVerifier
 
         var thisSource = string.Join("\n", Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)
             .Select(File.ReadAllText));
+
+        // Types declared in this project — don't infer references for those.
+        var localTypes = ExtractLikelyTypeNames(thisSource);
 
         foreach (var other in validProjects)
         {
@@ -262,11 +265,12 @@ public sealed class DockerVerifier
                 refs.Add(other);
 
             // 2. Type-level usage: if a public type declared in the other project is used in this project.
-            // Heuristic: collect CamelCase identifiers that look like class/record/struct names in the other
-            // project and check if they appear in this project's source as bare identifiers.
             var typeCandidates = ExtractLikelyTypeNames(otherSource);
             foreach (var typeName in typeCandidates)
             {
+                if (localTypes.Contains(typeName))
+                    continue;
+
                 var patterns = new[]
                 {
                     " " + typeName + " ",
@@ -497,25 +501,74 @@ public sealed class DockerVerifier
         var xml = File.ReadAllText(csprojPath);
         var refs = inferredProjectRefs ?? InferReferences(projectName, allProjects, contextDir);
 
-        // Helper to extract Include attribute values from existing ItemGroup elements.
+        // Helper: parse existing package references by name.
+        var existingPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pkgMatches = System.Text.RegularExpressions.Regex.Matches(xml, "<PackageReference\\s+([^\u003e]+)/\u003e");
+        foreach (System.Text.RegularExpressions.Match m in pkgMatches)
+        {
+            var attrs = m.Groups[1].Value;
+            var incMatch = System.Text.RegularExpressions.Regex.Match(attrs, "Include=\"([^\"]+)\"");
+            var verMatch = System.Text.RegularExpressions.Regex.Match(attrs, "Version=\"([^\"]+)\"");
+            if (incMatch.Success && verMatch.Success)
+                existingPackages[incMatch.Groups[1].Value] = verMatch.Groups[1].Value;
+        }
+
         bool HasInclude(string elementName, string includeValue)
         {
-            var pattern = $"\u003c{elementName}\\s+[^\u003e]*Include=\"{System.Text.RegularExpressions.Regex.Escape(includeValue)}\"";
+            var pattern = $"<{elementName}\\s+[^\u003e]*Include=\"{System.Text.RegularExpressions.Regex.Escape(includeValue)}\"";
             return System.Text.RegularExpressions.Regex.IsMatch(xml, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        static bool IsHigherVersion(string candidate, string current)
+        {
+            if (System.Version.TryParse(candidate, out var cV) && System.Version.TryParse(current, out var eV))
+                return cV > eV;
+            return true;
         }
 
         var packagesToAdd = inferredPackages.Where(p =>
         {
             var name = p.Split('|')[0];
-            return !HasInclude("PackageReference", name);
+            if (!existingPackages.TryGetValue(name, out var existingVersion))
+                return true;
+            return IsHigherVersion(p.Split('|')[1], existingVersion);
         }).ToList();
 
         var frameworksToAdd = inferredFrameworks.Where(f => !HasInclude("FrameworkReference", f)).ToList();
 
+        // Resolve the actual .csproj file inside a referenced directory and break cycles.
+        string? ResolveTargetCsproj(string targetDirName)
+        {
+            var targetDir = Path.Combine(contextDir, targetDirName);
+            if (!Directory.Exists(targetDir)) return null;
+            var candidates = Directory.GetFiles(targetDir, "*.csproj", SearchOption.AllDirectories);
+            return candidates.Length == 0 ? null : candidates.First();
+        }
+
+        bool TargetReferencesCurrent(string targetDirName)
+        {
+            var targetCsproj = ResolveTargetCsproj(targetDirName);
+            if (targetCsproj is null) return false;
+            var targetXml = File.ReadAllText(targetCsproj);
+            var thisAssumedPath = $"../{projectName}/{projectName}.csproj";
+            return targetXml.Contains(thisAssumedPath, StringComparison.OrdinalIgnoreCase)
+                || targetXml.Contains($"../{projectName}/", StringComparison.OrdinalIgnoreCase);
+        }
+
         var projectRefsToAdd = refs.Where(r =>
         {
-            var expected = $"../{r}/{r}.csproj";
-            return !xml.Contains(expected, StringComparison.OrdinalIgnoreCase);
+            var assumed = $"../{r}/{r}.csproj";
+            if (xml.Contains(assumed, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var targetCsproj = ResolveTargetCsproj(r);
+            if (targetCsproj is null) return false;
+
+            // Avoid circular references: if the target already references us, don't reference back.
+            if (TargetReferencesCurrent(r)) return false;
+
+            var expectedRelative = Path.GetRelativePath(Path.GetDirectoryName(csprojPath)!, targetCsproj).Replace('\\', '/');
+            return !xml.Contains(expectedRelative, StringComparison.OrdinalIgnoreCase);
         }).ToList();
 
         if (packagesToAdd.Count == 0 && frameworksToAdd.Count == 0 && projectRefsToAdd.Count == 0)
@@ -526,7 +579,11 @@ public sealed class DockerVerifier
         {
             insert.AppendLine("  <ItemGroup>");
             foreach (var r in projectRefsToAdd)
-                insert.AppendLine($"    <ProjectReference Include=\"../{r}/{r}.csproj\" />");
+            {
+                var targetCsproj = ResolveTargetCsproj(r)!;
+                var refPath = Path.GetRelativePath(Path.GetDirectoryName(csprojPath)!, targetCsproj).Replace('\\', '/');
+                insert.AppendLine($"    <ProjectReference Include=\"{refPath}\" />");
+            }
             insert.AppendLine("  </ItemGroup>");
         }
         if (frameworksToAdd.Count > 0)
@@ -542,7 +599,17 @@ public sealed class DockerVerifier
             foreach (var pkg in packagesToAdd)
             {
                 var parts = pkg.Split('|');
-                insert.AppendLine($"    <PackageReference Include=\"{parts[0]}\" Version=\"{parts[1]}\" />");
+                var name = parts[0];
+                var version = parts[1];
+                if (existingPackages.TryGetValue(name, out var oldVersion))
+                {
+                    // Upgrade existing reference in place rather than appending a duplicate.
+                    xml = xml.Replace($"Version=\"{oldVersion}\"", $"Version=\"{version}\"", StringComparison.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    insert.AppendLine($"    <PackageReference Include=\"{name}\" Version=\"{version}\" />");
+                }
             }
             insert.AppendLine("  </ItemGroup>");
         }

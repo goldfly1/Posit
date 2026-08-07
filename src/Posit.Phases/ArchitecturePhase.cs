@@ -313,17 +313,21 @@ public sealed class ArchitecturePhase : IPhase
         if (output.SchemaVersion != "1.0.0")
             errors.Add("validation.schema_mismatch: SchemaVersion");
 
+        ArchitectureContract? contract = null;
         try
         {
-            var contract = JsonSerializer.Deserialize<ArchitectureContract>(output.PayloadJson, JsonOptions);
+            contract = JsonSerializer.Deserialize<ArchitectureContract>(output.PayloadJson, JsonOptions);
             if (contract is null)
                 errors.Add("validation.missing_required_field: Payload");
-            else if (contract.Components.Length == 0)
-                errors.Add("validation.empty: Components");
         }
         catch (JsonException ex)
         {
             errors.Add($"validation.schema_mismatch: {ex.Message}");
+        }
+
+        if (contract is not null)
+        {
+            ValidateContract(contract, errors);
         }
 
         return Task.FromResult(new ValidationResult
@@ -331,5 +335,137 @@ public sealed class ArchitecturePhase : IPhase
             IsValid = errors.Count == 0,
             Errors = errors.ToArray()
         });
+    }
+
+    private static void ValidateContract(ArchitectureContract contract, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(contract.SystemContext))
+            errors.Add("validation.empty.systemContext: systemContext is required");
+
+        if (contract.Components is null || contract.Components.Length == 0)
+        {
+            errors.Add("validation.empty.components: at least one component required");
+            return;
+        }
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var componentByName = new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
+        var noiseSuffixes = new[] { ".Implementation", ".Implementations", ".extern", "Implementation", "Implementations", "Extern" };
+
+        for (int i = 0; i < contract.Components.Length; i++)
+        {
+            var c = contract.Components[i];
+            var prefix = $"component[{i}]";
+
+            if (string.IsNullOrWhiteSpace(c.Id))
+                errors.Add($"validation.empty.component_field: {prefix}.id");
+            if (string.IsNullOrWhiteSpace(c.Name))
+                errors.Add($"validation.empty.component_field: {prefix}.name");
+            if (string.IsNullOrWhiteSpace(c.Responsibility))
+                errors.Add($"validation.empty.component_field: {prefix}.responsibility");
+
+            if (!string.IsNullOrWhiteSpace(c.Name))
+            {
+                if (!names.Add(c.Name))
+                    errors.Add($"validation.duplicate.componentName: '{c.Name}'");
+
+                foreach (var suffix in noiseSuffixes)
+                {
+                    if (c.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                        errors.Add($"validation.noisy.componentName: '{c.Name}' ends with '{suffix}'");
+                }
+
+                componentByName[c.Name] = c;
+            }
+
+            if (c.TestCases is null || c.TestCases.Length == 0)
+                errors.Add($"validation.empty.testCases: {prefix} '{c.Name}' must have at least one test case");
+
+            if (c.Classification != ModuleClassification.Dafny &&
+                c.Classification != ModuleClassification.IoShell &&
+                c.Classification != ModuleClassification.Mixed)
+            {
+                errors.Add($"validation.invalid.classification: {prefix} '{c.Name}' = {c.Classification}");
+            }
+
+            if (c.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
+            {
+                if (string.IsNullOrWhiteSpace(c.PatternName))
+                    errors.Add($"validation.missing.patternName: {prefix} '{c.Name}' (dafny/mixed requires patternName)");
+            }
+
+            if (c.Classification == ModuleClassification.IoShell)
+            {
+                if (string.IsNullOrWhiteSpace(c.Tech))
+                    errors.Add($"validation.empty.tech: {prefix} '{c.Name}' (io-shell requires tech)");
+
+                var techLower = c.Tech?.ToLowerInvariant() ?? "";
+                var isWeb = techLower.Contains("aspnet") || techLower.Contains("asp.net") || techLower.Contains("web") || techLower.Contains("http");
+                if (isWeb && (c.PublicSurface is null || !c.PublicSurface.Any(s => s.Contains("Program", StringComparison.OrdinalIgnoreCase))))
+                    errors.Add($"validation.missing.entryPoint: {prefix} '{c.Name}' Web/API io-shell component must list 'Program' in publicSurface");
+            }
+
+            if (c.Dependencies is not null)
+            {
+                foreach (var dep in c.Dependencies)
+                {
+                    if (!componentByName.ContainsKey(dep) &&
+                        !contract.Components.Any(x => string.Equals(x.Name, dep, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        errors.Add($"validation.unresolved.dependency: {prefix} '{c.Name}' depends on unknown '{dep}'");
+                    }
+                }
+            }
+        }
+
+        // Build dependency graph and detect cycles.
+        var graph = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in contract.Components)
+        {
+            if (string.IsNullOrWhiteSpace(c.Name)) continue;
+            if (graph.ContainsKey(c.Name)) continue; // duplicate name already reported above
+            graph[c.Name] = (c.Dependencies ?? [])
+                .Where(d => componentByName.ContainsKey(d))
+                .ToList();
+        }
+
+        var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        bool Dfs(string node)
+        {
+            if (!visiting.Add(node)) return false; // cycle
+            if (visited.Contains(node)) return true;
+
+            if (graph.TryGetValue(node, out var deps))
+            {
+                foreach (var dep in deps)
+                {
+                    if (!Dfs(dep))
+                    {
+                        errors.Add($"validation.cyclic.dependencies: cycle involving '{node}' -> '{dep}'");
+                        return false;
+                    }
+                }
+            }
+
+            visiting.Remove(node);
+            visited.Add(node);
+            return true;
+        }
+
+        foreach (var name in graph.Keys)
+        {
+            Dfs(name);
+        }
+
+        if (contract.DataStores is null)
+            errors.Add("validation.null.section: dataStores");
+        if (contract.Interfaces is null)
+            errors.Add("validation.null.section: interfaces");
+        if (contract.QualityAttributes is null)
+            errors.Add("validation.null.section: qualityAttributes");
+        if (contract.Decisions is null)
+            errors.Add("validation.null.section: decisions");
     }
 }

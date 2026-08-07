@@ -274,11 +274,13 @@ public sealed class CSharpImplementationPhase : IPhase
     private static string BuildExternPrompt(string moduleName, string csharpPath, string translatedCSharp)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are the C# Implementation phase. Your only job is to supply C# bodies for the {:extern} portal methods declared in the translated Dafny C#.");
+        sb.AppendLine("You are the C# Implementation phase (Pass 2). Your only job is to supply C# bodies for the {:extern} portal methods declared in the translated Dafny C#.");
         sb.AppendLine("The translated file below already contains all verified types, namespaces, and method signatures. Do NOT redeclare them.");
         sb.AppendLine("Do NOT emit a copy of the translated skeleton. Do NOT create a separate project or folder.");
+        sb.AppendLine("Do NOT invent new module names or directories that are not in the architecture contract.");
         sb.AppendLine("Do NOT emit test files, xUnit attributes, or test classes — QA handles tests.");
         sb.AppendLine("Do NOT emit .csproj files or project files with .cs extensions.");
+        sb.AppendLine("Emit files ONLY under the canonical module directory for this extern portal.");
         sb.AppendLine("Emit a single C# file containing only the partial class / __default implementations needed for each {:extern} method.");
         sb.AppendLine();
         sb.AppendLine($"--- MODULE: {moduleName} ---");
@@ -312,6 +314,9 @@ public sealed class CSharpImplementationPhase : IPhase
         var sb = new StringBuilder();
         sb.AppendLine("You are the C# Implementation phase (Pass 2). Write a complete C# class for this io-shell module.");
         sb.AppendLine("This module does I/O — file reading, database, HTTP, console output. No Dafny, no verification.");
+        sb.AppendLine($"You are authorized to emit files ONLY under the '{shell.Name}/' directory.");
+        sb.AppendLine("Do NOT create new project directories (e.g. MigrationRunner, TodoApiImplementation, etc.) that are not explicitly in the architecture contract.");
+        sb.AppendLine("Do NOT move the entry point (Program.cs) to a different directory or namespace.");
         sb.AppendLine("IMPORTANT: avoid namespace/class name collisions. The project root namespace will match the module name.");
         sb.AppendLine($"Therefore the main class MUST NOT be named exactly '{shell.Name}'; use '{shell.Name}Service' or '{shell.Name}Impl' instead.");
         sb.AppendLine("Do NOT emit test files, xUnit attributes, or test classes — QA handles tests.");

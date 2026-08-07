@@ -151,6 +151,19 @@ public sealed class PositOrchestrator
                         Warnings = [..phaseResult.Warnings, ..validation.Errors]
                     };
                 }
+                else if (phaseId.Value == "csharp-implementation")
+                {
+                    var carapaceCheck = ValidateCSharpCarapace(state, phaseResult.Artifacts);
+                    if (!carapaceCheck.IsValid)
+                    {
+                        Console.Error.WriteLine($"[Posit] Carapace enforcement failed: {string.Join(", ", carapaceCheck.Errors)}");
+                        phaseResult = phaseResult with
+                        {
+                            Status = PhaseStatus.Failed,
+                            Warnings = [..phaseResult.Warnings, ..carapaceCheck.Errors]
+                        };
+                    }
+                }
             }
 
             // Route the result through the FSM
@@ -333,6 +346,54 @@ public sealed class PositOrchestrator
         "documentation" => "deepseek-v4-pro:cloud",
         _ => "glm-5.2:cloud" // default
     };
+
+    /// <summary>
+    /// Carapace enforcement for C# Implementation output. Every generated file must
+    /// live under an authorized component directory from the Architecture contract.
+    /// New directories invented by the model (e.g. "MigrationRunner") are rejected.
+    /// </summary>
+    private static ValidationResult ValidateCSharpCarapace(SessionState state, ArtifactBundle artifact)
+    {
+        var errors = new List<string>();
+        var allowedRoots = new HashSet<string>(
+            (state.DesignContext?.Components ?? [])
+            .Select(c => c.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Also allow a small shared utilities directory if explicitly declared.
+        allowedRoots.Add("Shared");
+
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
+            var bundle = JsonSerializer.Deserialize<SourceCodeBundle>(json, Options);
+            if (bundle?.Files is null)
+                return new ValidationResult { IsValid = true };
+
+            foreach (var file in bundle.Files)
+            {
+                var rel = file.Path?.Replace('\\', '/').TrimStart('/') ?? "";
+                var firstDir = rel.Split('/').FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(firstDir))
+                    continue;
+
+                if (!allowedRoots.Contains(firstDir))
+                {
+                    errors.Add($"carapace.off_list.directory: '{firstDir}' is not an authorized component directory ({string.Join(", ", allowedRoots.OrderBy(n => n))})");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"carapace.validation.error: {ex.Message}");
+        }
+
+        return new ValidationResult
+        {
+            IsValid = errors.Count == 0,
+            Errors = errors.ToArray()
+        };
+    }
 
     /// <summary>
     /// Snowball: update DesignContext with each phase's output.
