@@ -1,8 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Posit.AI.Models;
 using Posit.Data.Repositories;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Phases;
 
@@ -19,12 +20,7 @@ namespace Posit.Phases;
 /// </summary>
 public sealed class CSharpImplementationPhase : IPhase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     private readonly IModelGateway _gateway;
     private const int MaxRetries = 2;
@@ -189,28 +185,40 @@ public sealed class CSharpImplementationPhase : IPhase
         {
             // Read the translated C# from disk — the file is the authority
             var csharp = await File.ReadAllTextAsync(csharpPath, ct);
-            var systemPrompt = BuildExternPrompt(moduleName, csharpPath, csharp);
-            var prompt = context.Prompt with { SystemPrompt = systemPrompt };
 
-            var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
-            totalInput += generation.InputTokens;
-            totalOutput += generation.OutputTokens;
+            for (int attempt = 0; attempt <= MaxRetries; attempt++)
+            {
+                var systemPrompt = attempt == 0
+                    ? BuildExternPrompt(moduleName, csharpPath, csharp)
+                    : BuildExternCorrectionPrompt(moduleName, csharp, "Previous response could not be parsed. Return valid JSON array of {path, content}.");
+                var prompt = context.Prompt with { SystemPrompt = systemPrompt };
 
-            // Capture the prompt→response pair
-            await PromptLogger.LogPromptAsync(
-                context.SessionId.Value, Id.Value, context.AttemptNumber,
-                moduleName, "generate",
-                context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
-                systemPrompt, null,
-                generation.Text,
-                generation.InputTokens, generation.OutputTokens,
-                generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
-                null, null, ct);
+                var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
+                totalInput += generation.InputTokens;
+                totalOutput += generation.OutputTokens;
 
-            var parsedFiles = ParseFileOutput(generation.Text, moduleName);
-            files.AddRange(parsedFiles);
+                await PromptLogger.LogPromptAsync(
+                    context.SessionId.Value, Id.Value, context.AttemptNumber,
+                    moduleName, attempt == 0 ? "generate" : "retry",
+                    context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+                    systemPrompt, null,
+                    generation.Text,
+                    generation.InputTokens, generation.OutputTokens,
+                    generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+                    null, null, ct);
 
-            Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}': {parsedFiles.Count} C# files");
+                var parsedFiles = ParseFileOutput(generation.Text, moduleName);
+                if (parsedFiles.Count > 0)
+                {
+                    files.AddRange(parsedFiles);
+                    Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}': {parsedFiles.Count} C# files");
+                    break;
+                }
+
+                Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' attempt {attempt + 1}: no files parsed");
+                if (attempt == MaxRetries)
+                    Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' exhausted retries");
+            }
         }
 
         return (files, totalInput, totalOutput);
@@ -225,28 +233,39 @@ public sealed class CSharpImplementationPhase : IPhase
 
         foreach (var shell in ioShells)
         {
-            var systemPrompt = BuildIoShellPrompt(shell);
-            var prompt = context.Prompt with { SystemPrompt = systemPrompt };
+            for (int attempt = 0; attempt <= MaxRetries; attempt++)
+            {
+                var systemPrompt = attempt == 0
+                    ? BuildIoShellPrompt(shell)
+                    : BuildIoShellCorrectionPrompt(shell, "Previous response could not be parsed. Return valid JSON array of {path, content}.");
+                var prompt = context.Prompt with { SystemPrompt = systemPrompt };
 
-            var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
-            totalInput += generation.InputTokens;
-            totalOutput += generation.OutputTokens;
+                var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
+                totalInput += generation.InputTokens;
+                totalOutput += generation.OutputTokens;
 
-            // Capture the prompt→response pair
-            await PromptLogger.LogPromptAsync(
-                context.SessionId.Value, Id.Value, context.AttemptNumber,
-                shell.Name, "generate",
-                context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
-                systemPrompt, null,
-                generation.Text,
-                generation.InputTokens, generation.OutputTokens,
-                generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
-                null, null, ct);
+                await PromptLogger.LogPromptAsync(
+                    context.SessionId.Value, Id.Value, context.AttemptNumber,
+                    shell.Name, attempt == 0 ? "generate" : "retry",
+                    context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
+                    systemPrompt, null,
+                    generation.Text,
+                    generation.InputTokens, generation.OutputTokens,
+                    generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
+                    null, null, ct);
 
-            var parsedFiles = ParseFileOutput(generation.Text, shell.Name);
-            files.AddRange(parsedFiles);
+                var parsedFiles = ParseFileOutput(generation.Text, shell.Name);
+                if (parsedFiles.Count > 0)
+                {
+                    files.AddRange(parsedFiles);
+                    Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}': {parsedFiles.Count} C# files");
+                    break;
+                }
 
-            Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}': {parsedFiles.Count} C# files");
+                Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' attempt {attempt + 1}: no files parsed");
+                if (attempt == MaxRetries)
+                    Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' exhausted retries");
+            }
         }
 
         return (files, totalInput, totalOutput);
@@ -255,17 +274,36 @@ public sealed class CSharpImplementationPhase : IPhase
     private static string BuildExternPrompt(string moduleName, string csharpPath, string translatedCSharp)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are the C# Implementation phase (Pass 2). Fill in the extern portal holes in this translated Dafny C#.");
-        sb.AppendLine("Write partial class implementations for each {:extern} method. Match the Dafny signature.");
-        sb.AppendLine("Do NOT modify the translated Dafny code — write only the partial class implementations.");
+        sb.AppendLine("You are the C# Implementation phase. Your only job is to supply C# bodies for the {:extern} portal methods declared in the translated Dafny C#.");
+        sb.AppendLine("The translated file below already contains all verified types, namespaces, and method signatures. Do NOT redeclare them.");
+        sb.AppendLine("Do NOT emit a copy of the translated skeleton. Do NOT create a separate project or folder.");
+        sb.AppendLine("Do NOT emit test files, xUnit attributes, or test classes — QA handles tests.");
+        sb.AppendLine("Do NOT emit .csproj files or project files with .cs extensions.");
+        sb.AppendLine("Emit a single C# file containing only the partial class / __default implementations needed for each {:extern} method.");
         sb.AppendLine();
         sb.AppendLine($"--- MODULE: {moduleName} ---");
         sb.AppendLine($"The translated C# file is at: {csharpPath}");
-        sb.AppendLine("--- TRANSLATED C# (fill the extern holes — names and types are the authority) ---");
+        sb.AppendLine("--- TRANSLATED C# (authority for signatures only) ---");
         sb.AppendLine(translatedCSharp);
         sb.AppendLine();
-        sb.AppendLine("Respond with a JSON array of {path, content} file objects.");
+        sb.AppendLine("Respond with a single JSON array of {path, content} file objects. Use path like '\"CsvParser/CsvParserExtern.cs\"'. No markdown, no prose.");
 
+        return sb.ToString();
+    }
+
+    private static string BuildExternCorrectionPrompt(string moduleName, string translatedCSharp, string error)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("You are the C# Implementation phase (Pass 2). Your previous response could not be parsed.");
+        sb.AppendLine("Return ONLY a valid JSON array of {path, content} file objects. No prose, no markdown fences.");
+        sb.AppendLine();
+        sb.AppendLine($"--- MODULE: {moduleName} ---");
+        sb.AppendLine(error);
+        sb.AppendLine();
+        sb.AppendLine("--- TRANSLATED C# ---");
+        sb.AppendLine(translatedCSharp[..Math.Min(2000, translatedCSharp.Length)]);
+        sb.AppendLine();
+        sb.AppendLine("Respond with valid JSON only.");
         return sb.ToString();
     }
 
@@ -274,6 +312,10 @@ public sealed class CSharpImplementationPhase : IPhase
         var sb = new StringBuilder();
         sb.AppendLine("You are the C# Implementation phase (Pass 2). Write a complete C# class for this io-shell module.");
         sb.AppendLine("This module does I/O — file reading, database, HTTP, console output. No Dafny, no verification.");
+        sb.AppendLine("IMPORTANT: avoid namespace/class name collisions. The project root namespace will match the module name.");
+        sb.AppendLine($"Therefore the main class MUST NOT be named exactly '{shell.Name}'; use '{shell.Name}Service' or '{shell.Name}Impl' instead.");
+        sb.AppendLine("Do NOT emit test files, xUnit attributes, or test classes — QA handles tests.");
+        sb.AppendLine("Do NOT emit .csproj files or project files with .cs extensions.");
         sb.AppendLine();
         sb.AppendLine($"Module: {shell.Name}");
         sb.AppendLine($"Responsibility: {shell.Responsibility}");
@@ -283,14 +325,32 @@ public sealed class CSharpImplementationPhase : IPhase
         if (shell.Dependencies.Length > 0)
             sb.AppendLine($"Dependencies: {string.Join(", ", shell.Dependencies)}");
         sb.AppendLine();
-        sb.AppendLine("Respond with a JSON array of {path, content} file objects.");
+        sb.AppendLine("Respond with a single JSON array of {path, content} file objects. Do not include markdown fences or prose.");
 
+        return sb.ToString();
+    }
+
+    private static string BuildIoShellCorrectionPrompt(Component shell, string error)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("You are the C# Implementation phase (Pass 2). Your previous response could not be parsed.");
+        sb.AppendLine("Return ONLY a valid JSON array of {path, content} file objects. No prose, no markdown fences.");
+        sb.AppendLine();
+        sb.AppendLine(error);
+        sb.AppendLine();
+        sb.AppendLine($"Module: {shell.Name}");
+        sb.AppendLine($"Responsibility: {shell.Responsibility}");
+        sb.AppendLine($"Public Surface: {string.Join(", ", shell.PublicSurface)}");
+        sb.AppendLine();
+        sb.AppendLine("Respond with valid JSON only.");
         return sb.ToString();
     }
 
     /// <summary>
     /// Parse the model's JSON response into SourceCodeFile records.
     /// Handles files[] array format and single-file format.
+    /// The gateway already stripped reasoning tags and extracted JSON, so we
+    /// try direct parsing first and only fall back to extraction on failure.
     /// </summary>
     private static List<SourceCodeFile> ParseFileOutput(string text, string moduleName)
     {
@@ -299,12 +359,119 @@ public sealed class CSharpImplementationPhase : IPhase
         if (string.IsNullOrWhiteSpace(text))
             return files;
 
+        // The gateway already runs StripReasoningTags + ExtractJson.
+        // Try the provided text directly first.
+        if (TryParseFiles(text, files))
+        {
+            files = NormalizeAndFilter(files, moduleName);
+            return files;
+        }
+
+        // Fallback: re-extract if the gateway's extraction missed or the model
+        // wrapped multiple JSON blobs in prose.
+        var cleaned = OllamaModelGateway.StripReasoningTags(text);
+        var json = OllamaModelGateway.ExtractJson(cleaned);
+        if (json != text)
+        {
+            files.Clear();
+            if (TryParseFiles(json, files))
+            {
+                files = NormalizeAndFilter(files, moduleName);
+                return files;
+            }
+        }
+
+        Console.Error.WriteLine($"[Posit] C# Implementation — could not parse any files for '{moduleName}'");
+        return files;
+    }
+
+    /// <summary>
+    /// Normalize generated paths so extern/implementation fragments land in the
+    /// parent module folder. Drop raw skeleton duplicates the model sometimes emits.
+    /// </summary>
+    private static List<SourceCodeFile> NormalizeAndFilter(List<SourceCodeFile> files, string moduleName)
+    {
+        var normalized = new List<SourceCodeFile>();
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in files)
+        {
+            var rel = file.Path.Replace('\\', '/').TrimStart('/');
+            var parts = rel.Split('/').Select(p => p.Trim()).Where(p => !string.IsNullOrEmpty(p)).ToArray();
+            if (parts.Length == 0) continue;
+
+            // Skip test files emitted by the model by mistake
+            var lastPart = parts[^1];
+            if (lastPart.Contains("Test", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Skip files whose content is actually a project file but misnamed .cs
+            if (lastPart.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                && file.Content.TrimStart().StartsWith("\u003cProject", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Strip implementation/extern noise from intermediate directories
+            var cleanedParts = new List<string>();
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                cleanedParts.Add(StripDirectoryNoise(parts[i]));
+            }
+            cleanedParts.Add(parts[^1]);
+
+            // Coerce back to module root if the path strayed into a sibling project
+            var firstDir = cleanedParts[0];
+            var isStrayProject = firstDir.EndsWith(".Implementation", StringComparison.OrdinalIgnoreCase)
+                || firstDir.EndsWith(".Implementations", StringComparison.OrdinalIgnoreCase)
+                || firstDir.EndsWith(".extern", StringComparison.OrdinalIgnoreCase);
+
+            if (isStrayProject)
+            {
+                cleanedParts[0] = StripDirectoryNoise(firstDir);
+            }
+
+            // Avoid class/namespace collision for io-shell modules
+            var fileName = cleanedParts[^1];
+            var cleanName = StripDirectoryNoise(Path.GetFileNameWithoutExtension(fileName));
+            if (string.Equals(cleanName, moduleName, StringComparison.OrdinalIgnoreCase)
+                && !fileName.Contains("Extern")
+                && !fileName.Contains("skeleton-"))
+            {
+                fileName = $"{cleanName}Impl.cs";
+                cleanedParts[^1] = fileName;
+            }
+
+            // Coerce back into the canonical module folder
+            if (cleanedParts.Count == 1)
+            {
+                cleanedParts.Insert(0, moduleName);
+            }
+            else if (!string.Equals(cleanedParts[0], moduleName, StringComparison.OrdinalIgnoreCase))
+            {
+                cleanedParts[0] = moduleName;
+            }
+
+            var newRel = string.Join('/', cleanedParts);
+            if (seenPaths.Add(newRel))
+                normalized.Add(new SourceCodeFile(newRel, file.Content));
+        }
+
+        return normalized;
+    }
+
+    private static string StripDirectoryNoise(string name)
+    {
+        foreach (var suffix in new[] { ".Implementation", ".Implementations", ".extern" })
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                return name[..^suffix.Length];
+        }
+        return name;
+    }
+
+    private static bool TryParseFiles(string json, List<SourceCodeFile> files)
+    {
         try
         {
-            var cleaned = OllamaModelGateway.StripReasoningTags(text);
-            var json = OllamaModelGateway.ExtractJson(cleaned);
-
-            // Try array of {path, content}
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
@@ -317,10 +484,10 @@ public sealed class CSharpImplementationPhase : IPhase
                     if (!string.IsNullOrWhiteSpace(content))
                         files.Add(new SourceCodeFile(path, content));
                 }
+                return files.Count > 0;
             }
             else if (root.ValueKind == JsonValueKind.Object)
             {
-                // Single file or files[] wrapper
                 if (root.TryGetProperty("files", out var filesArr))
                 {
                     foreach (var element in filesArr.EnumerateArray())
@@ -333,19 +500,20 @@ public sealed class CSharpImplementationPhase : IPhase
                 }
                 else
                 {
-                    var path = root.TryGetProperty("path", out var p) ? p.GetString() ?? "" : $"{moduleName}.cs";
+                    var path = root.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "";
                     var content = root.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
                     if (!string.IsNullOrWhiteSpace(content))
                         files.Add(new SourceCodeFile(path, content));
                 }
+                return files.Count > 0;
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[Posit] C# Implementation — failed to parse file output: {ex.Message}");
+            Console.Error.WriteLine($"[Posit] C# Implementation — file parse attempt failed: {ex.Message}");
         }
 
-        return files;
+        return false;
     }
 
     private static ArtifactBundle CreateEmptyBundle(PhaseContext context)

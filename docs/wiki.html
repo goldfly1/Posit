@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wiki Wiki</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --sidebar-bg: #161b22;
+  --text: #e6edf3;
+  --link: #58a6ff;
+  --border: #30363d;
+  --code-bg: #1e242c;
+  --header-color: #f0f6fc;
+  --meta-color: #8b949e;
+  --accent: #3fb950;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  padding: 0;
+  overflow-y: auto;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+.sidebar-header {
+  padding: 20px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--header-color);
+  border-bottom: 1px solid var(--border);
+  background: var(--accent);
+  color: var(--bg);
+}
+.sidebar-nav { padding: 8px 0; }
+.sidebar-nav ul { list-style: none; }
+.sidebar-nav > ul > li { margin: 2px 0; }
+.sidebar-nav li.folder {
+  font-weight: 600;
+  color: var(--header-color);
+  padding: 6px 16px;
+  cursor: pointer;
+}
+.sidebar-nav li.folder > ul {
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+  margin-left: 24px;
+}
+.sidebar-nav li.page {
+  padding: 4px 16px 4px 16px;
+}
+.sidebar-nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 400;
+  font-size: 14px;
+  display: block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.sidebar-nav a:hover { background: var(--border); color: var(--link); }
+.main {
+  flex: 1;
+  padding: 40px;
+  max-width: 900px;
+  overflow-x: auto;
+}
+.search-bar {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 12px 0 16px;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.search-bar input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.search-bar input:focus { border-color: var(--link); }
+.page {
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+.page:last-child { border-bottom: none; }
+.page h1 {
+  color: var(--header-color);
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+.page-path {
+  font-size: 12px;
+  color: var(--meta-color);
+  font-family: monospace;
+  margin-bottom: 12px;
+}
+.page-meta {
+  font-size: 13px;
+  color: var(--meta-color);
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  background: var(--code-bg);
+  border-radius: 6px;
+}
+.meta-item { margin-right: 12px; }
+.page h2 {
+  color: var(--header-color);
+  font-size: 22px;
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.page h3 { color: var(--header-color); font-size: 18px; margin: 20px 0 8px; }
+.page p { margin: 8px 0; line-height: 1.6; }
+.page ul { margin: 8px 0 8px 24px; }
+.page li { margin: 4px 0; line-height: 1.5; }
+.page table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  width: 100%;
+  font-size: 14px;
+}
+.page th, .page td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+.page th { background: var(--code-bg); font-weight: 600; }
+.page pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  overflow-x: auto;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.page code {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 13px;
+}
+.page code.inline {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.page blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 8px 16px;
+  margin: 12px 0;
+  background: var(--code-bg);
+  border-radius: 0 6px 6px 0;
+}
+.page a { color: var(--link); }
+.page hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="sidebar">
+
+    <div class="sidebar-header">Wiki Wiki</div>
+    <nav class="sidebar-nav">
+    <ul>
+    <li class="folder">Architecture
+<ul>
+<li class="page"><a href="#page-7647444">Posit Architecture</a></li>
+</ul>
+</li>
+<li class="folder">Contracts
+<ul>
+<li class="page"><a href="#page-1714648">Dafny Contract Templates</a></li>
+</ul>
+</li>
+<li class="page"><a href="#page-2345518">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-16552381">Handoff 2026 08 08</a></li>
+<li class="folder">Plans
+<ul>
+<li class="page"><a href="#page-4868796">Dafny First Pipeline Plan</a></li>
+</ul>
+</li>
+    </ul>
+    </nav>
+</div>
+<div class="main">
+<div class="search-bar">
+<input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
+</div>
+
+        <div class="page" id="page-2345518" data-title="Handoff 2026 08 07">
+            <h1>Handoff 2026 08 07</h1>
+            <div class="page-path">handoff-2026-08-07.md</div>
+            
+            <h1 id="posit-handoff-sheet-aug-7-2026">Posit Handoff Sheet — Aug 7, 2026</h1>
+
+<h2 id="project">Project</h2>
+
+<p><strong>Posit</strong> — a spec compiler. The architect posits contracts (requires/ensures). Z3 confirms or denies. The code that survives is proven. Nothing ships unproven.</p>
+
+<h2 id="repos">Repos</h2>
+
+<ul><li style="margin-left:0ch"><strong>Posit (greenfield):</strong> <code class="inline">C:\Users\goldf\Posit\</code> — new project, Dafny-first pipeline</li>
+<li style="margin-left:0ch"><strong>Shepherd (reference):</strong> <code class="inline">C:\Users\goldf\orch\</code> — working pipeline with Dafny phase, QA budget fix, wiki search, 2147 Dafny wiki chunks</li>
+
+</ul><h2 id="current-state">Current State</h2>
+
+<p><strong>Posit repo:</strong> 18 commits, 8 projects, build clean (0 errors, 0 warnings)</p>
+
+<table>
+<tr>
+<th>Project</th>
+<th>Role</th>
+</tr>
+<tr>
+<td>Posit.Contracts</td>
+<td>Artifacts, enums, interfaces, IDs, DesignContext</td>
+</tr>
+<tr>
+<td>Posit.Core</td>
+<td>FSM, state machine, dependency graph, KnownPhases</td>
+</tr>
+<tr>
+<td>Posit.Data</td>
+<td>DB, repositories, migrations, PromptLogger, AuditRepository</td>
+</tr>
+<tr>
+<td>Posit.AI</td>
+<td>Model gateway (OllamaModelGateway), IModelGateway</td>
+</tr>
+<tr>
+<td>Posit.Phases</td>
+<td>All phase implementations (6 phases built)</td>
+</tr>
+<tr>
+<td>Posit.Tools</td>
+<td>Build engine, Z3 runner</td>
+</tr>
+<tr>
+<td>Posit.Cli</td>
+<td>CLI entry point + Orchestrator</td>
+</tr>
+<tr>
+<td>Posit.Web</td>
+<td>Blazor dashboard (stub)</td>
+</tr>
+</table>
+
+<h2 id="what-was-built-today-aug-5-6-">What Was Built Today (Aug 5-6)</h2>
+
+<h3 id="shepherd-reference-15-commits">Shepherd (reference) — 15+ commits</h3>
+
+<table>
+<tr>
+<th>Commit</th>
+<th>What</th>
+</tr>
+<tr>
+<td><code class="inline">ec0a999</code></td>
+<td>QA prompt budget 148K→32K (6.5x reduction)</td>
+</tr>
+<tr>
+<td><code class="inline">bb9dc3d</code></td>
+<td>Test stubs on disk (QA type shells)</td>
+</tr>
+<tr>
+<td><code class="inline">abf2305</code></td>
+<td>Dafny verification phase (Imp→Dafny→QA)</td>
+</tr>
+<tr>
+<td><code class="inline">0f60e89</code></td>
+<td><code class="inline">--session=&lt;id&gt;</code> resume flag</td>
+</tr>
+<tr>
+<td><code class="inline">05a8cfe</code></td>
+<td>Resume merges model routes, Dafny artifact cap</td>
+</tr>
+<tr>
+<td><code class="inline">377bd85</code></td>
+<td>Wiki search in Dafny + seed content</td>
+</tr>
+<tr>
+<td><code class="inline">7e07677</code></td>
+<td>DafnyVerificationResult optional fields</td>
+</tr>
+<tr>
+<td><code class="inline">f815527</code></td>
+<td>snake_case JSON normalization</td>
+</tr>
+<tr>
+<td><code class="inline">abe1bba</code></td>
+<td>Harvest 19 Dafny stdlib examples</td>
+</tr>
+<tr>
+<td><code class="inline">ea318a6</code></td>
+<td>Handle files[] JSON format fallback</td>
+</tr>
+<tr>
+<td><code class="inline">ed21e18</code></td>
+<td>Dafny syntax quick reference in prompt</td>
+</tr>
+<tr>
+<td><code class="inline">0358aa9</code></td>
+<td>Partial verification succeeds</td>
+</tr>
+<tr>
+<td><code class="inline">77e91f5</code></td>
+<td>Dafny-first pipeline plan</td>
+</tr>
+<tr>
+<td><code class="inline">bd951b3</code></td>
+<td>Name the project Posit</td>
+</tr>
+<tr>
+<td><code class="inline">f815527+</code></td>
+<td>Dafny syntax, IsVerified wire, standard libraries</td>
+</tr>
+</table>
+
+<h3 id="posit-greenfield-18-commits">Posit (greenfield) — 18 commits</h3>
+
+<table>
+<tr>
+<th>Commit</th>
+<th>What</th>
+</tr>
+<tr>
+<td><code class="inline">2b65726</code></td>
+<td>Initial project structure + plan</td>
+</tr>
+<tr>
+<td><code class="inline">33c1693</code></td>
+<td>.NET 10 solution (8 projects, Npgsql)</td>
+</tr>
+<tr>
+<td><code class="inline">0388a91</code></td>
+<td>Architecture doc + Dafny contract templates</td>
+</tr>
+<tr>
+<td><code class="inline">ec61781</code></td>
+<td>Dafny Contracts phase: Z3 verification gate, foundation contracts, model assignments</td>
+</tr>
+<tr>
+<td><code class="inline">fc62a81</code></td>
+<td>Plan gaps closed: 8 design decisions worked into docs</td>
+</tr>
+<tr>
+<td><code class="inline">bdd4ec5</code></td>
+<td>Two-pass implementation + extern portal pattern in all docs</td>
+</tr>
+<tr>
+<td><code class="inline">d214610</code></td>
+<td>Architecture phase: model gateway, Ollama gateway, architect prompt</td>
+</tr>
+<tr>
+<td><code class="inline">9c66b28</code></td>
+<td>Imp appeal process: kimi reviews io-shell QA disputes</td>
+</tr>
+<tr>
+<td><code class="inline">01ef5e1</code></td>
+<td>Orchestrator: FSM, dependency graph, phase controller — the pipeline spine</td>
+</tr>
+<tr>
+<td><code class="inline">291f0d9</code></td>
+<td>Dafny Implementation (Pass 1): fill bodies, Z3 verify, translate cs</td>
+</tr>
+<tr>
+<td><code class="inline">a3f80c0</code></td>
+<td>C# Implementation (Pass 2): plug into extern portals, wire I/O shells</td>
+</tr>
+<tr>
+<td><code class="inline">da0a40b</code></td>
+<td>QA phase: compile verified modules, test unverified, appeal-ready</td>
+</tr>
+<tr>
+<td><code class="inline">63d1923</code></td>
+<td>CLI entry point: wire pipeline, run command, phase selection</td>
+</tr>
+<tr>
+<td><code class="inline">1496ccc</code></td>
+<td>Fix: filter phase dependencies to profile&#x27;s phase set for subset runs</td>
+</tr>
+<tr>
+<td><code class="inline">c375d31</code></td>
+<td>Data capture layer: migrations, repositories, prompt logging, audit trail</td>
+</tr>
+</table>
+
+<h2 id="what-s-proven">What&#x27;s Proven</h2>
+
+<ul><li style="margin-left:0ch"><strong>QA prompt budget:</strong> 148K→32K, model produces 22K of real test code (Shepherd)</li>
+<li style="margin-left:0ch"><strong>Dafny verification:</strong> 2/5 modules verified by deepseek-v4-pro:cloud + Z3 (Shepherd)</li>
+<li style="margin-left:0ch"><strong>Wiki search:</strong> 2,147 Dafny chunks (7.4MB) in Shepherd DB, searchable</li>
+<li style="margin-left:0ch"><strong>IsVerified wire:</strong> Dafny→DesignContext→QA skips stubs+edges for verified modules</li>
+<li style="margin-left:0ch"><strong>Partial verification:</strong> verified modules preserved, unverified fall through to QA</li>
+<li style="margin-left:0ch"><strong><code class="inline">--session=&lt;id&gt; --phase=dafny</code>:</strong> resume from previous session works (Shepherd)</li>
+<li style="margin-left:0ch"><strong>Dafny compiles to:</strong> C#, Rust, Go, Java, JS, Python (one proof, six targets)</li>
+<li style="margin-left:0ch"><strong>Bodyless methods with <code class="inline">{:axiom}</code>:</strong> Z3 verifies skeletons, 4/0 errors (Posit, tested Aug 6)</li>
+<li style="margin-left:0ch"><strong>Extern portal pattern:</strong> <code class="inline">{:extern}</code> stubs verify + translate to partial class holes (Posit, tested Aug 6)</li>
+<li style="margin-left:0ch"><strong>First pipeline run:</strong> Architecture phase via deepseek-v4-pro:cloud, 2 dafny components with .dfy source, 18.3s (Posit, Aug 6)</li>
+<li style="margin-left:0ch"><strong>Pipeline with DB persistence:</strong> 6 migrations, prompt log, audit events, artifact persistence, session state, FSM retry (Posit, Aug 6)</li>
+<li style="margin-left:0ch"><strong>FSM retry works:</strong> parse failure on attempt 1 → retry → success on attempt 2 (Posit, Aug 6)</li>
+
+</ul><h2 id="key-documents">Key Documents</h2>
+
+<table>
+<tr>
+<th>File</th>
+<th>Content</th>
+</tr>
+<tr>
+<td><code class="inline">Posit/wiki/architecture/posit-architecture.md</code></td>
+<td>Full pipeline, phases, module classification, limits, model assignments</td>
+</tr>
+<tr>
+<td><code class="inline">Posit/wiki/contracts/dafny-contract-templates.md</code></td>
+<td>Parser, validator, generator, schema, I/O shell contract patterns</td>
+</tr>
+<tr>
+<td><code class="inline">Posit/wiki/plans/dafny-first-pipeline-plan.md</code></td>
+<td>Implementation steps, boundaries, limits</td>
+</tr>
+<tr>
+<td><code class="inline">orch/wiki/handoff-2026-08-05.md</code></td>
+<td>Shepherd handoff (prior session)</td>
+</tr>
+</table>
+
+<h2 id="environment">Environment</h2>
+
+<ul><li style="margin-left:0ch"><strong>Dafny:</strong> 4.11.0 at <code class="inline">C:\Users\goldf\.dotnet\tools\dafny.exe</code></li>
+<li style="margin-left:0ch"><strong>Z3:</strong> 4.12.1 at <code class="inline">C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe</code></li>
+<li style="margin-left:0ch"><strong>DB:</strong> PG18 on port 5434, shepherd database (shared with Posit for wiki)</li>
+<li style="margin-left:0ch"><strong>Dafny wiki chunks:</strong> 2,147 in <code class="inline">wiki.wiki_chunks</code> table, 7.4MB</li>
+<li style="margin-left:0ch"><strong>Dafny standard libraries:</strong> <code class="inline">--standard-libraries</code> flag enabled</li>
+<li style="margin-left:0ch"><strong>Dafny compiles to Rust:</strong> needs <code class="inline">--enforce-determinism</code> flag</li>
+<li style="margin-left:0ch"><strong>Shell:</strong> git-bash (MSYS), POSIX syntax. NOT PowerShell.</li>
+<li style="margin-left:0ch"><strong>Kill dotnet:</strong> <code class="inline">powershell.exe -Command &quot;Get-CimInstance Win32_Process -Filter \&quot;Name=&#x27;dotnet.exe&#x27;\&quot; | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }&quot;</code></li>
+
+</ul><h2 id="model-assignments">Model Assignments</h2>
+
+<table>
+<tr>
+<th>Task</th>
+<th>Model</th>
+<th>Why</th>
+</tr>
+<tr>
+<td>Dafny contracts (architect)</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Better formal reasoning</td>
+</tr>
+<tr>
+<td>Design Review</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Independent review — separation from architect</td>
+</tr>
+<tr>
+<td>Dafny bodies (Pass 1)</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Proven 2/5, understands architect&#x27;s contract intent</td>
+</tr>
+<tr>
+<td>C# shells (Pass 2)</td>
+<td>glm-5.2:cloud</td>
+<td>Plugs into extern portals, wires I/O to translated Dafny</td>
+</tr>
+<tr>
+<td>QA test generation</td>
+<td>glm-5.2:cloud</td>
+<td>Tests unprovable modules, knows module intent</td>
+</tr>
+<tr>
+<td>Imp appeal reviewer</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Independent arbiter for io-shell QA disputes</td>
+</tr>
+<tr>
+<td>File ops, wiki search</td>
+<td>local ollama</td>
+<td>Fast, no reasoning</td>
+</tr>
+</table>
+
+<h2 id="next-session-roadmap">Next Session Roadmap</h2>
+
+<h3 id="-completed">✅ Completed</h3>
+
+<ul><li style="margin-left:0ch"><strong>Dafny Contracts phase</strong> — Z3Runner, DafnyContractsPhase, bodyless + {:axiom} + {:extern} verified</li>
+<li style="margin-left:0ch"><strong>Architecture phase</strong> — OllamaModelGateway, architect prompt, JSON parsing, verified by real run</li>
+<li style="margin-left:0ch"><strong>Dafny Implementation (Pass 1)</strong> — fill Dafny bodies, Z3 verify, translate cs, retry on failure</li>
+<li style="margin-left:0ch"><strong>C# Implementation (Pass 2)</strong> — plug into extern portals, wire I/O shells</li>
+<li style="margin-left:0ch"><strong>QA phase</strong> — compile verified modules, test unverified, appeal-ready</li>
+<li style="margin-left:0ch"><strong>Orchestrator</strong> — FSM, dependency graph, phase controller, pipeline runner</li>
+<li style="margin-left:0ch"><strong>CLI</strong> — <code class="inline">posit run &lt;request&gt; --phase=...</code>, migration runner, DB wiring</li>
+<li style="margin-left:0ch"><strong>Data capture</strong> — 6 migrations, 4 repositories, PromptLogger, AuditRepository</li>
+<li style="margin-left:0ch"><strong>Imp appeal process</strong> — kimi-2.7-code:cloud reviews io-shell QA disputes</li>
+<li style="margin-left:0ch"><strong>Plan gaps closed</strong> — 13 key decisions documented</li>
+
+</ul><h3 id="next-steps">Next Steps</h3>
+
+<ul><li style="margin-left:0ch"><strong>Pattern registry: 14 more files</strong> — 8 patterns (pipeline, observer, strategy, adapter, graph/tree, cache, scheduler, reducer) + 6 stubs (crypto, auth, env, log, serialize, compress). Full registry = 17 patterns + 12 stub files = 99.99% coverage.</li>
+<li style="margin-left:0ch"><strong>Step 4: Limits and Budgets</strong> — 200-line cap, 10 method cap, 5 class cap enforcement</li>
+<li style="margin-left:0ch"><strong>Step 5: Trial Run</strong> — full end-to-end pipeline (architecture → dafny-contracts → impl → qa)</li>
+<li style="margin-left:0ch"><strong>Session resume</strong> — <code class="inline">--session=&lt;id&gt;</code> to resume from DB-persisted state</li>
+<li style="margin-left:0ch"><strong>Security ring</strong> — before frontend clone. Crypto + auth stubs + access control logic patterns.</li>
+<li style="margin-left:0ch"><strong>Frontend pipeline clone</strong> (Blazor) — also owns status/cost/resource monitoring (items #8, #10 from gap fixes)</li>
+<li style="margin-left:0ch"><strong>Rust target for Dafny translation</strong></li>
+<li style="margin-left:0ch"><strong>kimi-2.7-code:cloud needs registration in Ollama</strong> — required before Design Review or Imp Appeal can run</li>
+
+</ul><h3 id="future">Future</h3>
+<ul><li style="margin-left:0ch">Frontend pipeline clone (Blazor)</li>
+<li style="margin-left:0ch">Rust target for Dafny translation</li>
+<li style="margin-left:0ch">Appeal process tracking: does it improve workflow, mitigate tokens, or neither?</li>
+
+</ul><h2 id="lessons-learned">Lessons Learned</h2>
+
+<ul><li><strong>Model can write Dafny</strong> — deepseek-v4-pro:cloud verified 2/5 modules from scratch. With skeletons on disk, success rate should improve.</li>
+<li><strong>JSON extraction is the fragile point</strong> — model wraps Dafny in prose, reasoning tags, or <code class="inline">files[]</code> format. Multiple fallback parsers needed.</li>
+<li><strong>Partial verification is essential</strong> — all-or-nothing risks losing proven modules on non-deterministic re-runs.</li>
+<li><strong>Wiki search works</strong> — 2,147 Dafny examples give the model proven patterns to imitate.</li>
+<li><strong><code class="inline">dafny translate cs</code> produces verbose C#</strong> — uses Dafny runtime wrappers. Post-processing may be needed.</li>
+<li><strong>Dafny strings aren&#x27;t nullable</strong> — <code class="inline">requires value != null</code> fails for <code class="inline">seq&lt;char&gt;</code>. The model needs syntax guidance (already added to prompt).</li>
+<li><strong><code class="inline">type</code> is a reserved keyword in Dafny</strong> — can&#x27;t use as a parameter name. Model hit this error.</li>
+<li><strong>Standard libraries are available</strong> — <code class="inline">import Std.Collections.Seq</code>, <code class="inline">Std.Wrappers</code>, etc. with <code class="inline">--standard-libraries</code> flag.</li>
+<li><strong>Dafny compiles to 6 targets</strong> — C#, Rust, Go, Java, JS, Python. One proof, portable deployment.</li>
+<li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
+        </div>
+
+        <div class="page" id="page-16552381" data-title="Posit Handoff Sheet — Aug 8, 2026">
+            <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
+            <div class="page-path">handoff-2026-08-08.md</div>
+            <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
+            <h1 id="posit-handoff-sheet-aug-8-2026">Posit Handoff Sheet — Aug 8, 2026</h1>
+
+<h2 id="project">Project</h2>
+
+<p><strong>Posit</strong> — a spec compiler. The architect posits contracts (requires/ensures). Z3 confirms or denies. The code that survives is proven. Nothing ships unproven.</p>
+
+<h2 id="repos">Repos</h2>
+
+<ul><li style="margin-left:0ch"><strong>Posit (greenfield):</strong> <code class="inline">C:\Users\goldf\Posit\</code> — new project, Dafny-first pipeline</li>
+<li style="margin-left:0ch"><strong>Shepherd (reference):</strong> <code class="inline">C:\Users\goldf\orch\</code> — working pipeline, Dafny wiki, trial logs</li>
+
+</ul><h2 id="current-state">Current State</h2>
+
+<ul><li style="margin-left:0ch">Solution builds clean: 0 errors, 0 warnings.</li>
+<li style="margin-left:0ch">T1 (CSV parser) passed end-to-end with Docker verification and 87 tests.</li>
+<li style="margin-left:0ch">T2 (priority queue) passed end-to-end with Docker verification and 24 tests.</li>
+<li style="margin-left:0ch">T3 (TaskApi / ASP.NET Core CRUD + Postgres + Docker Compose) is in flight.</li>
+<li style="margin-left:0ch"><code class="inline">posit resume &lt;session-id&gt;</code> is implemented and verified.</li>
+<li style="margin-left:0ch">Blazor desktop UI (<code class="inline">Posit.Dt</code>) lists live sessions from Postgres.</li>
+
+</ul><h2 id="recent-changes">Recent Changes</h2>
+
+<table>
+<tr>
+<th>Change</th>
+<th>File</th>
+<th>Why</th>
+</tr>
+<tr>
+<td>Docker verifier</td>
+<td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
+<td>Materialize generated solution and run <code class="inline">dotnet build</code> + <code class="inline">dotnet test</code> in Docker</td>
+</tr>
+<tr>
+<td>Test detection by xUnit attributes</td>
+<td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
+<td>Project names are unreliable; <code class="inline">[Fact]</code>/<code class="inline">[Theory]</code> are truth</td>
+</tr>
+<tr>
+<td>Duplicate project name dedup</td>
+<td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
+<td>QA sometimes emits overlapping test directory names</td>
+</tr>
+<tr>
+<td>Token caps to 64 K</td>
+<td><code class="inline">src/Posit.Cli/Orchestration/PositOrchestrator.cs</code>, <code class="inline">src/Posit.Phases/QaPhase.cs</code></td>
+<td>Avoid truncation on large Dafny / QA outputs</td>
+</tr>
+<tr>
+<td>Correct model routing</td>
+<td><code class="inline">src/Posit.Cli/Orchestration/PositOrchestrator.cs</code></td>
+<td><code class="inline">deepseek-v4-pro:cloud</code> for Dafny; <code class="inline">kimi-k2.7-code:cloud</code> for design review</td>
+</tr>
+<tr>
+<td>C# phase no skeleton re-emission</td>
+<td><code class="inline">src/Posit.Phases/CSharpImplementationPhase.cs</code></td>
+<td>Collapse <code class="inline"><em>.Implementation</code>/<code class="inline"></em>Implementations</code>/<code class="inline">.extern</code> folders into parent module</td>
+</tr>
+<tr>
+<td>C# phase no test/csproj emission</td>
+<td><code class="inline">src/Posit.Phases/CSharpImplementationPhase.cs</code>, <code class="inline">prompts/csharp-implementation/1.0.0.md</code></td>
+<td>QA owns tests; verifier owns <code class="inline">.csproj</code></td>
+</tr>
+<tr>
+<td>Dafny verification failure is real failure</td>
+<td><code class="inline">src/Posit.Phases/DafnyImplementationPhase.cs</code></td>
+<td>Pipeline was continuing on Z3 failure</td>
+</tr>
+<tr>
+<td><code class="inline">forall</code> needs <code class="inline">ensures</code></td>
+<td><code class="inline">src/Posit.Phases/DafnyImplementationPhase.cs</code>, <code class="inline">prompts/architecture/1.0.0.md</code></td>
+<td>Fix <code class="inline">Repr</code>/<code class="inline">Valid()</code> anti-pattern</td>
+</tr>
+<tr>
+<td><code class="inline">frames</code> pattern</td>
+<td><code class="inline">patterns/frames.dfy</code></td>
+<td>Canonical <code class="inline">ghost predicate Valid()</code> + <code class="inline">Repr</code> for heap-owning classes</td>
+</tr>
+<tr>
+<td><code class="inline">posit resume</code></td>
+<td><code class="inline">src/Posit.Cli/Program.cs</code>, <code class="inline">src/Posit.Cli/Orchestration/PositOrchestrator.cs</code></td>
+<td>Continue from last failed phase without re-burning tokens</td>
+</tr>
+<tr>
+<td><code class="inline">posit status</code> reads DB</td>
+<td><code class="inline">src/Posit.Cli/Program.cs</code></td>
+<td>No longer in-memory only</td>
+</tr>
+<tr>
+<td>Async exception tests</td>
+<td><code class="inline">prompts/qa/1.0.0.md</code></td>
+<td><code class="inline">await Assert.ThrowsAsync&lt;T&gt;</code> for async code</td>
+</tr>
+<tr>
+<td>Blazor DT</td>
+<td><code class="inline">src/Posit.Dt/</code></td>
+<td>Live session listing UI</td>
+</tr>
+</table>
+
+<h2 id="verified-trials">Verified Trials</h2>
+
+<h3 id="t1-csv-parser">T1 — CSV Parser</h3>
+
+<ul><li style="margin-left:0ch">Session: <code class="inline">DgrruGRL1U-UzrQxS-nlsg0000</code></li>
+<li style="margin-left:0ch">Result: Completed, 5 phases</li>
+<li style="margin-left:0ch">Docker build: 0 errors, 158 warnings</li>
+<li style="margin-left:0ch">Tests: 87 passed, 0 failed</li>
+
+</ul><h3 id="t2-priority-queue">T2 — Priority Queue</h3>
+
+<ul><li style="margin-left:0ch">Session: <code class="inline">KgCMmAcgWE2YbFbfLBSzdg0000</code></li>
+<li style="margin-left:0ch">Result: Completed, 5 phases</li>
+<li style="margin-left:0ch">Docker build: 0 errors, 87 warnings</li>
+<li style="margin-left:0ch">Tests: 24 passed, 0 failed</li>
+
+</ul><h2 id="model-assignments">Model Assignments</h2>
+
+<table>
+<tr>
+<th>Task</th>
+<th>Model</th>
+</tr>
+<tr>
+<td>Architecture, Dafny Implementation</td>
+<td><code class="inline">deepseek-v4-pro:cloud</code></td>
+</tr>
+<tr>
+<td>Design Review, Imp Appeal</td>
+<td><code class="inline">kimi-k2.7-code:cloud</code></td>
+</tr>
+<tr>
+<td>C# Implementation, QA</td>
+<td><code class="inline">glm-5.2:cloud</code></td>
+</tr>
+</table>
+
+<h2 id="cli-commands">CLI Commands</h2>
+
+<pre><code class="language-bash">
+# Run a trial
+posit run &quot;Build a CSV parser&quot;
+
+# Resume from a failed/killed session
+posit resume &lt;session-id&gt;
+
+# Check session status
+posit status &lt;session-id&gt;
+
+# List artifacts
+posit artifacts &lt;session-id&gt;
+
+# Verify in Docker
+posit verify &lt;session-id&gt;
+</code></pre>
+
+<h2 id="environment">Environment</h2>
+
+<ul><li style="margin-left:0ch"><strong>Dafny:</strong> 4.11.0 at <code class="inline">C:\Users\goldf\.dotnet\tools\dafny.exe</code></li>
+<li style="margin-left:0ch"><strong>Z3:</strong> 4.12.1 at <code class="inline">C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe</code></li>
+<li style="margin-left:0ch"><strong>Postgres:</strong> <code class="inline">wiki-postgres</code> on 0.0.0.0:5435, <code class="inline">shepherd-postgres</code> on 127.0.0.1:5434</li>
+<li style="margin-left:0ch"><strong>Docker:</strong> 29.6.1</li>
+<li style="margin-left:0ch"><strong>Target framework:</strong> .NET 10 (<code class="inline">net10.0</code>)</li>
+
+</ul><h2 id="carapace-principles-still-in-force-">Carapace Principles (still in force)</h2>
+
+<ul><li>The <code class="inline">.dfy</code> skeleton is the contract.</li>
+<li>Patterns are objects cut from whole cloth, not partial classes to fill later.</li>
+<li>Imp only inlays function into pre-cut <code class="inline">{:extern}</code> portals.</li>
+<li>If a phase makes up names, the fix is contract enforcement, not more tolerant parsing.</li>
+
+</ul><h2 id="next">Next</h2>
+
+<ul><li style="margin-left:0ch">T3 (TaskApi) completion and Docker verification.</li>
+<li style="margin-left:0ch">Generate a structured Dafny language reference manual from the 2,126 Dafny examples in <code class="inline">orch/wiki/patterns/dafny-examples/</code> (on user request).</li>
+<li style="margin-left:0ch">Open Blazor DT for live session inspection (on user request).</li>
+</ul>
+        </div>
+
+        <div class="page" id="page-12032580" data-title="Posit Architecture">
+            <h1>Posit Architecture</h1>
+            <div class="page-path">architecture\posit-architecture.md</div>
+            <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
+            <h1 id="posit-architecture">Posit Architecture</h1>
+
+<h2 id="identity">Identity</h2>
+
+<p>Posit is a spec compiler. The architect posits contracts (requires/ensures). Z3 confirms or denies. The code that survives is proven. Nothing ships unproven.</p>
+
+<h2 id="design-principles">Design Principles</h2>
+
+<ul><li><strong>Spec before code</strong> — Dafny contracts are written before implementation. The exoskeleton comes first.</li>
+<li><strong>Proof is the test</strong> — Z3 verification replaces test generation for verified modules. No test stubs, no edge case patterns, no QA test code.</li>
+<li><strong>Pure logic in Dafny, I/O in C#</strong> — The proof boundary is the function signature. Side effects stay outside the proof.</li>
+<li><strong>Partial verification is success</strong> — Verified modules skip QA. Unverified modules fall through to traditional QA.</li>
+<li><strong>Deterministic judgment</strong> — Z3 doesn&#x27;t guess. It proves or it doesn&#x27;t. No model quality lottery on verification.</li>
+<li><strong>Small modules</strong> — 200 lines max per Dafny module. Forces decomposition. Tractable proofs.</li>
+<li><strong>Wiki-driven</strong> — 2,147 proven Dafny examples in the wiki. The model learns by imitation, not by guessing.</li>
+
+</ul><h2 id="pipeline">Pipeline</h2>
+
+<pre><code class="language-">
+Ideation → Architecture → API Definition → Pseudocode → Design Review
+  → Dafny Contracts (architect writes .dfy skeletons with requires/ensures, {:extern} portals for I/O)
+  → Dafny Implementation (Imp fills Dafny bodies, Z3 verifies, translate cs — verified logic + extern holes)
+  → C# Implementation (Imp writes C# shells that plug into extern portals, calls translated Dafny)
+  → QA (compile translated C#, test unverified modules only)
+  → Deployment → Observability → Documentation
+</code></pre>
+
+<h3 id="phase-detail">Phase Detail</h3>
+
+<table>
+<tr>
+<th>Phase</th>
+<th>Model</th>
+<th>Input</th>
+<th>Output</th>
+<th>Notes</th>
+</tr>
+<tr>
+<td>Ideation</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>User request</td>
+<td>Requirements doc</td>
+<td>Module registry pre-selection</td>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Requirements</td>
+<td>Architecture contract with module classification (dafny/io-shell) + Dafny contracts</td>
+<td>Architect writes .dfy skeletons</td>
+</tr>
+<tr>
+<td>API Definition</td>
+<td>deterministic</td>
+<td>Architecture</td>
+<td>API spec</td>
+<td>No model call</td>
+</tr>
+<tr>
+<td>Pseudocode</td>
+<td>deterministic</td>
+<td>Architecture + API</td>
+<td>Module specs</td>
+<td>No model call</td>
+</tr>
+<tr>
+<td>Design Review</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Accumulated design</td>
+<td>Approve/reject</td>
+<td>Independent review gate</td>
+</tr>
+<tr>
+<td>Dafny Contracts</td>
+<td>deterministic + Z3</td>
+<td>Architecture</td>
+<td>Verified .dfy skeleton files on disk</td>
+<td>Z3 verifies the spec is sound (bodyless methods, {:axiom} attribute)</td>
+</tr>
+<tr>
+<td>Dafny Implementation</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>.dfy skeletons + wiki</td>
+<td>Dafny bodies filled in, Z3 verified, translated C# with extern holes</td>
+<td>Pass 1: fill bodies, Z3 verify, <code class="inline">dafny translate cs</code> — produces partial classes</td>
+</tr>
+<tr>
+<td>C# Implementation</td>
+<td>glm-5.2:cloud</td>
+<td>Translated C# + extern holes + type shells</td>
+<td>C# shells that plug into extern portals</td>
+<td>Pass 2: implement {:extern} methods in partial classes, wire I/O to translated Dafny</td>
+</tr>
+<tr>
+<td>QA</td>
+<td>glm-5.2:cloud</td>
+<td>Translated C# + unverified modules</td>
+<td>Build + test results</td>
+<td>Verified modules: compile only. Unverified: full test generation.</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td>deterministic</td>
+<td>Implementation</td>
+<td>Deployment manifest</td>
+<td>No model call</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>deterministic</td>
+<td>Deployment</td>
+<td>Observability config</td>
+<td>No model call</td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>All artifacts</td>
+<td>Docs</td>
+<td></td>
+</tr>
+</table>
+
+<h3 id="model-calls-5-ideation-architecture-dafny-implementation-c-implementation-qa-">Model Calls: 5 (Ideation, Architecture, Dafny Implementation, C# Implementation, QA)</h3>
+<ul><li style="margin-left:0ch">Design Review, Documentation: 2 more if counted</li>
+<li style="margin-left:0ch">6 deterministic phases: API Definition, Pseudocode, Dafny Contracts, Deployment, Observability, + Z3 verification</li>
+
+</ul><h2 id="module-classification">Module Classification</h2>
+
+<p>The architect classifies each module as one of:</p>
+
+<h3 id="-dafny-pure-logic-verified-"><code class="inline">dafny</code> — Pure Logic (Verified)</h3>
+<ul><li style="margin-left:0ch">Parsing, validation, transformation, generation, business rules</li>
+<li style="margin-left:0ch">No I/O, no side effects, no external state</li>
+<li style="margin-left:0ch">Gets a <code class="inline">.dfy</code> skeleton with contracts</li>
+<li style="margin-left:0ch">Imp writes Dafny bodies</li>
+<li style="margin-left:0ch">Z3 verifies</li>
+<li style="margin-left:0ch"><code class="inline">dafny translate cs</code> produces C#</li>
+<li style="margin-left:0ch">QA compiles only (no tests)</li>
+
+</ul><h3 id="-io-shell-i-o-wrapper-unverified-"><code class="inline">io-shell</code> — I/O Wrapper (Unverified)</h3>
+<ul><li style="margin-left:0ch">File reading, console output, database connection, HTTP client</li>
+<li style="margin-left:0ch">Side effects, external state, framework calls</li>
+<li style="margin-left:0ch">Gets a C# type shell (existing Shepherd pattern)</li>
+<li style="margin-left:0ch">Imp writes C# bodies</li>
+<li style="margin-left:0ch">Build judge checks compilation</li>
+<li style="margin-left:0ch">QA generates tests (existing behavior)</li>
+
+</ul><h3 id="-mixed-partial-split-into-dafny-io-shell-"><code class="inline">mixed</code> — Partial (Split into dafny + io-shell)</h3>
+<ul><li style="margin-left:0ch">Config loader (file I/O + parsing)</li>
+<li style="margin-left:0ch">Split into: <code class="inline">ConfigParser</code> (dafny — pure parsing) + <code class="inline">ConfigFileReader</code> (io-shell — file I/O)</li>
+<li style="margin-left:0ch">Each piece goes through its respective pipeline</li>
+
+</ul><p><strong>Mixed module splitting:</strong> The architect outputs two separate <code class="inline">Component</code> records — one <code class="inline">dafny</code>, one <code class="inline">io-shell</code> — with a dependency from the io-shell to the dafny. The pipeline does not split modules. The architect is responsible for decomposition at design time.</p>
+
+<h2 id="dafny-contract-format">Dafny Contract Format</h2>
+
+<pre><code class="language-dafny">
+// Module: CsvParser
+// Responsibility: Parse CSV lines into typed rows
+
+module CsvParser {
+
+  datatype DataType = Integer | Float | Date | Boolean | Varchar
+
+  class CsvParser {
+    var delimiter: char
+    var quote: char
+
+    predicate Valid() reads this
+      { delimiter != &#x27;\000&#x27; }
+
+    constructor(delimiter: char, quote: char)
+      ensures Valid()
+
+    method ParseLine(line: string) returns (fields: seq&lt;string&gt;)
+      requires Valid()
+      requires |line| &gt; 0
+      ensures |fields| &gt;= 1
+      ensures forall i :: 0 &lt;= i &lt; |fields| ==&gt; fields[i] != null
+    // Bodyless — Imp fills in the body during Implementation
+  }
+}
+</code></pre>
+
+<h2 id="extern-portal-pattern">Extern Portal Pattern</h2>
+
+<p>The architect walks down the Dafny sidewalk — pure logic, requires/ensures, Z3-verified. When it hits something that can&#x27;t be proven (file read, stream, database call), it doesn&#x27;t stop. It puts an <code class="inline">{:extern}</code> stub — the portal.</p>
+
+<pre><code class="language-dafny">
+// In the .dfy skeleton (Architecture phase):
+class FileProcessor {
+  // The portal — C# implements this, Z3 assumes the contract
+  method {:extern} ReadFile(path: string) returns (content: string)
+    requires |path| &gt; 0
+    ensures |content| &gt;= 0
+
+  // Pure logic — verified by Z3, calls through the portal
+  method CountLines(content: string) returns (count: int)
+    requires |content| &gt;= 0
+    ensures count &gt;= 0
+  // Bodyless in skeleton — Imp fills in during Dafny Implementation
+}
+</code></pre>
+
+<p>Z3 verifies everything around the portal. The extern&#x27;s contract is taken as an axiom — &quot;whatever comes out of that door satisfies <code class="inline">|content| &gt;= 0</code>.&quot; The proof holds. The portal is the membrane.</p>
+
+<p><code class="inline">dafny translate cs</code> produces a <code class="inline">partial class</code> with the verified logic baked in and the extern method as a hole:</p>
+
+<pre><code class="language-csharp">
+// Generated by dafny translate cs (Dafny Implementation phase):
+public partial class FileProcessor {
+  public BigInteger CountLines(Dafny.ISequence&lt;Dafny.Rune&gt; content) {
+    // Verified logic — proven correct by Z3
+  }
+  // ReadFile is not here — it&#x27;s the extern hole
+}
+</code></pre>
+
+<p>Pass 2 (C# Implementation) plugs into the portal:</p>
+
+<pre><code class="language-csharp">
+// Written by Imp in C# Implementation phase:
+public partial class FileProcessor {
+  public string ReadFile(string path) =&gt; File.ReadAllText(path);
+}
+</code></pre>
+
+<p>The C# plugs into the portal. The translated Dafny calls it at runtime. The logic inside the exoskeleton is proven. The I/O passes through the portal and back out.</p>
+
+<h3 id="verified-by-testing-aug-6-2026-">Verified by testing (Aug 6, 2026)</h3>
+
+<ul><li style="margin-left:0ch"><strong>Bodyless methods with <code class="inline">{:axiom}</code>:</strong> <code class="inline">dafny verify</code> → 4 verified, 0 errors ✅</li>
+<li style="margin-left:0ch"><strong>Bodyless methods translate:</strong> fails (expected — bodyless methods can&#x27;t compile). Translation happens after Imp fills bodies.</li>
+<li style="margin-left:0ch"><strong>Extern stubs:</strong> <code class="inline">dafny verify</code> → 2 verified, 0 errors ✅. Z3 verifies logic around the extern.</li>
+<li style="margin-left:0ch"><strong>Extern translate:</strong> <code class="inline">dafny translate cs</code> → exit 0, produces <code class="inline">partial class</code> with verified logic + extern hole ✅</li>
+
+</ul><h2 id="i-o-shell-pattern">I/O Shell Pattern</h2>
+
+<pre><code class="language-csharp">
+// io-shell module — C#, not verified
+public class CsvFileReader
+{
+    public string ReadAllText(string path)
+        =&gt; File.ReadAllText(path);
+}
+
+// dafny module — translated to C# by dafny translate cs
+// The translated code calls into the proof-verified logic
+// The I/O shell calls the translated code
+public class CsvProgram
+{
+    public void Run(string filePath)
+    {
+        var reader = new CsvFileReader();       // io-shell
+        var content = reader.ReadAllText(filePath); // io-shell
+        var parser = new CsvParser(&#x27;,&#x27;, &#x27;&quot;&#x27;);    // translated Dafny
+        var rows = parser.ParseLine(content);    // proven correct
+    }
+}
+</code></pre>
+
+<h2 id="limits-and-boundaries">Limits and Boundaries</h2>
+
+<h3 id="per-module-dafny-source">Per-Module Dafny Source</h3>
+<ul><li style="margin-left:0ch">Max 200 lines</li>
+<li style="margin-left:0ch">Max 10 methods/functions</li>
+<li style="margin-left:0ch">Max 5 classes/datatypes</li>
+<li style="margin-left:0ch">Max 3 requires/ensures per method</li>
+
+</ul><h3 id="prompt-budgets">Prompt Budgets</h3>
+<table>
+<tr>
+<th>Phase</th>
+<th>System Prompt Cap</th>
+<th>Wiki Cap</th>
+<th>Other</th>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>16K</td>
+<td>8K</td>
+<td>Dafny syntax ref 2K</td>
+</tr>
+<tr>
+<td>Dafny Contracts</td>
+<td>N/A — deterministic</td>
+<td>N/A</td>
+<td>Z3 only, no model call</td>
+</tr>
+<tr>
+<td>Implementation (Dafny — Pass 1)</td>
+<td>16K</td>
+<td>4K</td>
+<td>Contract file on disk</td>
+</tr>
+<tr>
+<td>Implementation (C# — Pass 2)</td>
+<td>32K</td>
+<td>8K</td>
+<td>Translated Dafny + extern holes</td>
+</tr>
+<tr>
+<td>QA</td>
+<td>32K</td>
+<td>4K</td>
+<td>Edge cases 4K</td>
+</tr>
+</table>
+
+<h3 id="z3-verification">Z3 Verification</h3>
+<ul><li style="margin-left:0ch"><code class="inline">--verification-time-limit 30</code> (default)</li>
+<li style="margin-left:0ch"><code class="inline">--standard-libraries</code> (enable Std imports)</li>
+<li style="margin-left:0ch"><code class="inline">--resource-limit</code> configurable</li>
+
+</ul><h3 id="output-tokens">Output Tokens</h3>
+<ul><li style="margin-left:0ch">Dafny generation: 16K max</li>
+<li style="margin-left:0ch">C# generation: 64K max (existing)</li>
+<li style="margin-left:0ch">QA generation: 64K max (existing)</li>
+
+</ul><h2 id="agent-model-assignments">Agent Model Assignments</h2>
+
+<table>
+<tr>
+<th>Task</th>
+<th>Model</th>
+<th>Rationale</th>
+</tr>
+<tr>
+<td>Ideation</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Better reasoning for decomposition</td>
+</tr>
+<tr>
+<td>Architecture (Dafny contracts)</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Formal spec writing</td>
+</tr>
+<tr>
+<td>Design Review</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Independent review — separation from architect</td>
+</tr>
+<tr>
+<td>Implementation (Dafny bodies — Pass 1)</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Proven 2/5, understands architect&#x27;s contract intent</td>
+</tr>
+<tr>
+<td>Implementation (C# shells — Pass 2)</td>
+<td>glm-5.2:cloud</td>
+<td>Plugs into extern portals, wires I/O to translated Dafny</td>
+</tr>
+<tr>
+<td>QA (test generation)</td>
+<td>glm-5.2:cloud</td>
+<td>Architect knows module intent, well-positioned for unprovable module tests</td>
+</tr>
+<tr>
+<td>Imp appeal reviewer</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Independent — hasn&#x27;t touched io-shell code or QA tests. Reads architect spec as arbiter.</td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Better prose</td>
+</tr>
+<tr>
+<td>File ops, wiki search</td>
+<td>local ollama</td>
+<td>Fast, no reasoning</td>
+</tr>
+</table>
+
+<h2 id="project-structure">Project Structure</h2>
+
+<pre><code class="language-">
+Posit/
+  src/
+    Posit.Contracts/        # Artifacts, enums, interfaces
+    Posit.Core/              # FSM, state machine, session
+    Posit.Data/              # DB, repositories, migrations
+    Posit.AI/                 # Model gateway, prompt registry, context manager
+    Posit.Phases/             # All phase implementations
+      DafnyContractsPhase.cs
+      DafnyImplementationPhase.cs  # Pass 1: fill Dafny bodies, Z3 verify, translate cs
+      CSharpImplementationPhase.cs # Pass 2: plug into extern portals, wire I/O
+      QaPhase.cs             # Modified for verified module skip
+      ...
+    Posit.Tools/             # Build engine, staging, Z3 runner
+    Posit.Cli/                # CLI entry point
+    Posit.Web/                # Dashboard (Blazor)
+  tests/
+  prompts/
+    ideation/
+    architecture/            # Dafny contract writing prompt
+    dafny/                   # Dafny body writing prompt
+    implementation/          # C# I/O shell prompt
+    qa/
+    ...
+  wiki/
+    plans/
+    patterns/
+    architecture/
+    contracts/               # Dafny contract templates per module type
+  migrations/
+</code></pre>
+
+<h2 id="skeleton-verification-semantics">Skeleton Verification Semantics</h2>
+
+<p>Dafny distinguishes between <strong>bodyless methods</strong> and <strong>methods with empty bodies</strong>:</p>
+
+<ul><li style="margin-left:0ch"><strong>Bodyless</strong> (<code class="inline">method Foo() ensures ... </code> with no <code class="inline">{ }</code>): Z3 treats as abstract specification. Checks contracts are well-formed and self-consistent. No proof obligation for the body. This is what skeletons use.</li>
+<li style="margin-left:0ch"><strong>Empty body</strong> (<code class="inline">method Foo() ensures ... { }</code>): Z3 tries to prove postconditions from default return values. Almost always fails. Do NOT use.</li>
+
+</ul><p>All <code class="inline">.dfy</code> skeletons use bodyless declarations. Predicates are the exception — <code class="inline">predicate Valid() reads this { ... }</code> has a body because it&#x27;s a definition, not a proof obligation.</p>
+
+<h2 id="cross-file-dafny-dependencies">Cross-File Dafny Dependencies</h2>
+
+<p>Each module gets its own <code class="inline">.dfy</code> file. If a module needs types defined in another module, it uses:</p>
+
+<pre><code class="language-dafny">
+include &quot;OtherModule.dfy&quot;
+</code></pre>
+
+<p>Z3 verifies each file independently. <code class="inline">dafny translate cs</code> handles multi-file projects — it produces a single C# output per compilation. The DafnyContractsPhase writes all <code class="inline">.dfy</code> files to a staging directory and verifies them as a batch with <code class="inline">dafny verify *.dfy</code>.</p>
+
+<h2 id="correction-signal-dafny-contracts-loopback">Correction Signal — Dafny Contracts Loopback</h2>
+
+<p>When a skeleton fails Z3 verification, the correction signal loops <strong>back to the Architecture phase</strong>, not within Dafny Contracts. The FSM rolls back to Architecture with the Z3 error attached. The architect re-runs with the correction signal and produces a fixed <code class="inline">.dfy</code> skeleton.</p>
+
+<ul><li style="margin-left:0ch"><strong>Max loopbacks:</strong> 2 (same as Shepherd&#x27;s Implementation→Architecture loopback cap)</li>
+<li style="margin-left:0ch"><strong>After exhausting loopbacks:</strong> the module is downgraded to <code class="inline">io-shell</code> and proceeds through the C# pipeline with QA test generation</li>
+<li style="margin-left:0ch"><strong>Partial success:</strong> verified skeletons are preserved; only failed modules loop back</li>
+
+</ul><h2 id="fsm-design">FSM Design</h2>
+
+<p>Posit inherits Shepherd&#x27;s FSM states and escalation chain:</p>
+
+<pre><code class="language-">
+Idle → Planning → Active → Validating → Retry → CheckpointRollback → Recovery → ReviewGate → Paused → Completed → Aborted
+</code></pre>
+
+<p><strong>Escalation chain:</strong> retry in-phase → rollback to checkpoint → recovery with backoff → review gate (human) → abort to Idle.</p>
+
+<p><strong>New transitions for Dafny-first:</strong></p>
+
+<table>
+<tr>
+<th>Event</th>
+<th>From</th>
+<th>To</th>
+<th>Notes</th>
+</tr>
+<tr>
+<td><code class="inline">dafny.skeleton_failed</code></td>
+<td>Validating</td>
+<td>CheckpointRollback</td>
+<td>Rolls back to Architecture with Z3 error</td>
+</tr>
+<tr>
+<td><code class="inline">dafny.skeleton_verified</code></td>
+<td>Validating</td>
+<td>Planning</td>
+<td>Advances to Implementation</td>
+</tr>
+<tr>
+<td><code class="inline">dafny.body_failed</code></td>
+<td>Validating</td>
+<td>Retry</td>
+<td>Retries within Implementation (Imp fixes body)</td>
+</tr>
+<tr>
+<td><code class="inline">dafny.body_verified</code></td>
+<td>Validating</td>
+<td>Planning</td>
+<td>Advances to QA</td>
+</tr>
+<tr>
+<td><code class="inline">module.downgraded</code></td>
+<td>Active</td>
+<td>Active</td>
+<td>Module reclassified io-shell, pipeline continues</td>
+</tr>
+<tr>
+<td><code class="inline">dafny.translated_cs</code></td>
+<td>Validating</td>
+<td>Planning</td>
+<td>Translated C# dropped into project, advances</td>
+</tr>
+<tr>
+<td><code class="inline">qa.appeal_filed</code></td>
+<td>Validating</td>
+<td>Active</td>
+<td>Imp appeals QA failure on io-shell module — appeal reviewer called</td>
+</tr>
+<tr>
+<td><code class="inline">qa.appeal_upheld</code></td>
+<td>Active</td>
+<td>Planning</td>
+<td>Appeal reviewer says test is wrong — QA rewrites test, re-runs</td>
+</tr>
+<tr>
+<td><code class="inline">qa.appeal_denied</code></td>
+<td>Active</td>
+<td>Retry</td>
+<td>Appeal reviewer says code is wrong — Imp fixes code, QA re-runs</td>
+</tr>
+<tr>
+<td><code class="inline">qa.appeal_exhausted</code></td>
+<td>Retry</td>
+<td>ReviewGate</td>
+<td>Max 1 appeal per module reached — human review gate</td>
+</tr>
+</table>
+
+<p><strong>Loopback counter:</strong> <code class="inline">LoopbackCount</code> on <code class="inline">SessionState</code> tracks Architecture→Dafny Contracts round-trips. Capped at 2.</p>
+
+<h2 id="multi-target-stance">Multi-Target Stance</h2>
+
+<p>C# now. Multi-target (Rust, Go, Java, JS, Python) is a future aspiration, not a current design goal. The plan, project structure, and all phases target C# only. <code class="inline">dafny translate cs</code> is the only translation path. When multi-target becomes a real requirement, a target-language abstraction will be added — but not before.</p>
+
+<h2 id="determinism-stance">Determinism Stance</h2>
+
+<p>Determinism is a target-specific concern, not a core property of Posit. The <code class="inline">--enforce-determinism</code> flag is relevant only if/when a Rust target is added. For C# output, standard Dafny translation is sufficient. Proofs are deterministic (Z3); translated code follows the target language&#x27;s semantics.</p>
+
+<h2 id="imp-appeal-process">Imp Appeal Process</h2>
+
+<p>When QA fails an io-shell module and Imp believes the test is wrong (not the code), Imp can appeal. The appeal goes to an independent reviewer model that wasn&#x27;t involved in writing the code or the test.</p>
+
+<p><strong>Only io-shell modules can appeal.</strong> Dafny modules have no QA tests — Z3 is the judge, the proof is the test, there&#x27;s nothing to dispute.</p>
+
+<h3 id="flow">Flow</h3>
+
+<pre><code class="language-">
+QA fails io-shell module
+  → Imp appeals with reason (&quot;test expects X but spec says Y&quot;)
+  → Appeal reviewer (kimi-2.7-code:cloud) reads:
+      - Architect&#x27;s Component spec (responsibility, test cases, public surface)
+      - Imp&#x27;s C# code
+      - QA&#x27;s test
+      - Imp&#x27;s appeal reason
+  → Decision: test is wrong (QA rewrites test) OR code is wrong (Imp fixes) OR both
+  → Max 1 appeal per module, then REVIEW_GATE (human)
+</code></pre>
+
+<h3 id="model-assignment">Model Assignment</h3>
+
+<table>
+<tr>
+<th>Role</th>
+<th>Model</th>
+<th>Why</th>
+</tr>
+<tr>
+<td>Appeal reviewer</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Already the independent reviewer (Design Review). Hasn&#x27;t touched io-shell code or QA tests. Reads the spec as arbiter.</td>
+</tr>
+</table>
+
+<h3 id="constraints">Constraints</h3>
+
+<ul><li style="margin-left:0ch">One extra model call, only on appeal, only for io-shell modules</li>
+<li style="margin-left:0ch">Max 1 appeal per module — second failure goes to REVIEW_GATE</li>
+<li style="margin-left:0ch">The appeal reviewer sees the architect&#x27;s spec as the source of truth, not Imp&#x27;s interpretation or QA&#x27;s test</li>
+<li style="margin-left:0ch">Traffic goes through the same Ollama interface — no new infrastructure</li>
+
+</ul><h3 id="tracking">Tracking</h3>
+
+<p>We will monitor whether the appeal process:</p>
+<ul><li style="margin-left:0ch">Improves workflow (fewer false QA failures, less rework)</li>
+<li style="margin-left:0ch">Mitigates token use (cheaper to appeal than to retry the full QA loop)</li>
+<li style="margin-left:0ch">Both</li>
+<li style="margin-left:0ch">Neither (appeal cost exceeds retry cost, and we remove it)</li>
+
+</ul><p>This is an investment under observation, not a permanent fixture.</p>
+
+<h2 id="built-infrastructure">Built Infrastructure</h2>
+
+<p>As of Aug 6, 2026 (18 commits):</p>
+
+<h3 id="phases-6-of-11-built-">Phases (6 of 11 built)</h3>
+
+<table>
+<tr>
+<th>Phase</th>
+<th>Status</th>
+<th>Model</th>
+<th>Type</th>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>✅ Built + verified</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>AI</td>
+</tr>
+<tr>
+<td>Dafny Contracts</td>
+<td>✅ Built</td>
+<td>— (Z3 only)</td>
+<td>Deterministic</td>
+</tr>
+<tr>
+<td>Dafny Implementation (Pass 1)</td>
+<td>✅ Built</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>AI</td>
+</tr>
+<tr>
+<td>C# Implementation (Pass 2)</td>
+<td>✅ Built</td>
+<td>glm-5.2:cloud</td>
+<td>AI</td>
+</tr>
+<tr>
+<td>QA</td>
+<td>✅ Built</td>
+<td>glm-5.2:cloud</td>
+<td>AI</td>
+</tr>
+<tr>
+<td>Ideation</td>
+<td>❌ Not built</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>AI</td>
+</tr>
+<tr>
+<td>API Definition</td>
+<td>❌ Not built</td>
+<td>—</td>
+<td>Deterministic</td>
+</tr>
+<tr>
+<td>Pseudocode</td>
+<td>❌ Not built</td>
+<td>—</td>
+<td>Deterministic</td>
+</tr>
+<tr>
+<td>Design Review</td>
+<td>❌ Not built</td>
+<td>kimi-2.7-code:cloud</td>
+<td>AI</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td>❌ Not built</td>
+<td>—</td>
+<td>Deterministic</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>❌ Not built</td>
+<td>—</td>
+<td>Deterministic</td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>❌ Not built</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>AI</td>
+</tr>
+</table>
+
+<h3 id="infrastructure">Infrastructure</h3>
+
+<table>
+<tr>
+<th>Component</th>
+<th>Status</th>
+</tr>
+<tr>
+<td>OllamaModelGateway</td>
+<td>✅ Ollama-only, localhost:11434</td>
+</tr>
+<tr>
+<td>Z3Runner</td>
+<td>✅ <code class="inline">dafny verify</code> + <code class="inline">dafny translate cs</code></td>
+</tr>
+<tr>
+<td>FsmReducer</td>
+<td>✅ State transitions, retry, rollback</td>
+</tr>
+<tr>
+<td>DependencyGraphEngine</td>
+<td>✅ Phase ordering, cycle detection</td>
+</tr>
+<tr>
+<td>PhaseController</td>
+<td>✅ Initialize + execute</td>
+</tr>
+<tr>
+<td>PositOrchestrator</td>
+<td>✅ Pipeline runner, DB persistence</td>
+</tr>
+<tr>
+<td>CLI</td>
+<td>✅ <code class="inline">posit run &lt;request&gt; --phase=...</code></td>
+</tr>
+</table>
+
+<h3 id="data-capture">Data Capture</h3>
+
+<table>
+<tr>
+<th>Table</th>
+<th>Schema</th>
+<th>Captures</th>
+</tr>
+<tr>
+<td><code class="inline">posit_artifacts.artifacts</code></td>
+<td>ArtifactRepository</td>
+<td>Every phase output (JSONB)</td>
+</tr>
+<tr>
+<td><code class="inline">posit_artifacts.artifact_lineage</code></td>
+<td>ArtifactRepository</td>
+<td>Artifact dependency graph</td>
+</tr>
+<tr>
+<td><code class="inline">posit_state.sessions</code></td>
+<td>StateStore</td>
+<td>Session state (JSONB)</td>
+</tr>
+<tr>
+<td><code class="inline">posit_qa.prompts_log</code></td>
+<td>PromptLogger</td>
+<td>Every prompt→response pair (the data harvest)</td>
+</tr>
+<tr>
+<td><code class="inline">posit_audit.events</code></td>
+<td>AuditRepository</td>
+<td>Append-only event log</td>
+</tr>
+<tr>
+<td><code class="inline">posit_qa.dafny_results</code></td>
+<td>PromptLogger</td>
+<td>Z3 verification output + translated C#</td>
+</tr>
+</table>
+
+<h3 id="prompts">Prompts</h3>
+
+<table>
+<tr>
+<th>Prompt</th>
+<th>Status</th>
+</tr>
+<tr>
+<td><code class="inline">prompts/architecture/1.0.0.md</code></td>
+<td>✅ Dafny sidewalk, extern portals, bodyless methods</td>
+</tr>
+<tr>
+<td><code class="inline">prompts/dafny/1.0.0.md</code></td>
+<td>✅ Body filling, don&#x27;t touch contracts, Z3 hints</td>
+</tr>
+<tr>
+<td><code class="inline">prompts/csharp-implementation/1.0.0.md</code></td>
+<td>✅ Portal pattern, Dafny→C# type mapping</td>
+</tr>
+<tr>
+<td><code class="inline">prompts/qa/1.0.0.md</code></td>
+<td>✅ Verified vs unverified split, appeal process</td>
+</tr>
+</table>
+
+<h2 id="what-s-different-from-shepherd">What&#x27;s Different from Shepherd</h2>
+
+<table>
+<tr>
+<th>Aspect</th>
+<th>Shepherd</th>
+<th>Posit</th>
+</tr>
+<tr>
+<td>Spec language</td>
+<td>C# type signatures</td>
+<td>Dafny contracts (requires/ensures)</td>
+</tr>
+<tr>
+<td>Implementation language</td>
+<td>C#</td>
+<td>Dafny (for logic) + C# (for I/O)</td>
+</tr>
+<tr>
+<td>Verification</td>
+<td>Build judge (compilation)</td>
+<td>Z3 (formal proof) + build judge</td>
+</tr>
+<tr>
+<td>QA</td>
+<td>Generate tests for all modules</td>
+<td>Compile translated C#, test unverified only</td>
+</tr>
+<tr>
+<td>Test stubs</td>
+<td>All modules</td>
+<td>Unverified modules only</td>
+</tr>
+<tr>
+<td>Edge cases</td>
+<td>All modules</td>
+<td>Unverified modules only</td>
+</tr>
+<tr>
+<td>Correction signal</td>
+<td>Compiler errors</td>
+<td>Z3 proof failures (exact clause + counterexample)</td>
+</tr>
+<tr>
+<td>Wiki</td>
+<td>C# patterns + edge cases</td>
+<td>C# patterns + 2,147 Dafny examples</td>
+</tr>
+<tr>
+<td>Module classification</td>
+<td>None</td>
+<td>dafny / io-shell / mixed</td>
+</tr>
+</table>
+
+<h2 id="implementation-steps">Implementation Steps</h2>
+
+<h3 id="step-1-project-structure">Step 1: Project Structure</h3>
+<ul><li style="margin-left:0ch">Solution, projects, build system</li>
+<li style="margin-left:0ch">Reuse Shepherd&#x27;s infrastructure (FSM, state machine, DB, migrations)</li>
+<li style="margin-left:0ch">New: DafnyContractsPhase, modified ImplementationPhase, modified QaPhase</li>
+
+</ul><h3 id="step-2-dafny-contracts-phase">Step 2: Dafny Contracts Phase</h3>
+<ul><li style="margin-left:0ch">Architect writes .dfy skeletons with contracts</li>
+<li style="margin-left:0ch">Z3 verifies skeleton (contracts without bodies)</li>
+<li style="margin-left:0ch">.dfy files written to disk</li>
+
+</ul><h3 id="step-3-dafny-first-implementation">Step 3: Dafny-first Implementation</h3>
+<ul><li style="margin-left:0ch">Imp fills in Dafny bodies</li>
+<li style="margin-left:0ch">Z3 verifies complete program</li>
+<li style="margin-left:0ch"><code class="inline">dafny translate cs</code> produces C#</li>
+<li style="margin-left:0ch">C# I/O shells implemented normally</li>
+
+</ul><h3 id="step-4-modified-qa">Step 4: Modified QA</h3>
+<ul><li style="margin-left:0ch">Verified modules: compile translated C# only</li>
+<li style="margin-left:0ch">Unverified modules: full test generation (existing behavior)</li>
+
+</ul><h3 id="step-5-limits-and-budgets">Step 5: Limits and Budgets</h3>
+<ul><li style="margin-left:0ch">200-line cap, 10 method cap, 5 class cap per Dafny module</li>
+<li style="margin-left:0ch">Prompt budgets per phase</li>
+
+</ul><h3 id="step-6-trial">Step 6: Trial</h3>
+<ul><li style="margin-left:0ch">End-to-end Dafny-first pipeline run</li>
+<li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
+        </div>
+
+        <div class="page" id="page-8198210" data-title="Dafny Contract Templates">
+            <h1>Dafny Contract Templates</h1>
+            <div class="page-path">contracts\dafny-contract-templates.md</div>
+            <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
+            <h1 id="dafny-contract-templates">Dafny Contract Templates</h1>
+
+<p>Templates the architect uses when writing .dfy skeletons. Each template shows the contract pattern for a common module type. The architect picks the closest template, fills in the types and methods, and writes requires/ensures clauses. Imp fills in the bodies.</p>
+
+<h2 id="parser-module">Parser Module</h2>
+
+<pre><code class="language-dafny">
+module CsvParser_Module {
+
+  datatype ParseError = ParseError(line: int, col: int, message: string)
+
+  class CsvParser {
+    var delimiter: char
+    var quote: char
+
+    predicate Valid() reads this
+      { delimiter != &#x27;\000&#x27; }
+
+    constructor(delimiter: char, quote: char)
+      ensures Valid()
+
+    method ParseLine(line: string) returns (fields: seq&lt;string&gt;, error: ParseError?)
+      requires Valid()
+      requires |line| &gt; 0
+      ensures |fields| &gt;= 0
+      ensures error == null ==&gt; |fields| &gt;= 1
+  }
+}
+</code></pre>
+
+<h2 id="validator-module">Validator Module</h2>
+
+<pre><code class="language-dafny">
+module Validator_Module {
+
+  datatype DataType = Integer | Float | Date | Boolean | Varchar
+  datatype ValidationResult = Valid | Invalid(reason: string)
+
+  class DataValidator {
+    method Validate(value: string, type: DataType) returns (result: ValidationResult)
+      requires |value| &gt;= 0
+      ensures result.Valid? || result.Invalid?
+  }
+}
+</code></pre>
+
+<h2 id="generator-module">Generator Module</h2>
+
+<pre><code class="language-dafny">
+module SqlGenerator_Module {
+
+  datatype DatabaseDialect = PostgreSql | Sqlite | MySql
+
+  class SqlInsertBuilder {
+    var dialect: DatabaseDialect
+    var tableName: string
+
+    predicate Valid() reads this
+      { |tableName| &gt; 0 }
+
+    constructor(dialect: DatabaseDialect, tableName: string)
+      requires |tableName| &gt; 0
+      ensures Valid()
+
+    method BuildInsert(columns: seq&lt;string&gt;, values: seq&lt;string&gt;) returns (sql: string)
+      requires Valid()
+      requires |columns| == |values|
+      requires |columns| &gt; 0
+      ensures |sql| &gt; 0
+  }
+}
+</code></pre>
+
+<h2 id="config-schema-module">Config/Schema Module</h2>
+
+<pre><code class="language-dafny">
+module SchemaMapper_Module {
+
+  datatype ColumnSchema = ColumnSchema(
+    name: string,
+    dataType: string,
+    nullable: bool,
+    maxLength: int
+  )
+
+  class SchemaValidator {
+    method ValidateSchema(columns: seq&lt;ColumnSchema&gt;, header: seq&lt;string&gt;) returns (valid: bool, errors: seq&lt;string&gt;)
+      requires |columns| &gt; 0
+      requires |header| &gt; 0
+      ensures valid ==&gt; |errors| == 0
+  }
+}
+</code></pre>
+
+<h2 id="i-o-shell-module-not-dafny-c-only-">I/O Shell Module (NOT Dafny — C# only)</h2>
+
+<pre><code class="language-csharp">
+// io-shell module — NOT verified, just compiles
+// This module does NOT get a .dfy file
+public class FileService
+{
+    public string ReadAllText(string path) =&gt; File.ReadAllText(path);
+    public void WriteAllText(string path, string content) =&gt; File.WriteAllText(path, content);
+}
+</code></pre>
+
+<h2 id="extern-portal-pattern-i-o-inside-dafny-modules-">Extern Portal Pattern (I/O inside Dafny modules)</h2>
+
+<p>When a Dafny module needs I/O, the architect writes an <code class="inline">{:extern}</code> stub — the portal.</p>
+<p>Z3 verifies the logic around it. The extern&#x27;s contract is taken as an axiom.</p>
+<p><code class="inline">dafny translate cs</code> produces a <code class="inline">partial class</code> with the extern as a hole.</p>
+<p>Pass 2 (C# Implementation) plugs into the hole.</p>
+
+<pre><code class="language-dafny">
+// In the .dfy skeleton — the portal
+class FileProcessor {
+  method {:extern} ReadFile(path: string) returns (content: string)
+    requires |path| &gt; 0
+    ensures |content| &gt;= 0
+
+  // Pure logic — verified by Z3, calls through the portal
+  method CountLines(content: string) returns (count: int)
+    requires |content| &gt;= 0
+    ensures count &gt;= 0
+  // Bodyless in skeleton — Imp fills in during Dafny Implementation (Pass 1)
+}
+</code></pre>
+
+<pre><code class="language-csharp">
+// Generated by dafny translate cs (Pass 1 output):
+public partial class FileProcessor {
+  public BigInteger CountLines(Dafny.ISequence&lt;Dafny.Rune&gt; content) {
+    // Verified logic — proven correct by Z3
+  }
+  // ReadFile is the extern hole — not here
+}
+
+// Written by Imp in C# Implementation (Pass 2):
+public partial class FileProcessor {
+  public string ReadFile(string path) =&gt; File.ReadAllText(path);
+}
+</code></pre>
+
+<h2 id="rules-for-the-architect">Rules for the Architect</h2>
+
+<ul><li>Pure logic modules get Dafny contracts. I/O modules get C# type shells.</li>
+<li>Every <code class="inline">method</code> gets at least one <code class="inline">requires</code> and one <code class="inline">ensures</code>.</li>
+<li>Every <code class="inline">class</code> with mutable state gets a <code class="inline">predicate Valid()</code>.</li>
+<li>Constructors must <code class="inline">ensures Valid()</code>.</li>
+<li>Mutating methods must <code class="inline">requires Valid()</code> and <code class="inline">ensures Valid()</code> and <code class="inline">modifies this</code>.</li>
+<li>Keep it minimal — types and signatures only. <strong>No method or constructor bodies — bodyless declarations only.</strong> Do NOT write <code class="inline">{ }</code> after a method or constructor. An empty body is NOT a missing body — empty bodies create proof obligations that fail (Z3 tries to prove postconditions from default values). Bodyless methods are treated as abstract specifications — Z3 checks the contracts are well-formed and self-consistent without requiring a body.</li>
+<li>Predicates DO have bodies — <code class="inline">predicate Valid() reads this { ... }</code> is a definition, not a proof obligation. The predicate body defines what &quot;valid&quot; means.</li>
+<li>Max 200 lines, 10 methods, 5 classes per module.</li>
+<li>Use <code class="inline">datatype</code> for enums and records. Use <code class="inline">class</code> for stateful types.</li>
+<li>Use <code class="inline">string</code> for text (not <code class="inline">seq&lt;char&gt;</code> — Dafny maps it automatically).</li>
+<li>Use <code class="inline">int</code> for numbers (not <code class="inline">BigInteger</code> — Dafny&#x27;s <code class="inline">int</code> is arbitrary precision).</li>
+<li>If a module needs types defined in another module, use <code class="inline">include &quot;OtherModule.dfy&quot;</code> at the top of the file. Each .dfy file is verified independently by Z3.</li>
+<li>Use <code class="inline">{:axiom}</code> on bodyless methods to suppress warnings. The attribute goes on the method declaration line: <code class="inline">method {:axiom} Foo()</code>.</li>
+<li>Use <code class="inline">{:extern}</code> for I/O portals — methods that C# will implement. Z3 takes the contract as an axiom. <code class="inline">dafny translate cs</code> produces a <code class="inline">partial class</code> hole for Pass 2 to plug into.</li>
+<li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
+        </div>
+
+        <div class="page" id="page-7667498" data-title="Plans\Dafny First Pipeline Plan">
+            <h1>Plans\Dafny First Pipeline Plan</h1>
+            <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
+            
+            <h1 id="posit-dafny-first-pipeline-plan">Posit — Dafny-First Pipeline Plan</h1>
+
+<h2 id="name">Name</h2>
+
+<p><strong>Posit</strong> — a spec compiler. The architect posits contracts (requires/ensures). Z3 confirms or denies. The code that survives is proven. Nothing ships unproven.</p>
+
+<h2 id="vision">Vision</h2>
+
+<p>Wall-to-wall Dafny: everything provable is proven, everything else is a thin I/O shell.</p>
+
+<p>Architect writes Dafny contracts (exoskeleton). Imp writes Dafny bodies (meat). Z3 verifies. <code class="inline">dafny translate cs</code> produces deployable C#. QA compiles translated code only — no test generation for verified modules.</p>
+
+<h2 id="pipeline-order">Pipeline Order</h2>
+
+<pre><code class="language-">
+Ideation → Architecture → API Definition → Pseudocode → Design Review
+  → Dafny Contracts (NEW — architect writes .dfy skeletons with requires/ensures)
+  → Implementation (Imp fills in Dafny bodies, Z3 verifies)
+  → QA (compiles translated C#, runs tests for unverified modules only)
+  → Deployment → Observability → Documentation
+</code></pre>
+
+<h2 id="phase-changes">Phase Changes</h2>
+
+<h3 id="architecture-phase">Architecture Phase</h3>
+<ul><li style="margin-left:0ch">Architect writes Dafny contract files (<code class="inline">.dfy</code>) instead of C# type signatures</li>
+<li style="margin-left:0ch">Each module gets a <code class="inline">.dfy</code> file with:</li>
+<li style="margin-left:1ch"><code class="inline">datatype</code> for enums/records</li>
+<li style="margin-left:1ch"><code class="inline">class</code> with <code class="inline">var</code> fields and <code class="inline">predicate Valid()</code> (predicate HAS a body — it&#x27;s a definition)</li>
+<li style="margin-left:1ch"><code class="inline">method</code> signatures with <code class="inline">requires</code>/<code class="inline">ensures</code> — <strong>bodyless, no <code class="inline">{ }</code></strong></li>
+<li style="margin-left:1ch"><code class="inline">function</code> signatures with <code class="inline">requires</code>/<code class="inline">ensures</code> — <strong>bodyless, no <code class="inline">{ }</code></strong></li>
+<li style="margin-left:1ch"><code class="inline">constructor</code> signatures with <code class="inline">ensures</code> — <strong>bodyless, no <code class="inline">{ }</code></strong></li>
+<li style="margin-left:1ch"><code class="inline">include &quot;OtherModule.dfy&quot;</code> if cross-file types are needed</li>
+<li style="margin-left:0ch">Contracts written to disk as <code class="inline">.dfy</code> files (same pattern as type shells)</li>
+<li style="margin-left:0ch">Mixed modules: architect outputs two Component records (one dafny, one io-shell)</li>
+
+</ul><h3 id="dafny-contracts-phase-new-between-design-review-and-implementation-">Dafny Contracts Phase (NEW — between Design Review and Implementation)</h3>
+<ul><li style="margin-left:0ch">Materializes <code class="inline">.dfy</code> skeleton files to staging</li>
+<li style="margin-left:0ch">Runs <code class="inline">dafny verify</code> on skeletons (bodyless methods — Z3 checks contract well-formedness)</li>
+<li style="margin-left:0ch">If skeleton verification fails, correction signal loops <strong>back to Architecture</strong> (max 2 loopbacks)</li>
+<li style="margin-left:0ch">After exhausting loopbacks, module is downgraded to <code class="inline">io-shell</code></li>
+<li style="margin-left:0ch">Produces <code class="inline">DafnyContractResult</code> with contract source + verification status per module</li>
+<li style="margin-left:0ch">Verified skeletons preserved; only failed modules loop back</li>
+
+</ul><h3 id="implementation-phase-two-passes">Implementation Phase — Two Passes</h3>
+
+<p>Implementation is split into two passes. One spec, two passes. The architect&#x27;s Dafny sidewalk runs until it can&#x27;t, stubs the I/O with <code class="inline">{:extern}</code> portals, and keeps walking. Pass 1 fills the Dafny bodies. Pass 2 plugs C# into the extern portals.</p>
+
+<h4 id="pass-1-dafny-implementation-deepseek-v4-pro-cloud-">Pass 1: Dafny Implementation (deepseek-v4-pro:cloud)</h4>
+<ul><li style="margin-left:0ch">Imp gets <code class="inline">.dfy</code> skeleton files on disk (already verified by Dafny Contracts)</li>
+<li style="margin-left:0ch">Imp fills in method/function bodies in Dafny (not C#)</li>
+<li style="margin-left:0ch">Z3 verifies complete program (skeleton contracts + Imp&#x27;s bodies)</li>
+<li style="margin-left:0ch">On Z3 failure: correction signal with exact proof error (retry within phase)</li>
+<li style="margin-left:0ch">On Z3 success: <code class="inline">dafny translate cs</code> produces C# with <code class="inline">partial class</code> + extern holes</li>
+<li style="margin-left:0ch"><code class="inline">{:extern}</code> methods stay bodyless — they become holes in the partial class</li>
+<li style="margin-left:0ch">Translated C# drops into staging alongside I/O shell modules</li>
+
+</ul><h4 id="pass-2-c-implementation-glm-5-2-cloud-">Pass 2: C# Implementation (glm-5.2:cloud)</h4>
+<ul><li style="margin-left:0ch">Imp gets translated C# (from Pass 1) + extern holes + type shells</li>
+<li style="margin-left:0ch">Imp writes C# that plugs into the <code class="inline">partial class</code> extern holes</li>
+<li style="margin-left:0ch">Imp wires I/O shells to call translated Dafny methods</li>
+<li style="margin-left:0ch">Build judge checks compilation (no Z3 — this is unverified I/O)</li>
+<li style="margin-left:0ch">On build failure: correction signal with compiler errors (existing Shepherd pattern)</li>
+
+</ul><h3 id="qa-phase-modified-">QA Phase (modified)</h3>
+<ul><li style="margin-left:0ch">For verified modules: compile translated C# only (no test generation)</li>
+<li style="margin-left:0ch">For unverified modules: full test generation (existing behavior)</li>
+<li style="margin-left:0ch"><code class="inline">IsVerified</code> flag already wired — QA already skips stubs/edges</li>
+
+</ul><h3 id="imp-appeal-process-new-">Imp Appeal Process (NEW)</h3>
+<ul><li style="margin-left:0ch">When QA fails an io-shell module, Imp can appeal with a reason</li>
+<li style="margin-left:0ch">Appeal goes to kimi-2.7-code:cloud (independent — hasn&#x27;t touched code or tests)</li>
+<li style="margin-left:0ch">Kimi reads architect spec + Imp code + QA test + appeal reason</li>
+<li style="margin-left:0ch">Decision: test wrong (QA rewrites) OR code wrong (Imp fixes) OR both</li>
+<li style="margin-left:0ch">Max 1 appeal per module, then REVIEW_GATE (human)</li>
+<li style="margin-left:0ch">Only io-shell modules — Dafny modules have Z3 as judge, no appeal possible</li>
+<li style="margin-left:0ch">Tracking: monitor if appeal improves workflow, mitigates tokens, both, or neither</li>
+
+</ul><h2 id="module-classification">Module Classification</h2>
+
+<table>
+<tr>
+<th>Type</th>
+<th>Dafny?</th>
+<th>Example</th>
+</tr>
+<tr>
+<td>Pure logic</td>
+<td>YES</td>
+<td>Parser, validator, SQL generator, schema mapper</td>
+</tr>
+<tr>
+<td>I/O shell</td>
+<td>NO</td>
+<td>File reader, CLI wrapper, database writer, HTTP client</td>
+</tr>
+<tr>
+<td>Mixed</td>
+<td>Partial</td>
+<td>Config loader (file I/O + parsing) — Dafny for parsing, C# for I/O</td>
+</tr>
+</table>
+
+<p>Architect marks each module as <code class="inline">dafny</code> or <code class="inline">io-shell</code> in the architecture contract.</p>
+<p>Only <code class="inline">dafny</code> modules go through the Dafny pipeline.</p>
+<p><code class="inline">io-shell</code> modules go through the existing C# implementation path.</p>
+
+<h2 id="limits-and-boundaries">Limits and Boundaries</h2>
+
+<h3 id="dafny-source-limits-per-module-">Dafny Source Limits (per module)</h3>
+<ul><li style="margin-left:0ch">Max 200 lines</li>
+<li style="margin-left:0ch">Max 10 methods/functions</li>
+<li style="margin-left:0ch">Max 5 classes/datatypes</li>
+<li style="margin-left:0ch">Max 3 requires/ensures clauses per method (keep proofs tractable)</li>
+
+</ul><h3 id="prompt-budget">Prompt Budget</h3>
+<ul><li style="margin-left:0ch">Dafny system prompt: hard cap 16K chars</li>
+<li style="margin-left:0ch">Wiki results: 4K cap (already set)</li>
+<li style="margin-left:0ch">Compiled API / module signatures: 8K cap</li>
+<li style="margin-left:0ch">Syntax quick reference: ~2K (already in prompt)</li>
+
+</ul><h3 id="z3-verification">Z3 Verification</h3>
+<ul><li style="margin-left:0ch"><code class="inline">--verification-time-limit 30</code> (default)</li>
+<li style="margin-left:0ch"><code class="inline">--standard-libraries</code> (already set)</li>
+<li style="margin-left:0ch"><code class="inline">--resource-limit</code> configurable via env var</li>
+
+</ul><h3 id="output-tokens">Output Tokens</h3>
+<ul><li style="margin-left:0ch">16K max for Dafny generation (already set in template)</li>
+
+</ul><h3 id="module-decomposition">Module Decomposition</h3>
+<ul><li style="margin-left:0ch">If a module needs &gt;200 lines of Dafny, split it</li>
+<li style="margin-left:0ch">Each module should prove one clear responsibility</li>
+<li style="margin-left:0ch">I/O boundaries are explicit — pure functions only in Dafny</li>
+
+</ul><h2 id="i-o-shell-pattern">I/O Shell Pattern</h2>
+
+<pre><code class="language-csharp">
+// C# I/O shell — NOT verified, just compiles
+public class CsvFileReader
+{
+    public string ReadFile(string path)
+    {
+        return File.ReadAllText(path); // side effect — outside proof boundary
+    }
+}
+
+// Dafny verified module — translated to C# by dafny translate cs
+// class CsvParser { method Parse(line: string) returns (rows: seq&lt;seq&lt;string&gt;&gt;)
+//   requires |line| &gt; 0
+//   ensures |rows| &gt;= 1 ... }
+</code></pre>
+
+<p>The I/O shell calls into the translated Dafny code. The proof covers the logic.</p>
+<p>The I/O is outside the proof boundary.</p>
+
+<h2 id="agent-model-assignments">Agent Model Assignments</h2>
+
+<table>
+<tr>
+<th>Task</th>
+<th>Model</th>
+<th>Why</th>
+</tr>
+<tr>
+<td>Dafny contract writing (architect)</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Better at formal reasoning</td>
+</tr>
+<tr>
+<td>Design Review</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Independent review — separation from architect</td>
+</tr>
+<tr>
+<td>Dafny body writing (Pass 1)</td>
+<td>deepseek-v4-pro:cloud</td>
+<td>Proven 2/5, understands architect&#x27;s contract intent</td>
+</tr>
+<tr>
+<td>C# shell writing (Pass 2)</td>
+<td>glm-5.2:cloud</td>
+<td>Plugs into extern portals, wires I/O to translated Dafny</td>
+</tr>
+<tr>
+<td>File operations, wiki search</td>
+<td>local ollama</td>
+<td>Fast, no reasoning needed</td>
+</tr>
+<tr>
+<td>QA test generation</td>
+<td>glm-5.2:cloud</td>
+<td>Tests unprovable modules, knows module intent</td>
+</tr>
+<tr>
+<td>Imp appeal reviewer</td>
+<td>kimi-2.7-code:cloud</td>
+<td>Independent arbiter — hasn&#x27;t touched io-shell code or QA tests</td>
+</tr>
+</table>
+
+<h2 id="implementation-steps">Implementation Steps</h2>
+
+<h3 id="step-1-dafny-contracts-phase-">Step 1: Dafny Contracts Phase ✅</h3>
+<ul><li style="margin-left:0ch">[x] Create <code class="inline">DafnyContractsPhase</code> — Z3 verifies .dfy skeletons</li>
+<li style="margin-left:0ch">[x] Create <code class="inline">DafnyContractResult</code> type</li>
+<li style="margin-left:0ch">[x] Wire into pipeline between Design Review and Implementation</li>
+<li style="margin-left:0ch">[x] Add <code class="inline">ModuleClassification</code> (dafny/io-shell/mixed) to <code class="inline">Component</code> record</li>
+<li style="margin-left:0ch">[x] Z3Runner: <code class="inline">dafny verify</code> with <code class="inline">--standard-libraries</code> + <code class="inline">--allow-warnings</code></li>
+
+</ul><h3 id="step-2-dafny-implementation-phase-pass-1-">Step 2: Dafny Implementation Phase (Pass 1) ✅</h3>
+<ul><li style="margin-left:0ch">[x] For <code class="inline">dafny</code> modules: model fills .dfy bodies, Z3 verifies</li>
+<li style="margin-left:0ch">[x] On success: <code class="inline">dafny translate cs</code> → C# with partial class + extern holes</li>
+<li style="margin-left:0ch">[x] <code class="inline">{:extern}</code> methods stay bodyless — they become holes for Pass 2</li>
+<li style="margin-left:0ch">[x] Retry on Z3 failure with correction signal (max 2)</li>
+<li style="margin-left:0ch">[x] PromptLogger captures every model call</li>
+
+</ul><h3 id="step-2b-c-implementation-phase-pass-2-">Step 2b: C# Implementation Phase (Pass 2) ✅</h3>
+<ul><li style="margin-left:0ch">[x] Imp gets translated C# from Pass 1</li>
+<li style="margin-left:0ch">[x] Write C# that plugs into <code class="inline">partial class</code> extern holes</li>
+<li style="margin-left:0ch">[x] Wire I/O shells to call translated Dafny methods</li>
+<li style="margin-left:0ch">[x] PromptLogger captures every model call</li>
+
+</ul><h3 id="step-3-architecture-phase-">Step 3: Architecture Phase ✅</h3>
+<ul><li style="margin-left:0ch">[x] Architect prompt: write Dafny contracts for pure-logic modules</li>
+<li style="margin-left:0ch">[x] Architect prompt: mark modules as <code class="inline">dafny</code> or <code class="inline">io-shell</code></li>
+<li style="margin-left:0ch">[x] Output Dafny contract source in architecture artifact</li>
+<li style="margin-left:0ch">[x] OllamaModelGateway (Ollama-only, localhost:11434)</li>
+<li style="margin-left:0ch">[x] JSON parsing with reasoning tag stripping + snake_case normalization</li>
+<li style="margin-left:0ch">[x] PromptLogger captures every model call</li>
+
+</ul><h3 id="step-3b-qa-phase-">Step 3b: QA Phase ✅</h3>
+<ul><li style="margin-left:0ch">[x] Verified modules: compile only (no test generation)</li>
+<li style="margin-left:0ch">[x] Unverified modules: full test generation via glm-5.2:cloud</li>
+<li style="margin-left:0ch">[x] Imp appeal process documented (kimi reviews, max 1 per module)</li>
+<li style="margin-left:0ch">[x] PromptLogger captures test generation calls</li>
+
+</ul><h3 id="step-3c-orchestrator-cli-">Step 3c: Orchestrator + CLI ✅</h3>
+<ul><li style="margin-left:0ch">[x] FsmReducer (state transitions, retry, rollback, escalation)</li>
+<li style="margin-left:0ch">[x] DependencyGraphEngine (phase ordering, cycle detection)</li>
+<li style="margin-left:0ch">[x] PhaseController (initialize + execute)</li>
+<li style="margin-left:0ch">[x] PositOrchestrator (pipeline runner, artifact storage)</li>
+<li style="margin-left:0ch">[x] CLI: <code class="inline">posit run &lt;request&gt; --phase=...</code></li>
+<li style="margin-left:0ch">[x] Subset phase runs (dependency filtering)</li>
+<li style="margin-left:0ch">[x] 30-minute timeout</li>
+
+</ul><h3 id="step-3d-data-capture-">Step 3d: Data Capture ✅</h3>
+<ul><li style="margin-left:0ch">[x] 6 migrations (schemas, artifacts, sessions, prompts_log, audit, dafny_results)</li>
+<li style="margin-left:0ch">[x] ArtifactRepository (stage, get, listBySession)</li>
+<li style="margin-left:0ch">[x] StateStore (saveSession, loadSession)</li>
+<li style="margin-left:0ch">[x] PromptLogger (logPromptAsync, logDafnyResultAsync)</li>
+<li style="margin-left:0ch">[x] AuditRepository (logEventAsync, getEventsAsync)</li>
+<li style="margin-left:0ch">[x] All model-calling phases wired to PromptLogger</li>
+<li style="margin-left:0ch">[x] Orchestrator persists artifacts + state + audit events</li>
+<li style="margin-left:0ch">[x] Verified: 2 prompt logs, 2 audit events, 1 artifact, 1 session in DB</li>
+
+</ul><h3 id="step-4-limits-and-budgets">Step 4: Limits and Budgets</h3>
+<ul><li style="margin-left:0ch">[ ] 200-line cap on Dafny source per module</li>
+<li style="margin-left:0ch">[ ] 16K system prompt cap for Dafny phases</li>
+<li style="margin-left:0ch">[ ] 10 method / 5 class limits per module</li>
+
+</ul><h3 id="step-5-testing">Step 5: Testing</h3>
+<ul><li style="margin-left:0ch">[ ] Run trial with full Dafny-first pipeline (all phases)</li>
+<li style="margin-left:0ch">[ ] Verify: architect writes contracts → Z3 verifies skeleton → Imp fills bodies → Z3 verifies → translate cs → C# plugs in → QA compiles</li>
+<li style="margin-left:0ch">[ ] Compare success rate vs current pipeline</li>
+<li style="margin-left:0ch">[ ] Compare: modules verified, verification rate, QA prompt size, total pipeline time</li>
+
+</ul><h2 id="key-decisions">Key Decisions</h2>
+
+<ul><li><strong>Partial verification is success</strong> — already implemented. Verified modules skip QA, unverified fall through.</li>
+<li><strong>Dafny for pure logic only</strong> — I/O shells stay in C#. The proof boundary is the function signature.</li>
+<li><strong>deepseek-v4-pro:cloud for Dafny contracts and bodies</strong> — proven better than glm-5.2:cloud for Dafny. Design Review uses kimi-2.7-code:cloud for separation.</li>
+<li><strong>Translated C# may need post-processing</strong> — strip Dafny runtime wrappers, add using statements. Acceptable for now.</li>
+<li><strong>Module decomposition is enforced by line count</strong> — 200 lines max forces small, focused modules.</li>
+<li><strong>Skeletons use bodyless methods</strong> — no <code class="inline">{ }</code> after method/constructor signatures. Empty bodies create proof obligations that fail. Bodyless methods are abstract specs; Z3 checks contract well-formedness only.</li>
+<li><strong>Cross-file dependencies use <code class="inline">include</code></strong> — each .dfy file is independent. Z3 verifies as a batch.</li>
+<li><strong>Mixed modules split at Architecture</strong> — the architect outputs two Component records (one dafny, one io-shell). The pipeline does not split modules.</li>
+<li><strong>Skeleton correction loops back to Architecture</strong> — max 2 loopbacks, then downgrade to io-shell.</li>
+<li><strong>FSM inherits Shepherd&#x27;s states</strong> — same escalation chain, new transitions for Dafny skeleton/body verification.</li>
+<li><strong>C# only</strong> — multi-target is future. No target-language abstraction now.</li>
+<li><strong>Determinism is target-specific</strong> — not a core property. Only relevant if Rust target is added.</li>
+<li><strong>Imp appeal process for io-shell modules</strong> — kimi-2.7-code:cloud reviews appeals. Max 1 per module. Architect spec is the source of truth. Under observation: does it improve workflow, mitigate tokens, or neither?</li>
+<li><strong>Architect writes the tests</strong> — the architect is enjoined to write test cases for every module. These are the acceptance criteria. QA tests against the architect&#x27;s test cases and the module&#x27;s public surface, not the full architecture. This minimizes the QA context snowball. Test cases are hung on the skeleton as comments and carried in <code class="inline">Component.TestCases</code>.</li>
+<li><strong>Skeleton is the carapace</strong> — the .dfy file on disk is the authority. Artifact carries the path, not the content. Names, types, contracts, dependencies tattooed on the carapace. No guessing, no making it up. Imp inlays the function within the pre-cut shape.</li>
+<li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
+        </div>
+</div>
+<script>
+// Client-side fuzzy filter
+const input = document.getElementById('filter');
+const pages = document.querySelectorAll('.page');
+input.addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim();
+  if (!q) {
+    pages.forEach(p => p.classList.remove('hidden'));
+    return;
+  }
+  pages.forEach(p => {
+    const title = (p.dataset.title || '').toLowerCase();
+    const content = p.textContent.toLowerCase();
+    if (title.includes(q) || content.includes(q)) {
+      p.classList.remove('hidden');
+    } else {
+      p.classList.add('hidden');
+    }
+  });
+});
+// Folder toggle
+document.querySelectorAll('.sidebar-nav li.folder').forEach(f => {
+  f.addEventListener('click', () => {
+    const ul = f.querySelector(':scope > ul');
+    if (ul) ul.style.display = ul.style.display === 'none' ? '' : 'none';
+  });
+});
+</script>
+</body>
+</html>

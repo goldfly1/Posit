@@ -18,10 +18,10 @@ public static class PromptLogger
     /// </summary>
     public static void Initialize(NpgsqlDataSource? dataSource) => _dataSource = dataSource;
 
-    private static NpgsqlConnection CreateConnection()
+    private static async Task<NpgsqlConnection> CreateConnectionAsync(CancellationToken ct)
     {
         if (_dataSource is not null)
-            return _dataSource.OpenConnectionAsync().GetAwaiter().GetResult();
+            return await _dataSource.OpenConnectionAsync(ct);
         return new NpgsqlConnection(DbConnectionProvider.GetConnectionString());
     }
 
@@ -46,8 +46,9 @@ public static class PromptLogger
     {
         try
         {
-            await using var conn = CreateConnection();
-            await conn.OpenAsync(ct);
+            await using var conn = await CreateConnectionAsync(ct);
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync(ct);
 
             await using var cmd = new NpgsqlCommand(@"
                 INSERT INTO posit_qa.prompts_log
@@ -107,8 +108,9 @@ public static class PromptLogger
     {
         try
         {
-            await using var conn = CreateConnection();
-            await conn.OpenAsync(ct);
+            await using var conn = await CreateConnectionAsync(ct);
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync(ct);
 
             await using var cmd = new NpgsqlCommand(@"
                 INSERT INTO posit_qa.dafny_results

@@ -175,6 +175,16 @@ public record DesignComponent(string Id, string Name, string Responsibility, str
     public ModuleClassification Classification { get; init; } = ModuleClassification.IoShell;
 
     /// <summary>
+    /// Name of the registry pattern selected for this dafny/mixed component.
+    /// </summary>
+    public string? PatternName { get; init; }
+
+    /// <summary>
+    /// Names of registry stub groups selected for this component's I/O portals.
+    /// </summary>
+    public string[] StubNames { get; init; } = [];
+
+    /// <summary>
     /// Path to the .dfy skeleton file on disk. The file is the authority.
     /// </summary>
     public string? DafnyContractPath { get; init; }

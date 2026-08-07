@@ -2,6 +2,8 @@ using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
 using Posit.Data.Configuration;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Data.Repositories;
 
@@ -15,17 +17,14 @@ public static class AuditRepository
 
     public static void Initialize(NpgsqlDataSource? dataSource) => _dataSource = dataSource;
 
-    private static NpgsqlConnection CreateConnection()
+    private static async Task<NpgsqlConnection> CreateConnectionAsync(CancellationToken ct)
     {
         if (_dataSource is not null)
-            return _dataSource.OpenConnectionAsync().GetAwaiter().GetResult();
+            return await _dataSource.OpenConnectionAsync(ct);
         return new NpgsqlConnection(DbConnectionProvider.GetConnectionString());
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     public static async Task LogEventAsync(
         string sessionId,
@@ -37,8 +36,9 @@ public static class AuditRepository
     {
         try
         {
-            await using var conn = CreateConnection();
-            await conn.OpenAsync(ct);
+            await using var conn = await CreateConnectionAsync(ct);
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync(ct);
 
             var payloadJson = payload is not null
                 ? JsonSerializer.Serialize(payload, JsonOptions)

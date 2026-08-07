@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Posit.Contracts.Core;
 
 public enum ArtifactKind
@@ -42,6 +44,7 @@ public enum OutputFormat { Json, Markdown, Yaml, Xml, PlainText }
 /// dafny = pure logic, verified by Z3. io-shell = side effects, C# only.
 /// mixed = split into both.
 /// </summary>
+[JsonConverter(typeof(ModuleClassificationConverter))]
 public enum ModuleClassification
 {
     Dafny,

@@ -1,6 +1,7 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Posit.Tools;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Phases;
 
@@ -23,12 +24,7 @@ namespace Posit.Phases;
 /// </summary>
 public sealed class DafnyContractsPhase : IPhase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     private readonly Z3Runner _z3Runner;
 
@@ -185,7 +181,8 @@ public sealed class DafnyContractsPhase : IPhase
         return new DafnyContractResult
         {
             ModuleName = moduleName,
-            DafnySource = dafnySource,  // kept for DB logging
+            DafnySource = dafnySource,
+            DafnyPath = dafnyPath,
             IsVerified = verified,
             VerificationOutput = output,
             ContractSummary = verified

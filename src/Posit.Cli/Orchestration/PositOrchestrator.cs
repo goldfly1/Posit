@@ -1,6 +1,7 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Posit.Contracts.Core;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 using Posit.Core.Graph;
 using Posit.Core.State;
 using Posit.Data.Repositories;
@@ -23,12 +24,7 @@ public sealed class PositOrchestrator
     private readonly ArtifactRepository? _artifactRepo;
     private readonly StateStore? _stateStore;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     public PositOrchestrator(
         FsmReducer reducer,
@@ -170,10 +166,13 @@ public sealed class PositOrchestrator
 
             state = fsmResult.State;
 
-            // Store artifacts on success
+            // Store artifacts on success OR failure so debugging/tracing is possible.
+            // On failure the artifact is NOT staged/snowballed; we just keep it in memory
+            // for the next retry attempt.
+            _artifacts[sessionId].Add(phaseResult.Artifacts);
+
             if (phaseResult.Status == PhaseStatus.Success)
             {
-                _artifacts[sessionId].Add(phaseResult.Artifacts);
                 Console.Error.WriteLine($"[Posit] Phase '{phaseId.Value}' completed. Artifacts: {_artifacts[sessionId].Count}");
 
                 // Snowball: update DesignContext with this phase's output
@@ -217,6 +216,39 @@ public sealed class PositOrchestrator
     }
 
     /// <summary>
+    /// Resume a persisted session from its last saved state.
+    /// Loads artifacts from the repository so downstream phases have inputs.
+    /// </summary>
+    public async Task<bool> ResumeAsync(SessionId sessionId, CancellationToken ct = default)
+    {
+        if (_stateStore is null)
+        {
+            Console.Error.WriteLine("[Posit] Resume requires a StateStore (DB not available).");
+            return false;
+        }
+
+        var state = await _stateStore.LoadSessionAsync(sessionId, ct);
+        if (state is null)
+        {
+            Console.Error.WriteLine($"[Posit] Session {sessionId.Value} not found in state store.");
+            return false;
+        }
+
+        _sessions[sessionId] = state;
+        _artifacts[sessionId] = [];
+
+        if (_artifactRepo is not null)
+        {
+            var artifacts = await _artifactRepo.ListBySessionAsync(sessionId, ct);
+            _artifacts[sessionId] = [.. artifacts];
+            Console.Error.WriteLine($"[Posit] Resume: loaded {artifacts.Length} artifacts");
+        }
+
+        Console.Error.WriteLine($"[Posit] Resuming session {sessionId.Value} at status {state.Status}, phase {state.CurrentPhaseId?.Value ?? "(none)"}, attempt {state.CurrentAttempt}");
+        return true;
+    }
+
+    /// <summary>
     /// Get all artifacts produced by a session.
     /// </summary>
     public IReadOnlyList<ArtifactBundle> GetArtifacts(SessionId sessionId)
@@ -227,6 +259,24 @@ public sealed class PositOrchestrator
     /// </summary>
     public SessionState? GetState(SessionId sessionId)
         => _sessions.TryGetValue(sessionId, out var state) ? state : null;
+
+    /// <summary>
+    /// Load a session and its artifacts from the repository without running.
+    /// Used by CLI resume/status commands.
+    /// </summary>
+    public async Task LoadSessionArtifactsAsync(SessionId sessionId, CancellationToken ct = default)
+    {
+        if (_stateStore is null || _artifactRepo is null)
+            return;
+
+        var state = await _stateStore.LoadSessionAsync(sessionId, ct);
+        if (state is null)
+            return;
+
+        _sessions[sessionId] = state;
+        var artifacts = await _artifactRepo.ListBySessionAsync(sessionId, ct);
+        _artifacts[sessionId] = [.. artifacts];
+    }
 
     private PhaseContext BuildContext(SessionState state)
     {
@@ -245,7 +295,7 @@ public sealed class PositOrchestrator
                 OutputFormatSpec = "json",
                 ModelTier = ModelTier.Standard,
                 Temperature = 0.2,
-                MaxOutputTokens = 16000,
+                MaxOutputTokens = 64000,
                 OutputFormat = OutputFormat.Json,
                 OutputSchemaRef = "",
                 Status = PromptStatus.Active
@@ -257,7 +307,7 @@ public sealed class PositOrchestrator
                 Tier = ModelTier.Standard,
                 ProviderId = "ollama",
                 ModelId = GetModelForPhase(phaseId),
-                MaxOutputTokens = 16000,
+                MaxOutputTokens = 64000,
                 Temperature = 0.2
             },
             BudgetRemaining = state.Profile.Budget,
@@ -274,9 +324,10 @@ public sealed class PositOrchestrator
     {
         "ideation" => "deepseek-v4-pro:cloud",
         "architecture" => "deepseek-v4-pro:cloud",
-        "design-review" => "kimi-2.7-code:cloud",
+        "design-review" => "kimi-k2.7-code:cloud",
         "dafny-contracts" => "ollama", // deterministic — no model call
-        "implementation" => "deepseek-v4-pro:cloud", // Pass 1: Dafny bodies
+        "implementation" => "deepseek-v4-pro:cloud", // legacy alias
+        "dafny-implementation" => "deepseek-v4-pro:cloud", // Pass 1: Dafny bodies
         "csharp-implementation" => "glm-5.2:cloud", // Pass 2: C# shells
         "qa" => "glm-5.2:cloud",
         "documentation" => "deepseek-v4-pro:cloud",
@@ -296,11 +347,7 @@ public sealed class PositOrchestrator
         try
         {
             var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
-            var opts = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                PropertyNameCaseInsensitive = true
-            };
+            var opts = Options;
 
             if (phaseId == "architecture" && artifact.Kind == ArtifactKind.ArchitectureContract)
             {
@@ -314,6 +361,8 @@ public sealed class PositOrchestrator
                             c.PublicSurface, c.Internals, c.Dependencies)
                         {
                             Classification = c.Classification,
+                            PatternName = c.PatternName,
+                            StubNames = c.StubNames,
                             DafnyContractPath = c.DafnyContractPath,
                             TestCases = c.TestCases?.Select(tc => new DesignTestCase(
                                 tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray() ?? []
@@ -337,8 +386,8 @@ public sealed class PositOrchestrator
                         DafnyContracts = contracts.Select(c => new DafnyContractEntry
                         {
                             ModuleName = c.ModuleName,
-                            DafnySource = c.DafnySource,  // for DB logging
-                            DafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{c.ModuleName}"),
+                            DafnySource = c.DafnySource,
+                            DafnyPath = !string.IsNullOrWhiteSpace(c.DafnyPath) ? c.DafnyPath : Z3Runner.GetDafnyStagingPath($"skeleton-{c.ModuleName}"),
                             IsVerified = c.IsVerified,
                             VerificationOutput = c.VerificationOutput
                         }).ToArray()
@@ -355,23 +404,15 @@ public sealed class PositOrchestrator
                     var existing = current.DafnyContracts?.ToDictionary(c => c.ModuleName) ?? new();
                     foreach (var r in results)
                     {
-                        if (existing.TryGetValue(r.ModuleName, out var entry))
-                            existing[r.ModuleName] = entry with
-                            {
-                                IsVerified = r.IsVerified,
-                                VerificationOutput = r.VerificationOutput,
-                                TranslatedCSharpPath = r.TranslatedCSharpPath
-                            };
-                        else
-                            existing[r.ModuleName] = new DafnyContractEntry
-                            {
-                                ModuleName = r.ModuleName,
-                                DafnySource = r.DafnySource,
-                                DafnyPath = r.DafnyPath,
-                                IsVerified = r.IsVerified,
-                                VerificationOutput = r.VerificationOutput,
-                                TranslatedCSharpPath = r.TranslatedCSharpPath
-                            };
+                        existing[r.ModuleName] = new DafnyContractEntry
+                        {
+                            ModuleName = r.ModuleName,
+                            DafnySource = r.DafnySource,
+                            DafnyPath = r.DafnyPath,
+                            IsVerified = r.IsVerified,
+                            VerificationOutput = r.VerificationOutput,
+                            TranslatedCSharpPath = r.TranslatedCSharpPath
+                        };
                     }
                     current = current with { DafnyContracts = existing.Values.ToArray() };
                     Console.Error.WriteLine($"[Posit] Snowball: DesignContext updated with {results.Length} Dafny verification results");

@@ -1,9 +1,10 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Posit.AI.Models;
 using Posit.Data.Repositories;
 using Posit.Tools;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Phases;
 
@@ -21,12 +22,7 @@ namespace Posit.Phases;
 /// </summary>
 public sealed class DafnyImplementationPhase : IPhase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     private readonly IModelGateway _gateway;
     private readonly Z3Runner _z3Runner;
@@ -109,7 +105,7 @@ public sealed class DafnyImplementationPhase : IPhase
         return new PhaseResult
         {
             PhaseId = Id,
-            Status = PhaseStatus.Success,
+            Status = anyFailed ? PhaseStatus.Failed : PhaseStatus.Success,
             Artifacts = bundle,
             Costs = new CostSnapshot
             {
@@ -119,7 +115,7 @@ public sealed class DafnyImplementationPhase : IPhase
             },
             AttemptNumber = context.AttemptNumber,
             Warnings = anyFailed
-                ? [$"dafny.partial_verification: {results.Count(r => r.IsVerified)}/{results.Count} modules verified. Unverified modules will be tested by QA."]
+                ? [$"dafny.verification_failed: {results.Count(r => r.IsVerified)}/{results.Count} modules verified. See DafnyVerification artifact for errors."]
                 : []
         };
     }
@@ -182,7 +178,7 @@ public sealed class DafnyImplementationPhase : IPhase
             if (verified)
             {
                 // Translate to C# on success — output goes to a file on disk
-                var csharpPath = await _z3Runner.TranslateToCSharpAsync(dafnyPath, ct);
+                var csharpPath = await _z3Runner.TranslateToCSharpAsync(dafnyPath, moduleName, ct);
                 var finalResult = result with
                 {
                     IsVerified = true,
@@ -247,8 +243,10 @@ public sealed class DafnyImplementationPhase : IPhase
 
                 foreach (var cr in contractResults)
                 {
-                    if (cr.IsVerified && !string.IsNullOrWhiteSpace(cr.DafnySource))
-                        skeletons.Add((cr.ModuleName, cr.DafnySource));
+                    if (cr.IsVerified && !string.IsNullOrWhiteSpace(cr.DafnyPath) && File.Exists(cr.DafnyPath))
+                        skeletons.Add((cr.ModuleName, cr.DafnyPath));
+                    else if (cr.IsVerified && !string.IsNullOrWhiteSpace(cr.DafnySource))
+                        Console.Error.WriteLine($"[Posit] Dafny Implementation — warning: contract result for '{cr.ModuleName}' has source but no path; skipping");
                 }
             }
             catch (Exception ex)
@@ -319,6 +317,7 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("- Add stronger invariant clauses to while loops");
         sb.AppendLine("- Add decreases clauses for recursion");
         sb.AppendLine("- Add assert statements to guide Z3");
+        sb.AppendLine("- When using `forall` statements to prove a postcondition, add an `ensures` clause to the forall so the conclusion is visible outside");
         sb.AppendLine("- Simplify the implementation if too complex to verify");
         sb.AppendLine("- Use {:termination false} if termination checking fails");
         sb.AppendLine();

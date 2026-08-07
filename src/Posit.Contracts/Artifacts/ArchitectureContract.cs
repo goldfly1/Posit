@@ -40,6 +40,18 @@ public record Component(
     public string? DafnyContractPath { get; init; }
 
     /// <summary>
+    /// Name of the registry pattern selected for this dafny/mixed component.
+    /// The object registry in patterns/ supplies the pre-cut hull shape.
+    /// </summary>
+    public string? PatternName { get; init; }
+
+    /// <summary>
+    /// Names of registry stub groups selected for this component's I/O portals.
+    /// These are the {:extern} declarations from patterns/stubs/ that Pass 2 plugs.
+    /// </summary>
+    public string[] StubNames { get; init; } = [];
+
+    /// <summary>
     /// True when this module has been verified by Dafny. Verified modules
     /// do not need QA test stubs or edge case patterns — the proof IS the test.
     /// Set by the Dafny Contracts verification gate after successful proof.

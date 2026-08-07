@@ -100,6 +100,27 @@ public sealed class ArtifactRepository
         return [.. results];
     }
 
+    /// <summary>
+    /// Return distinct session IDs ordered by most recent artifact.
+    /// </summary>
+    public async Task<SessionId[]> ListSessionsAsync(CancellationToken ct = default)
+    {
+        await using var conn = await _dataSource.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand(@"
+            SELECT session_id, MAX(produced_at) AS latest
+            FROM posit_artifacts.artifacts
+            GROUP BY session_id
+            ORDER BY latest DESC",
+            conn);
+
+        var results = new List<SessionId>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            results.Add(new SessionId(reader.GetString(0)));
+
+        return [.. results];
+    }
+
     private static ArtifactBundle ReadArtifactBundle(NpgsqlDataReader reader)
     {
         var payloadBytes = reader.GetFieldValue<byte[]>(5);

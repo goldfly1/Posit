@@ -1,8 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Posit.AI.Models;
 using Posit.Data.Repositories;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Phases;
 
@@ -21,14 +22,15 @@ namespace Posit.Phases;
 /// </summary>
 public sealed class QaPhase : IPhase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     private readonly IModelGateway _gateway;
+
+    /// <summary>
+    /// The QA phase needs more output tokens than other phases because it must
+    /// generate complete test files as JSON. Default cap is 64K; QA gets 64K.
+    /// </summary>
+    private const int QaMaxOutputTokens = 64000;
 
     public QaPhase(IModelGateway gateway)
     {
@@ -219,7 +221,9 @@ public sealed class QaPhase : IPhase
 
         Console.Error.WriteLine($"[Posit] QA — calling model for test generation...");
 
-        var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
+        // QA needs a larger output budget than other phases
+        var route = context.ModelRoute with { MaxOutputTokens = QaMaxOutputTokens };
+        var generation = await _gateway.GenerateAsync(route, prompt, context, ct);
 
         // Capture the prompt→response pair
         await PromptLogger.LogPromptAsync(

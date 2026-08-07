@@ -3,6 +3,8 @@ using Npgsql;
 using NpgsqlTypes;
 using Posit.Data.Configuration;
 using Posit.Core.State;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Data.Repositories;
 
@@ -13,10 +15,7 @@ namespace Posit.Data.Repositories;
 public sealed class StateStore
 {
     private readonly NpgsqlDataSource _dataSource;
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     public StateStore(NpgsqlDataSource? dataSource = null)
     {

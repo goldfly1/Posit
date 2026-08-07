@@ -17,6 +17,11 @@ public record DafnyContractResult
     public string ContractSummary { get; init; } = "";
 
     /// <summary>
+    /// Path to the .dfy skeleton file on disk. The file is the authority.
+    /// </summary>
+    public string DafnyPath { get; init; } = "";
+
+    /// <summary>
     /// True when `dafny verify` succeeded with 0 errors on the skeleton
     /// (contracts without bodies). Set by the Dafny Contracts phase after
     /// running the verifier — NOT by the model.

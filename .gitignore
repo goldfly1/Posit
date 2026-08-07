@@ -9,3 +9,7 @@ obj/
 # Rider/VS
 .idea/
 *.swp
+
+# Posit runtime artifacts
+.posit/staging/
+.posit/output/

@@ -80,6 +80,7 @@ public sealed class Z3Runner
     /// </summary>
     public async Task<string?> TranslateToCSharpAsync(
         string dafnyFilePath,
+        string moduleName,
         CancellationToken ct = default)
     {
         try
@@ -106,11 +107,35 @@ public sealed class Z3Runner
             if (process.ExitCode != 0)
             {
                 Console.Error.WriteLine(
-                    $"[Posit] dafny translate cs failed: {stderr[..Math.Min(200, stderr.Length)]}");
+                    $"[Posit] dafny translate cs failed (exit {process.ExitCode}):\nSTDOUT:\n{stdout[..Math.Min(500, stdout.Length)]}\nSTDERR:\n{stderr[..Math.Min(500, stderr.Length)]}");
                 return null;
             }
 
-            // If the file wasn't created, fall back to stdout
+            // dafny translate cs may produce a directory or multiple files.
+            // Prefer the explicitly requested output, then look for generated .cs files.
+            if (!File.Exists(outputPath))
+            {
+                var dir = Path.GetDirectoryName(dafnyFilePath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    var generated = Directory.GetFiles(dir, "*.cs")
+                        .OrderBy(f => f)
+                        .ToList();
+                    if (generated.Count == 1)
+                    {
+                        outputPath = generated[0];
+                    }
+                    else if (generated.Count > 1)
+                    {
+                        var moduleNamed = generated.FirstOrDefault(f =>
+                            Path.GetFileNameWithoutExtension(f).Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+                        outputPath = moduleNamed ?? generated[0];
+                        Console.Error.WriteLine($"[Posit] dafny translate cs produced {generated.Count} files; using {outputPath}");
+                    }
+                }
+            }
+
+            // If still no file, write stdout as fallback
             if (!File.Exists(outputPath))
             {
                 await File.WriteAllTextAsync(outputPath, stdout, ct);
@@ -157,5 +182,5 @@ public sealed class Z3Runner
         " --standard-libraries";
 
     private string BuildTranslateArguments(string dafnyPath) =>
-        $"translate cs \"{dafnyPath}\" --solver-path \"{_z3SolverPath}\" --include-runtime";
+        $"translate cs \"{dafnyPath}\" --include-runtime --no-verify --allow-external-contracts";
 }

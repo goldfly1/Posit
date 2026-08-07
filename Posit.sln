@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Posit.Web", "src\Posit.Web\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Posit.Cli", "src\Posit.Cli\Posit.Cli.csproj", "{10912C89-CA47-4E03-B7FF-6D9D0726F2DA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Posit.Dt", "src\Posit.Dt\Posit.Dt.csproj", "{B2D4E8F1-3C5A-4B7E-9F2D-1A3B4C5D6E7F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

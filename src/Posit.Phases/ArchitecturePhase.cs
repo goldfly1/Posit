@@ -1,8 +1,9 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Posit.AI.Models;
 using Posit.Data.Repositories;
 using Posit.Tools;
+using Posit.Contracts.Serialization;
+using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Phases;
 
@@ -19,18 +20,43 @@ namespace Posit.Phases;
 /// </summary>
 public sealed class ArchitecturePhase : IPhase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase), new ModuleClassificationConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = Options;
 
     private readonly IModelGateway _gateway;
+    private readonly PatternRegistry _registry;
 
-    public ArchitecturePhase(IModelGateway gateway)
+    public ArchitecturePhase(IModelGateway gateway, PatternRegistry? registry = null)
     {
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
+        _registry = registry ?? new PatternRegistry(GetDefaultPatternsDirectory());
+    }
+
+    private static string GetDefaultPatternsDirectory()
+    {
+        var candidate = Path.Combine(Directory.GetCurrentDirectory(), "patterns");
+        if (Directory.Exists(candidate))
+            return candidate;
+
+        candidate = Path.Combine(AppContext.BaseDirectory, "patterns");
+        if (Directory.Exists(candidate))
+            return candidate;
+
+        var assemblyLoc = typeof(ArchitecturePhase).Assembly.Location;
+        if (!string.IsNullOrEmpty(assemblyLoc))
+        {
+            var srcRoot = Directory.GetParent(assemblyLoc);
+            while (srcRoot is not null)
+            {
+                var test = Path.Combine(srcRoot.FullName, "patterns");
+                if (Directory.Exists(test))
+                    return test;
+                srcRoot = srcRoot.Parent;
+            }
+        }
+
+        throw new DirectoryNotFoundException(
+            "Could not find the Posit pattern registry (patterns/ directory). " +
+            "It should be at the project root, next to Posit.sln.");
     }
 
     public PhaseId Id => new("architecture");
@@ -99,20 +125,41 @@ public sealed class ArchitecturePhase : IPhase
         var ioShellCount = contract.Components.Count(c => c.Classification == ModuleClassification.IoShell);
         var mixedCount = contract.Components.Count(c => c.Classification == ModuleClassification.Mixed);
 
-        // Write .dfy skeletons to staging. The model returns source as a JSON string;
-        // we write it to disk and store the path. The file is the authority.
+        // Compose .dfy skeletons from the object registry for dafny/mixed components.
+        // The model returns patternName + stubNames; the pipeline composes the file.
+        // This keeps the carapace consistent: every module comes from the quarry.
         var componentsWithPath = new List<Component>();
         foreach (var comp in contract.Components)
         {
-            if ((comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
-                && !string.IsNullOrWhiteSpace(comp.DafnyContractPath))
+            if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
             {
-                // Model returned the source in DafnyContractPath (legacy field name from JSON)
-                // Write it to staging and replace with the file path
+                var patternName = !string.IsNullOrWhiteSpace(comp.PatternName)
+                    ? comp.PatternName
+                    : PatternRegistry.Suggest(comp).PatternName;
+
+                var stubNames = comp.StubNames?.Length > 0
+                    ? comp.StubNames
+                    : PatternRegistry.Suggest(comp).StubNames;
+
+                if (!_registry.HasPattern(patternName))
+                {
+                    Console.Error.WriteLine($"[Posit] Architecture — pattern '{patternName}' not in registry, falling back to suggest for {comp.Name}");
+                    var suggestion = PatternRegistry.Suggest(comp);
+                    patternName = suggestion.PatternName;
+                    stubNames = suggestion.StubNames;
+                }
+
                 var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{comp.Name}");
-                await File.WriteAllTextAsync(dafnyPath, comp.DafnyContractPath!, ct);
-                componentsWithPath.Add(comp with { DafnyContractPath = dafnyPath });
-                Console.Error.WriteLine($"[Posit] Architecture — skeleton written: {dafnyPath}");
+                var skeleton = _registry.ComposeSkeleton(comp.Name, patternName, stubNames);
+                await File.WriteAllTextAsync(dafnyPath, skeleton, ct);
+                _registry.MaterializeDependencies(comp.Name, patternName, stubNames, Path.GetDirectoryName(dafnyPath)!);
+                componentsWithPath.Add(comp with
+                {
+                    PatternName = patternName,
+                    StubNames = stubNames,
+                    DafnyContractPath = dafnyPath
+                });
+                Console.Error.WriteLine($"[Posit] Architecture — composed skeleton for {comp.Name}: {patternName} + [{string.Join(",", stubNames)}] => {dafnyPath}");
             }
             else
             {
