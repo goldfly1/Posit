@@ -413,19 +413,25 @@ public sealed class PositOrchestrator
                 }
             }
 
-            // Every authorized component must be represented by at least one file.
-            // Missing a component means the C# phase failed to inlay its stub cap.
             var presentRoots = new HashSet<string>(
                 bundle.Files
                     .Where(f => !string.IsNullOrWhiteSpace(f.Path))
                     .Select(f => f.Path!.Replace('\\', '/').TrimStart('/').Split('/')[0]),
                 StringComparer.OrdinalIgnoreCase);
 
-            foreach (var component in allowedRoots.Where(c => !string.Equals(c, "Shared", StringComparison.OrdinalIgnoreCase)))
+            // Components that require a C# stub cap (io-shell or Dafny components with {:extern} stubs)
+            // must be represented by at least one file. Pure Dafny components without stubs are supplied
+            // by the verifier from the DafnyVerification artifact, not by C# Implementation.
+            var componentsNeedingCSharp = (state.DesignContext?.Components ?? [])
+                .Where(c => c.Classification == ModuleClassification.IoShell || (c.StubNames?.Length > 0))
+                .Select(c => c.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var component in componentsNeedingCSharp)
             {
                 if (!presentRoots.Contains(component))
                 {
-                    errors.Add($"carapace.missing_component: '{component}' is in the architecture contract but has no files in the C# Implementation output");
+                    errors.Add($"carapace.missing_component: '{component}' requires a C# stub cap but has no files in the C# Implementation output");
                 }
             }
         }

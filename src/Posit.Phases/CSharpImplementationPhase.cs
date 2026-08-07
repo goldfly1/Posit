@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Posit.AI.Models;
 using Posit.Data.Repositories;
+using Posit.Tools;
 using Posit.Contracts.Serialization;
 using static Posit.Contracts.Serialization.PositJson;
 
@@ -23,11 +24,29 @@ public sealed class CSharpImplementationPhase : IPhase
     private static readonly JsonSerializerOptions JsonOptions = Options;
 
     private readonly IModelGateway _gateway;
+    private readonly PatternRegistry _registry;
     private const int MaxRetries = 2;
 
-    public CSharpImplementationPhase(IModelGateway gateway)
+    public CSharpImplementationPhase(IModelGateway gateway, PatternRegistry? registry = null)
     {
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
+        _registry = registry ?? new PatternRegistry(FindPatternsDirectory());
+    }
+
+    private static string FindPatternsDirectory()
+    {
+        var dir = AppContext.BaseDirectory;
+        for (int i = 0; i < 10; i++)
+        {
+            var candidate = Path.Combine(dir, "patterns");
+            if (Directory.Exists(candidate))
+                return candidate;
+            var parent = Directory.GetParent(dir);
+            if (parent is null)
+                break;
+            dir = parent.FullName;
+        }
+        throw new DirectoryNotFoundException("Could not locate patterns/ directory relative to assembly.");
     }
 
     public PhaseId Id => new("csharp-implementation");
@@ -180,45 +199,27 @@ public sealed class CSharpImplementationPhase : IPhase
         var files = new List<SourceCodeFile>();
         var totalInput = 0;
         var totalOutput = 0;
+        var arch = GetArchitectureContract(context);
         var componentNames = GetComponentNames(context);
 
         foreach (var (moduleName, csharpPath) in translatedFiles)
         {
-            // Read the translated C# from disk — the file is the authority
-            var csharp = await File.ReadAllTextAsync(csharpPath, ct);
+            var component = arch?.Components?.FirstOrDefault(c => string.Equals(c.Name, moduleName, StringComparison.OrdinalIgnoreCase));
+            var stubs = component is not null ? _registry.SelectCSharpStubs(component) : [];
 
-            for (int attempt = 0; attempt <= MaxRetries; attempt++)
+            if (stubs.Count > 0)
             {
-                var systemPrompt = attempt == 0
-                    ? BuildExternPrompt(moduleName, csharpPath, csharp)
-                    : BuildExternCorrectionPrompt(moduleName, csharp, "Previous response could not be parsed. Return valid JSON array of {path, content}.");
-                var prompt = context.Prompt with { SystemPrompt = systemPrompt };
-
-                var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
-                totalInput += generation.InputTokens;
-                totalOutput += generation.OutputTokens;
-
-                await PromptLogger.LogPromptAsync(
-                    context.SessionId.Value, Id.Value, context.AttemptNumber,
-                    moduleName, attempt == 0 ? "generate" : "retry",
-                    context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
-                    systemPrompt, null,
-                    generation.Text,
-                    generation.InputTokens, generation.OutputTokens,
-                    generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
-                    null, null, ct);
-
-                var parsedFiles = ParseFileOutput(generation.Text, moduleName, componentNames);
-                if (parsedFiles.Count > 0)
+                foreach (var stub in stubs)
                 {
-                    files.AddRange(parsedFiles);
-                    Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}': {parsedFiles.Count} C# files");
-                    break;
+                    var rendered = PatternRegistry.RenderCSharpStub(stub, moduleName);
+                    var fileName = $"{moduleName}Extern.cs";
+                    files.Add(new SourceCodeFile($"{moduleName}/{fileName}", rendered));
+                    Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' registry stub '{stub.Name}' -> {fileName}");
                 }
-
-                Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' attempt {attempt + 1}: no files parsed");
-                if (attempt == MaxRetries)
-                    Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' exhausted retries");
+            }
+            else
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' has no registered C# stub cap; skipping");
             }
         }
 
@@ -235,42 +236,42 @@ public sealed class CSharpImplementationPhase : IPhase
 
         foreach (var shell in ioShells)
         {
-            for (int attempt = 0; attempt <= MaxRetries; attempt++)
+            var stubs = _registry.SelectCSharpStubs(shell);
+            if (stubs.Count == 0)
             {
-                var systemPrompt = attempt == 0
-                    ? BuildIoShellPrompt(shell)
-                    : BuildIoShellCorrectionPrompt(shell, "Previous response could not be parsed. Return valid JSON array of {path, content}.");
-                var prompt = context.Prompt with { SystemPrompt = systemPrompt };
+                Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' has no registered C# stub cap");
+                continue;
+            }
 
-                var generation = await _gateway.GenerateAsync(context.ModelRoute, prompt, context, ct);
-                totalInput += generation.InputTokens;
-                totalOutput += generation.OutputTokens;
-
-                await PromptLogger.LogPromptAsync(
-                    context.SessionId.Value, Id.Value, context.AttemptNumber,
-                    shell.Name, attempt == 0 ? "generate" : "retry",
-                    context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
-                    systemPrompt, null,
-                    generation.Text,
-                    generation.InputTokens, generation.OutputTokens,
-                    generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
-                    null, null, ct);
-
-                var parsedFiles = ParseFileOutput(generation.Text, shell.Name, componentNames);
-                if (parsedFiles.Count > 0)
-                {
-                    files.AddRange(parsedFiles);
-                    Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}': {parsedFiles.Count} C# files");
-                    break;
-                }
-
-                Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' attempt {attempt + 1}: no files parsed");
-                if (attempt == MaxRetries)
-                    Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' exhausted retries");
+            foreach (var stub in stubs)
+            {
+                var rendered = PatternRegistry.RenderCSharpStub(stub, shell.Name);
+                var fileName = $"{shell.Name}{stub.Name.ToLowerInvariant().Replace("-", "")}.cs";
+                files.Add(new SourceCodeFile($"{shell.Name}/{fileName}", rendered));
+                Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' registry stub '{stub.Name}' -> {fileName}");
             }
         }
 
         return (files, totalInput, totalOutput);
+    }
+
+    private static ArchitectureContract? GetArchitectureContract(PhaseContext context)
+    {
+        foreach (var artifact in context.InputArtifacts)
+        {
+            if (artifact.Kind != ArtifactKind.ArchitectureContract)
+                continue;
+            try
+            {
+                var json = Encoding.UTF8.GetString(artifact.PayloadJson);
+                return JsonSerializer.Deserialize<ArchitectureContract>(json, JsonOptions);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — failed to parse architecture contract: {ex.Message}");
+            }
+        }
+        return null;
     }
 
     private static IReadOnlySet<string> GetComponentNames(PhaseContext context)

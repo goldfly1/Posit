@@ -26,6 +26,64 @@ public sealed class PatternRegistry
     private readonly Dictionary<string, PatternEntry> _patterns = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, StubEntry> _stubs = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly string _csharpStubsDirectory;
+    private readonly Dictionary<string, CSharpStubEntry> _csharpStubs = new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyDictionary<string, CSharpStubEntry> CSharpStubs => _csharpStubs;
+
+    public bool HasCSharpStub(string name) => _csharpStubs.ContainsKey(name);
+
+    public CSharpStubEntry GetCSharpStub(string name) => _csharpStubs.TryGetValue(name, out var s)
+        ? s
+        : throw new KeyNotFoundException($"C# stub '{name}' not found in registry. Available: {string.Join(", ", _csharpStubs.Keys)}");
+
+    /// <summary>
+    /// Select the appropriate C# stub template(s) for a component based on the architecture contract.
+    /// Returns empty if the component is pure Dafny with no {:extern} stubs needing a C# cap.
+    /// </summary>
+    public IReadOnlyList<CSharpStubEntry> SelectCSharpStubs(Component component)
+    {
+        var selected = new List<CSharpStubEntry>();
+        var name = component.Name;
+        var classification = component.Classification;
+        var tech = component.Tech?.ToLowerInvariant() ?? "";
+
+        // Io-shell components get implementation files from the rack.
+        if (classification == ModuleClassification.IoShell || tech == "c#")
+        {
+            var responsibility = component.Responsibility?.ToLowerInvariant() ?? "";
+            if (responsibility.Contains("database") || responsibility.Contains("sql") || responsibility.Contains("repository") || responsibility.Contains("persist"))
+                if (HasCSharpStub("io-database-repository"))
+                    selected.Add(GetCSharpStub("io-database-repository"));
+
+            if (component.StubNames?.Any(s => s.Contains("console", StringComparison.OrdinalIgnoreCase)) == true ||
+                name.Contains("CLI", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("Console", StringComparison.OrdinalIgnoreCase))
+                if (HasCSharpStub("io-console-program"))
+                    selected.Add(GetCSharpStub("io-console-program"));
+        }
+
+        // Dafny components with {:extern} stubs need matching C# partial-class implementations.
+        foreach (var stubName in component.StubNames ?? [])
+        {
+            var templateName = $"extern-{stubName}";
+            if (HasCSharpStub(templateName))
+                selected.Add(GetCSharpStub(templateName));
+        }
+
+        return selected.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Render a C# stub template for a component by substituting placeholders.
+    /// </summary>
+    public static string RenderCSharpStub(CSharpStubEntry stub, string componentName)
+    {
+        return stub.Source
+            .Replace("{{ComponentName}}", componentName)
+            .Replace("{{componentName}}", componentName);
+    }
+
     public PatternRegistry(string patternsDirectory)
     {
         if (!Directory.Exists(patternsDirectory))
@@ -33,6 +91,7 @@ public sealed class PatternRegistry
 
         _patternsDirectory = patternsDirectory;
         _stubsDirectory = Path.Combine(patternsDirectory, "stubs");
+        _csharpStubsDirectory = Path.Combine(patternsDirectory, "csharp-stubs");
         Load();
     }
 
@@ -210,6 +269,16 @@ public sealed class PatternRegistry
                 _stubs[name] = new StubEntry(name, source, file, deps);
             }
         }
+
+        if (Directory.Exists(_csharpStubsDirectory))
+        {
+            foreach (var file in Directory.EnumerateFiles(_csharpStubsDirectory, "*.cs.template"))
+            {
+                var name = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(file));
+                var source = File.ReadAllText(file);
+                _csharpStubs[name] = new CSharpStubEntry(name, source, file);
+            }
+        }
     }
 
     private static string[] ExtractIncludes(string source)
@@ -238,3 +307,4 @@ public sealed class PatternRegistry
 public sealed record PatternEntry(string Name, string Source, string FilePath, string[] Dependencies);
 public sealed record StubEntry(string Name, string Source, string FilePath, string[] Dependencies);
 public sealed record RegistrySuggestion(string PatternName, string[] StubNames);
+public sealed record CSharpStubEntry(string Name, string Source, string FilePath);
