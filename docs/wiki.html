@@ -186,19 +186,19 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-7647444">Posit Architecture</a></li>
+<li class="page"><a href="#page-11905159">Posit Architecture</a></li>
 </ul>
 </li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-1714648">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-9264319">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-2345518">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-16552381">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-7601792">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-16273835">Handoff 2026 08 08</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-4868796">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-2822511">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
     </ul>
@@ -209,7 +209,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-2345518" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-7601792" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -548,7 +548,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-16552381" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-16273835" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -568,9 +568,9 @@ body {
 <ul><li style="margin-left:0ch">Solution builds clean: 0 errors, 0 warnings.</li>
 <li style="margin-left:0ch">T1 (CSV parser) passed end-to-end with Docker verification and 87 tests.</li>
 <li style="margin-left:0ch">T2 (priority queue) passed end-to-end with Docker verification and 24 tests.</li>
-<li style="margin-left:0ch">T3 (TaskApi / ASP.NET Core CRUD + Postgres + Docker Compose) is in flight.</li>
+<li style="margin-left:0ch"><strong>T3 (TaskApi / ASP.NET Core CRUD + Postgres + Docker Compose) is the first real failure:</strong> pipeline completed exit 0, but Docker verification failed.</li>
 <li style="margin-left:0ch"><code class="inline">posit resume &lt;session-id&gt;</code> is implemented and verified.</li>
-<li style="margin-left:0ch">Blazor desktop UI (<code class="inline">Posit.Dt</code>) lists live sessions from Postgres.</li>
+<li style="margin-left:0ch">Blazor desktop UI (<code class="inline">Posit.Dt</code>) lists live sessions from Postgres and serves HTTP directly in Development.</li>
 
 </ul><h2 id="recent-changes">Recent Changes</h2>
 
@@ -591,9 +591,24 @@ body {
 <td>Project names are unreliable; <code class="inline">[Fact]</code>/<code class="inline">[Theory]</code> are truth</td>
 </tr>
 <tr>
+<td>Test detection by project name</td>
+<td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
+<td>Integration tests may not contain xUnit attributes yet</td>
+</tr>
+<tr>
 <td>Duplicate project name dedup</td>
 <td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
 <td>QA sometimes emits overlapping test directory names</td>
+</tr>
+<tr>
+<td>NuGet package inference</td>
+<td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
+<td>EF Core, ASP.NET, Npgsql, etc. must be added from source usage</td>
+</tr>
+<tr>
+<td>Preserve model <code class="inline">.csproj</code> files</td>
+<td><code class="inline">src/Posit.Tools/DockerVerifier.cs</code></td>
+<td>Overwriting them destroyed authored package/project references</td>
 </tr>
 <tr>
 <td>Token caps to 64 K</td>
@@ -648,7 +663,7 @@ body {
 <tr>
 <td>Blazor DT</td>
 <td><code class="inline">src/Posit.Dt/</code></td>
-<td>Live session listing UI</td>
+<td>Live session listing UI; Development environment serves HTTP directly</td>
 </tr>
 </table>
 
@@ -668,7 +683,31 @@ body {
 <li style="margin-left:0ch">Docker build: 0 errors, 87 warnings</li>
 <li style="margin-left:0ch">Tests: 24 passed, 0 failed</li>
 
-</ul><h2 id="model-assignments">Model Assignments</h2>
+</ul><h3 id="t3-taskapi-minimal-asp-net-core-crud-postgres-docker-compose-">T3 — TaskApi (Minimal ASP.NET Core CRUD + Postgres + Docker Compose)</h3>
+
+<ul><li style="margin-left:0ch">Session: <code class="inline">j9Qj7nMKCUKGP8mPK4gOaA0000</code></li>
+<li style="margin-left:0ch">Pipeline: Completed exit 0, 5 phases, 501,958 input / 72,279 output tokens</li>
+<li style="margin-left:0ch">QA parse issue: model output contained raw newlines inside a JSON string; QA phase still completed with 0 test files</li>
+<li style="margin-left:0ch"><strong>Docker verification: FAILED</strong></li>
+
+</ul><p>Final Docker error after systemic verifier improvements:</p>
+
+<pre><code class="language-">
+Skipping project &quot;/src/MigrationRunner/MigrationRunner.csproj&quot; because it was not found.
+error MSB4006: There is a circular dependency in the target dependency graph
+  involving target &quot;_GenerateRestoreProjectPathWalk&quot;.
+  [/src/TodoRepositoryLogic/TodoRepositoryLogic.csproj]
+</code></pre>
+
+<p>Remaining root causes:</p>
+
+<ul><li><strong>Wrong project file name assumption.</strong> The verifier assumes each project directory contains <code class="inline">{dirName}.csproj</code>. T3&#x27;s C# Implementation phase put the API inside a directory named <code class="inline">MigrationRunner</code> but named the project file <code class="inline">TodoApi.csproj</code>. The inferred <code class="inline">ProjectReference</code> then points to a non-existent <code class="inline">MigrationRunner.csproj</code>.</li>
+<li><strong>Circular project references.</strong> The type-name heuristic inferred a bidirectional reference between <code class="inline">TodoValidator</code> and <code class="inline">TodoRepositoryLogic</code>.</li>
+<li><strong>Structural misplacement.</strong> The API, migrations, integration test factory, and repository I/O shell were all emitted into the <code class="inline">MigrationRunner</code> module instead of being separated into <code class="inline">TodoApi</code>, <code class="inline">TodoRepositoryDb</code>, etc.</li>
+
+</ul><p>These are model-output structural issues, not per-dependency band-aids. The verifier can be made more defensive, but the clean fix is in the C# Implementation / architecture prompts: enforce one module per bounded context and forbid nested projects with mismatched directory/file names.</p>
+
+<h2 id="model-assignments">Model Assignments</h2>
 
 <table>
 <tr>
@@ -725,13 +764,14 @@ posit verify &lt;session-id&gt;
 
 </ul><h2 id="next">Next</h2>
 
-<ul><li style="margin-left:0ch">T3 (TaskApi) completion and Docker verification.</li>
+<ul><li style="margin-left:0ch">Decide whether to (a) harden the verifier further (actual csproj name resolution, cycle breaking) or (b) fix the C# Implementation / Architecture prompts so T3&#x27;s module structure is correct on the first pass.</li>
+<li style="margin-left:0ch">The failure is real; per the trial directive, stop at the first real failure and report. Reporting now.</li>
 <li style="margin-left:0ch">Generate a structured Dafny language reference manual from the 2,126 Dafny examples in <code class="inline">orch/wiki/patterns/dafny-examples/</code> (on user request).</li>
-<li style="margin-left:0ch">Open Blazor DT for live session inspection (on user request).</li>
+<li style="margin-left:0ch">Open Blazor DT for live session inspection (already running at <code class="inline">http://localhost:5002</code>).</li>
 </ul>
         </div>
 
-        <div class="page" id="page-12032580" data-title="Posit Architecture">
+        <div class="page" id="page-8198145" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -1589,7 +1629,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-8198210" data-title="Dafny Contract Templates">
+        <div class="page" id="page-8948535" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -1755,7 +1795,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-7667498" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-397136" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             

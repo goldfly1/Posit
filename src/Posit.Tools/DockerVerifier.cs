@@ -90,34 +90,38 @@ public sealed class DockerVerifier
                 await File.WriteAllTextAsync(fullPath, file.Content, ct);
             }
 
-            // Build project directory list and create missing .csproj files
-            var projectDirs = Directory.GetDirectories(contextDir, "*", SearchOption.TopDirectoryOnly)
+            // Build project directory list and create missing .csproj files.
+            // If a directory already contains any .csproj, trust the model's project file
+            // and only generate one when the directory is completely missing a project file.
+            var candidateProjectDirs = Directory.GetDirectories(contextDir, "*", SearchOption.TopDirectoryOnly)
                 .Where(d => Directory.GetFiles(d, "*.cs", SearchOption.AllDirectories).Any())
                 .Select(d => Path.GetFileName(d)!)
                 .ToList();
 
-            foreach (var projectName in projectDirs)
+            foreach (var projectName in candidateProjectDirs)
             {
                 var projectDir = Path.Combine(contextDir, projectName);
+                if (Directory.GetFiles(projectDir, "*.csproj", SearchOption.AllDirectories).Any())
+                    continue;
+
                 var csprojPath = Path.Combine(projectDir, $"{projectName}.csproj");
-                if (!File.Exists(csprojPath))
-                {
-                    var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
-                    var isTest = IsTestProjectDirectory(projectDir);
-                    var refs = InferReferences(projectName, projectDirs, contextDir);
-                    await File.WriteAllTextAsync(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, isTest), ct);
-                }
+                var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
+                var isTest = IsTestProjectDirectory(projectDir, projectName);
+                var refs = InferReferences(projectName, candidateProjectDirs, contextDir);
+                var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
+                await File.WriteAllTextAsync(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, pkgs, fws, isTest), ct);
             }
 
-            // Normalize existing .csproj files
-            foreach (var csproj in Directory.GetFiles(contextDir, "*.csproj", SearchOption.AllDirectories))
+            // Normalize only project files that we generated ourselves. Existing model .csproj
+            // files are preserved so authored package/project references are not destroyed.
+            var existingCsprojs = Directory.GetFiles(contextDir, "*.csproj", SearchOption.AllDirectories);
+            foreach (var csproj in existingCsprojs)
             {
                 var projectDir = Path.GetDirectoryName(csproj)!;
                 var projectName = Path.GetFileNameWithoutExtension(csproj);
-                var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
-                var isTest = IsTestProjectDirectory(projectDir);
-                var refs = InferReferences(projectName, projectDirs, contextDir);
-                await File.WriteAllTextAsync(csproj, GenerateCsproj(projectName, targetFramework, isExe, refs, isTest), ct);
+                var isTest = IsTestProjectDirectory(projectDir, projectName);
+                var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
+                MergeMissingRefsIntoCsproj(csproj, projectName, candidateProjectDirs, contextDir, pkgs, fws);
             }
 
             // Generate solution
@@ -238,13 +242,45 @@ public sealed class DockerVerifier
         var projectDir = Path.Combine(contextDir, projectName);
         if (!Directory.Exists(projectDir)) return refs;
 
-        foreach (var csFile in Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories))
+        // Only reference projects whose directory (and generated .csproj) actually exists.
+        var validProjects = allProjects
+            .Where(p => !string.Equals(p, projectName, StringComparison.OrdinalIgnoreCase))
+            .Where(p => Directory.Exists(Path.Combine(contextDir, p)) && Directory.GetFiles(Path.Combine(contextDir, p), "*.csproj", SearchOption.AllDirectories).Any())
+            .ToList();
+
+        var thisSource = string.Join("\n", Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)
+            .Select(File.ReadAllText));
+
+        foreach (var other in validProjects)
         {
-            var content = File.ReadAllText(csFile);
-            foreach (var other in allProjects.Where(p => !string.Equals(p, projectName, StringComparison.OrdinalIgnoreCase)))
+            var otherDir = Path.Combine(contextDir, other);
+            var otherSource = string.Join("\n", Directory.GetFiles(otherDir, "*.cs", SearchOption.AllDirectories)
+                .Select(File.ReadAllText));
+
+            // 1. Namespace-level usage
+            if (thisSource.Contains($"using {other};") || thisSource.Contains($"{other}."))
+                refs.Add(other);
+
+            // 2. Type-level usage: if a public type declared in the other project is used in this project.
+            // Heuristic: collect CamelCase identifiers that look like class/record/struct names in the other
+            // project and check if they appear in this project's source as bare identifiers.
+            var typeCandidates = ExtractLikelyTypeNames(otherSource);
+            foreach (var typeName in typeCandidates)
             {
-                if (content.Contains($"using {other};") || content.Contains($"{other}."))
+                var patterns = new[]
+                {
+                    " " + typeName + " ",
+                    " " + typeName + ";",
+                    " " + typeName + ".",
+                    "(" + typeName + " ",
+                    "<" + typeName + ">",
+                    " " + typeName + "\""
+                };
+                if (patterns.Any(p => thisSource.Contains(p)))
+                {
                     refs.Add(other);
+                    break;
+                }
             }
         }
 
@@ -252,15 +288,32 @@ public sealed class DockerVerifier
         if (projectName.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase))
         {
             var subject = projectName[..^".Tests".Length];
-            if (allProjects.Contains(subject))
+            if (validProjects.Contains(subject))
                 refs.Add(subject);
         }
 
         return refs;
     }
 
-    private static bool IsTestProjectDirectory(string projectDir)
+    private static HashSet<string> ExtractLikelyTypeNames(string source)
     {
+        var types = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // class/record/struct/interface/enum declarations
+        foreach (var keyword in new[] { "class", "record", "struct", "interface", "enum" })
+        {
+            var matches = System.Text.RegularExpressions.Regex.Matches(source, $@"\b{keyword}\s+(\w+)");
+            foreach (System.Text.RegularExpressions.Match m in matches)
+                types.Add(m.Groups[1].Value);
+        }
+        return types;
+    }
+
+    private static bool IsTestProjectDirectory(string projectDir, string projectName)
+    {
+        var nameHint = projectName.Contains("Test", StringComparison.OrdinalIgnoreCase)
+            || projectName.Contains("Integration", StringComparison.OrdinalIgnoreCase);
+        if (nameHint) return true;
+
         foreach (var csFile in Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories))
         {
             var content = File.ReadAllText(csFile);
@@ -270,7 +323,116 @@ public sealed class DockerVerifier
         return false;
     }
 
+    /// <summary>
+    /// Detect required NuGet packages and framework references by scanning source files.
+    /// This is the systemic alternative to hard-coding package names per project name.
+    /// Package versions are chosen to match the target framework.
+    /// </summary>
+    private static (HashSet<string> Packages, HashSet<string> Frameworks) InferPackagesAndFrameworks(string projectDir, bool isTestProject, string targetFramework)
+    {
+        var tfmMajor = targetFramework.Length >= 5 && int.TryParse(targetFramework[3..].Split('.')[0], out var major) ? major : 8;
+
+        var packages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var frameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var allSource = string.Join("\n", Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)
+            .Select(File.ReadAllText));
+
+        // xUnit / testing
+        if (isTestProject || allSource.Contains("[Fact]") || allSource.Contains("[Theory]"))
+        {
+            packages.Add("Microsoft.NET.Test.Sdk|17.12.0");
+            packages.Add("xunit|2.9.2");
+            packages.Add("xunit.runner.visualstudio|2.8.2");
+        }
+
+        // ASP.NET Core shared framework
+        if (allSource.Contains("Microsoft.AspNetCore") ||
+            allSource.Contains("WebApplication") ||
+            allSource.Contains("IApplicationBuilder") ||
+            allSource.Contains("IEndpointRouteBuilder") ||
+            allSource.Contains("RouteHandlerBuilder"))
+        {
+            frameworks.Add("Microsoft.AspNetCore.App");
+        }
+
+        var efVersion = tfmMajor >= 10 ? "10.0.0" : $"{tfmMajor}.0.8";
+        var aspVersion = tfmMajor >= 10 ? "10.0.0" : $"{tfmMajor}.0.8";
+        var extVersion = tfmMajor >= 10 ? "10.0.0" : $"{tfmMajor}.0.1";
+
+        // ASP.NET Core integration testing
+        if (allSource.Contains("WebApplicationFactory") || allSource.Contains("CustomWebApplicationFactory"))
+            packages.Add($"Microsoft.AspNetCore.Mvc.Testing|{aspVersion}");
+
+        if (allSource.Contains("TestServer"))
+            packages.Add($"Microsoft.AspNetCore.TestHost|{aspVersion}");
+
+        // Entity Framework Core
+        if (allSource.Contains("Microsoft.EntityFrameworkCore") ||
+            allSource.Contains("DbContext") ||
+            allSource.Contains("DbSet") ||
+            allSource.Contains("MigrationBuilder") ||
+            allSource.Contains("ModelBuilder"))
+        {
+            packages.Add($"Microsoft.EntityFrameworkCore|{efVersion}");
+        }
+
+        // EF Core Relational (MigrateAsync, ToTable, HasColumnName, annotations)
+        if (allSource.Contains("MigrateAsync") ||
+            allSource.Contains(".ToTable(") ||
+            allSource.Contains("HasColumnName") ||
+            allSource.Contains("HasAnnotation") ||
+            allSource.Contains("UseIdentityByDefaultColumns") ||
+            allSource.Contains("NpgsqlModelBuilderExtensions"))
+        {
+            packages.Add($"Microsoft.EntityFrameworkCore.Relational|{efVersion}");
+        }
+
+        // PostgreSQL / Npgsql
+        if (allSource.Contains("Npgsql.EntityFrameworkCore.PostgreSQL") ||
+            allSource.Contains("UseNpgsql") ||
+            allSource.Contains("NpgsqlDbContextOptionsExtensions"))
+        {
+            packages.Add($"Npgsql.EntityFrameworkCore.PostgreSQL|{efVersion}");
+        }
+        else if (allSource.Contains("Npgsql"))
+        {
+            packages.Add("Npgsql|9.0.2");
+        }
+
+        // Generic host / DI / logging / configuration
+        var mayProvideLoggingAbstractions = false;
+
+        if (allSource.Contains("Microsoft.Extensions.Hosting") || allSource.Contains("IHost"))
+        {
+            packages.Add($"Microsoft.Extensions.Hosting|{extVersion}");
+            mayProvideLoggingAbstractions = true;
+        }
+
+        if (allSource.Contains("Microsoft.Extensions.DependencyInjection") || allSource.Contains("IServiceCollection"))
+            packages.Add($"Microsoft.Extensions.DependencyInjection|{extVersion}");
+
+        if (allSource.Contains("Microsoft.Extensions.Logging") || allSource.Contains("ILogger"))
+        {
+            // Only add Logging.Abstractions explicitly if nothing else is already going to bring it in
+            // at a higher version (Npgsql, EF Core, and Hosting all reference it transitively).
+            if (!mayProvideLoggingAbstractions && !packages.Any(p => p.StartsWith("Npgsql", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)))
+                packages.Add($"Microsoft.Extensions.Logging.Abstractions|{extVersion}");
+        }
+
+        if (allSource.Contains("Microsoft.Extensions.Configuration"))
+            packages.Add($"Microsoft.Extensions.Configuration|{extVersion}");
+
+        return (packages, frameworks);
+    }
+
     private static string GenerateCsproj(string name, string targetFramework, bool isExe, HashSet<string> references, bool isTestProject = false)
+    {
+        var projectDir = string.Empty; // not used here; packages inferred by caller
+        return GenerateCsproj(name, targetFramework, isExe, references, new HashSet<string>(), new HashSet<string>(), isTestProject);
+    }
+
+    private static string GenerateCsproj(string name, string targetFramework, bool isExe, HashSet<string> references, HashSet<string> packages, HashSet<string> frameworks, bool isTestProject = false)
     {
         var sb = new StringBuilder();
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
@@ -287,6 +449,7 @@ public sealed class DockerVerifier
             sb.AppendLine("    <IsTestProject>true</IsTestProject>");
         }
         sb.AppendLine("  </PropertyGroup>");
+
         if (references.Count > 0)
         {
             sb.AppendLine("  <ItemGroup>");
@@ -294,43 +457,146 @@ public sealed class DockerVerifier
                 sb.AppendLine($"    <ProjectReference Include=\"../{r}/{r}.csproj\" />");
             sb.AppendLine("  </ItemGroup>");
         }
-        if (isTestProject || name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase))
+
+        if (frameworks.Count > 0)
         {
             sb.AppendLine("  <ItemGroup>");
-            sb.AppendLine("    <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.12.0\" />");
-            sb.AppendLine("    <PackageReference Include=\"xunit\" Version=\"2.9.2\" />");
-            sb.AppendLine("    <PackageReference Include=\"xunit.runner.visualstudio\" Version=\"2.8.2\" />");
+            foreach (var fw in frameworks)
+                sb.AppendLine($"    <FrameworkReference Include=\"{fw}\" />");
             sb.AppendLine("  </ItemGroup>");
         }
-        if (name.Contains("Sql"))
+
+        if (packages.Count > 0)
         {
             sb.AppendLine("  <ItemGroup>");
-            sb.AppendLine("    <PackageReference Include=\"Npgsql\" Version=\"9.0.2\" />");
+            foreach (var pkg in packages)
+            {
+                var parts = pkg.Split('|');
+                sb.AppendLine($"    <PackageReference Include=\"{parts[0]}\" Version=\"{parts[1]}\" />");
+            }
             sb.AppendLine("  </ItemGroup>");
         }
+
         sb.AppendLine("</Project>");
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Merge missing package/framework/project references into an existing .csproj without
+    /// destroying the model's authored references or target framework.
+    /// </summary>
+    private static void MergeMissingRefsIntoCsproj(
+        string csprojPath,
+        string projectName,
+        List<string> allProjects,
+        string contextDir,
+        HashSet<string> inferredPackages,
+        HashSet<string> inferredFrameworks,
+        HashSet<string>? inferredProjectRefs = null)
+    {
+        var xml = File.ReadAllText(csprojPath);
+        var refs = inferredProjectRefs ?? InferReferences(projectName, allProjects, contextDir);
+
+        // Helper to extract Include attribute values from existing ItemGroup elements.
+        bool HasInclude(string elementName, string includeValue)
+        {
+            var pattern = $"\u003c{elementName}\\s+[^\u003e]*Include=\"{System.Text.RegularExpressions.Regex.Escape(includeValue)}\"";
+            return System.Text.RegularExpressions.Regex.IsMatch(xml, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        var packagesToAdd = inferredPackages.Where(p =>
+        {
+            var name = p.Split('|')[0];
+            return !HasInclude("PackageReference", name);
+        }).ToList();
+
+        var frameworksToAdd = inferredFrameworks.Where(f => !HasInclude("FrameworkReference", f)).ToList();
+
+        var projectRefsToAdd = refs.Where(r =>
+        {
+            var expected = $"../{r}/{r}.csproj";
+            return !xml.Contains(expected, StringComparison.OrdinalIgnoreCase);
+        }).ToList();
+
+        if (packagesToAdd.Count == 0 && frameworksToAdd.Count == 0 && projectRefsToAdd.Count == 0)
+            return;
+
+        var insert = new StringBuilder();
+        if (projectRefsToAdd.Count > 0)
+        {
+            insert.AppendLine("  <ItemGroup>");
+            foreach (var r in projectRefsToAdd)
+                insert.AppendLine($"    <ProjectReference Include=\"../{r}/{r}.csproj\" />");
+            insert.AppendLine("  </ItemGroup>");
+        }
+        if (frameworksToAdd.Count > 0)
+        {
+            insert.AppendLine("  <ItemGroup>");
+            foreach (var fw in frameworksToAdd)
+                insert.AppendLine($"    <FrameworkReference Include=\"{fw}\" />");
+            insert.AppendLine("  </ItemGroup>");
+        }
+        if (packagesToAdd.Count > 0)
+        {
+            insert.AppendLine("  <ItemGroup>");
+            foreach (var pkg in packagesToAdd)
+            {
+                var parts = pkg.Split('|');
+                insert.AppendLine($"    <PackageReference Include=\"{parts[0]}\" Version=\"{parts[1]}\" />");
+            }
+            insert.AppendLine("  </ItemGroup>");
+        }
+
+        // Insert before the closing </Project> tag.
+        var closing = "</Project>";
+        var idx = xml.LastIndexOf(closing, StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            xml = xml[..idx] + insert.ToString() + "\n" + xml[idx..];
+        }
+        else
+        {
+            xml += "\n" + insert.ToString() + "</Project>";
+        }
+
+        // Ensure IsTestProject if project name suggests tests and source contains xUnit attributes.
+        if (!xml.Contains("<IsTestProject>true</IsTestProject>", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectDir = Path.GetDirectoryName(csprojPath)!;
+            if (IsTestProjectDirectory(projectDir, projectName))
+            {
+                var propClose = "</PropertyGroup>";
+                var propIdx = xml.IndexOf(propClose, StringComparison.OrdinalIgnoreCase);
+                if (propIdx >= 0)
+                {
+                    xml = xml[..(propIdx + propClose.Length)] + "\n  <PropertyGroup>\n    <IsPackable>false</IsPackable>\n    <IsTestProject>true</IsTestProject>\n  </PropertyGroup>" + xml[(propIdx + propClose.Length)..];
+                }
+            }
+        }
+
+        File.WriteAllText(csprojPath, xml);
+    }
+
     private static string GenerateSolution(string contextDir, string targetFramework)
     {
-        // Renormalize existing csproj files before generating the solution so references are current.
         var projectDirs = Directory.GetDirectories(contextDir, "*", SearchOption.TopDirectoryOnly)
             .Where(d => Directory.GetFiles(d, "*.cs", SearchOption.AllDirectories).Any())
             .Select(d => Path.GetFileName(d)!)
             .ToList();
 
+        // Generate missing .csproj files only for dirs that don't already have one.
         foreach (var projectName in projectDirs)
         {
             var projectDir = Path.Combine(contextDir, projectName);
+            if (Directory.GetFiles(projectDir, "*.csproj", SearchOption.AllDirectories).Any())
+                continue;
+
             var csprojPath = Path.Combine(projectDir, $"{projectName}.csproj");
-            if (!File.Exists(csprojPath))
-            {
-                var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
-                var isTest = IsTestProjectDirectory(projectDir);
-                var refs = InferReferences(projectName, projectDirs, contextDir);
-                File.WriteAllText(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, isTest));
-            }
+            var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
+            var isTest = IsTestProjectDirectory(projectDir, projectName);
+            var refs = InferReferences(projectName, projectDirs, contextDir);
+            var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
+            File.WriteAllText(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, pkgs, fws, isTest));
         }
 
         var projects = Directory.GetFiles(contextDir, "*.csproj", SearchOption.AllDirectories)
@@ -362,15 +628,16 @@ public sealed class DockerVerifier
             uniqueProjects.Add((current.Name, current.Rel, Guid.NewGuid().ToString().ToUpperInvariant()));
         }
 
-        // Re-normalize references after possible renames
+        // After possible renames, merge any missing inferred package/framework/project references
+        // into existing .csproj files without destroying the model's authored references.
         foreach (var csproj in Directory.GetFiles(contextDir, "*.csproj", SearchOption.AllDirectories))
         {
             var projectDir = Path.GetDirectoryName(csproj)!;
             var projectName = Path.GetFileNameWithoutExtension(csproj);
-            var isExe = File.Exists(Path.Combine(projectDir, "Program.cs"));
-            var isTest = IsTestProjectDirectory(projectDir);
+            var isTest = IsTestProjectDirectory(projectDir, projectName);
             var refs = InferReferences(projectName, uniqueProjects.Select(p => p.Name).ToList(), contextDir);
-            File.WriteAllText(csproj, GenerateCsproj(projectName, targetFramework, isExe, refs, isTest));
+            var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
+            MergeMissingRefsIntoCsproj(csproj, projectName, uniqueProjects.Select(p => p.Name).ToList(), contextDir, pkgs, fws, refs);
         }
 
         var sb = new StringBuilder();
