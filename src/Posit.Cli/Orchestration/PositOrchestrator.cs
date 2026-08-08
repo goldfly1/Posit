@@ -514,7 +514,9 @@ public sealed class PositOrchestrator
                 if (results is not null)
                 {
                     // Update DafnyContracts with verification + translation results
-                    var existing = current.DafnyContracts?.ToDictionary(c => c.ModuleName) ?? new();
+                    var existing = current.DafnyContracts?
+                        .GroupBy(c => c.ModuleName)
+                        .ToDictionary(g => g.Key, g => g.Last()) ?? new();
                     foreach (var r in results)
                     {
                         existing[r.ModuleName] = new DafnyContractEntry

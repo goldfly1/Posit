@@ -64,11 +64,11 @@ public sealed class PatternRegistry
         }
 
         // Dafny components with {:extern} stubs need matching C# partial-class implementations.
+        // The C# stub files are named the same as the Dafny stub files (e.g., "file-io", "stream-io").
         foreach (var stubName in component.StubNames ?? [])
         {
-            var templateName = $"extern-{stubName}";
-            if (HasCSharpStub(templateName))
-                selected.Add(GetCSharpStub(templateName));
+            if (HasCSharpStub(stubName))
+                selected.Add(GetCSharpStub(stubName));
         }
 
         return selected.Distinct().ToList();

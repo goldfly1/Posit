@@ -282,6 +282,7 @@ public sealed class QaPhase : IPhase
         {
             var cleaned = OllamaModelGateway.StripReasoningTags(text);
             var json = OllamaModelGateway.ExtractJson(cleaned);
+            json = SanitizeJson(json);
 
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -314,6 +315,48 @@ public sealed class QaPhase : IPhase
         }
 
         return files;
+    }
+
+    /// <summary>
+    /// Sanitizes JSON returned by models that may include invalid escape sequences
+    /// or other malformations that cause JsonDocument.Parse to fail.
+    /// </summary>
+    private static string SanitizeJson(string json)
+    {
+        // Remove stray backslashes that aren't valid JSON escape sequences
+        // (e.g., \S, \T, \n in C# code strings that the model didn't escape properly)
+        var sb = new StringBuilder(json.Length);
+        var i = 0;
+        while (i < json.Length)
+        {
+            if (json[i] == '\\' && i + 1 < json.Length)
+            {
+                var next = json[i + 1];
+                // Valid JSON escape characters: " \ / b f n r t u
+                if (next == '"' || next == '\\' || next == '/' || next == 'b' || next == 'f'
+                    || next == 'n' || next == 'r' || next == 't' || next == 'u')
+                {
+                    if (next == 'u' && i + 5 < json.Length)
+                    {
+                        // Copy \uXXXX as-is
+                        sb.Append(json, i, 6);
+                        i += 6;
+                        continue;
+                    }
+                    sb.Append(json[i]);
+                    sb.Append(next);
+                    i += 2;
+                    continue;
+                }
+                // Invalid escape — replace with double backslash
+                sb.Append("\\\\");
+                i++;
+                continue;
+            }
+            sb.Append(json[i]);
+            i++;
+        }
+        return sb.ToString();
     }
 
     private static ArtifactBundle CreateEmptyBundle(PhaseContext context)
