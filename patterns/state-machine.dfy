@@ -1,6 +1,13 @@
-// Pattern: State Machine
-// Finite states with guarded transitions.
-// Pre-cut stub: customize the states and transition guards.
+// Pattern: State Machine (Approach 3 — pre-written body with parameters)
+// responsibility: Finite states with guarded transitions
+// test: Transition(Idle, "start") returns Active
+// test: Transition(Active, "complete") returns Completed
+// test: Transition(Idle, "complete") returns Idle (invalid transition)
+//
+// Parameters:
+//   states: the datatype variants (customized per domain)
+//   events: the event strings (customized per domain)
+//   guards: which transitions are valid (the match body)
 
 datatype State =
   | Idle
@@ -9,8 +16,60 @@ datatype State =
   | Failed
 
 // Transition: state x event -> state
-// Guards: only valid transitions are allowed
+// Invalid transitions stay in current state
 method Transition(current: State, event: string) returns (next: State)
   ensures next == Idle || next == Active || next == Completed || next == Failed
-  // approach: match on current state + event, return new state
-  // invalid transitions stay in current state or go to Failed
+{
+  match current
+  case Idle =>
+    if event == "start" {
+      next := Active;
+    } else {
+      next := Idle;
+    }
+  case Active =>
+    if event == "complete" {
+      next := Completed;
+    } else if event == "fail" {
+      next := Failed;
+    } else {
+      next := Active;
+    }
+  case Completed =>
+    if event == "reset" {
+      next := Idle;
+    } else {
+      next := Completed;
+    }
+  case Failed =>
+    if event == "reset" {
+      next := Idle;
+    } else {
+      next := Failed;
+    }
+}
+
+// Check if a transition is valid without executing it
+function IsValidTransition(current: State, event: string): bool
+{
+  match current
+  case Idle => event == "start"
+  case Active => event == "complete" || event == "fail"
+  case Completed => event == "reset"
+  case Failed => event == "reset"
+}
+
+// Get all valid events for a state
+method GetValidEvents(current: State) returns (events: seq<string>)
+  ensures |events| >= 0
+{
+  if current == Idle {
+    events := ["start"];
+  } else if current == Active {
+    events := ["complete", "fail"];
+  } else if current == Completed {
+    events := ["reset"];
+  } else {
+    events := ["reset"];
+  }
+}

@@ -52,6 +52,13 @@ public record Component(
     public string[] StubNames { get; init; } = [];
 
     /// <summary>
+    /// Parameters for the selected registry pattern. Key-value pairs that
+    /// customize the pre-cut pattern body (e.g., delimiter, quoteChar, hasHeader).
+    /// The pipeline instantiates the pattern with these parameters.
+    /// </summary>
+    public string? ParametersJson { get; init; }
+
+    /// <summary>
     /// True when this module has been verified by Dafny. Verified modules
     /// do not need QA test stubs or edge case patterns — the proof IS the test.
     /// Set by the Dafny Contracts verification gate after successful proof.
