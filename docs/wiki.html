@@ -186,32 +186,32 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-2198741">Posit Architecture</a></li>
+<li class="page"><a href="#page-10113857">Posit Architecture</a></li>
 </ul>
 </li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-14040925">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-16551673">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-13217075">Desktop Port Plan</a></li>
+<li class="page"><a href="#page-10309631">Desktop Port Plan</a></li>
 <li class="folder">Evolution
 <ul>
-<li class="page"><a href="#page-589225">Architecture Evolution Map</a></li>
+<li class="page"><a href="#page-9167291">Architecture Evolution Map</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-11567890">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-9729336">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-7257152">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-9496746">Handoff 2026 08 08</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-6821253">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-9239448">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
 <li class="folder">Reference
 <ul>
-<li class="page"><a href="#page-16336370">Dafny Runtime Cs</a></li>
-<li class="page"><a href="#page-12514250">Dafny Runtime System Cs</a></li>
-<li class="page"><a href="#page-11505071">Dafny Stdlib</a></li>
+<li class="page"><a href="#page-1613929">Dafny Runtime Cs</a></li>
+<li class="page"><a href="#page-9802524">Dafny Runtime System Cs</a></li>
+<li class="page"><a href="#page-8397320">Dafny Stdlib</a></li>
 </ul>
 </li>
     </ul>
@@ -222,7 +222,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-13217075" data-title="Desktop Port Plan">
+        <div class="page" id="page-10309631" data-title="Desktop Port Plan">
             <h1>Desktop Port Plan</h1>
             <div class="page-path">desktop-port-plan.md</div>
             
@@ -630,7 +630,7 @@ body {
 </ul>
         </div>
 
-        <div class="page" id="page-11567890" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-7257152" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -647,7 +647,7 @@ body {
 
 </ul><h2 id="current-state">Current State</h2>
 
-<p><strong>Posit repo:</strong> 18 commits, 8 projects, build clean (0 errors, 0 warnings)</p>
+<p><strong>Posit repo:</strong> 42+ commits, 9 projects (Posit.Dt added), build clean (0 errors, 0 warnings)</p>
 
 <table>
 <tr>
@@ -676,11 +676,15 @@ body {
 </tr>
 <tr>
 <td>Posit.Tools</td>
-<td>Build engine, Z3 runner</td>
+<td>Build engine, Z3 runner, PatternRegistry</td>
 </tr>
 <tr>
 <td>Posit.Cli</td>
 <td>CLI entry point + Orchestrator</td>
+</tr>
+<tr>
+<td>Posit.Dt</td>
+<td>Blazor dashboard (in progress)</td>
 </tr>
 <tr>
 <td>Posit.Web</td>
@@ -842,6 +846,15 @@ body {
 <li style="margin-left:0ch"><strong>First pipeline run:</strong> Architecture phase via deepseek-v4-pro:cloud, 2 dafny components with .dfy source, 18.3s (Posit, Aug 6)</li>
 <li style="margin-left:0ch"><strong>Pipeline with DB persistence:</strong> 6 migrations, prompt log, audit events, artifact persistence, session state, FSM retry (Posit, Aug 6)</li>
 <li style="margin-left:0ch"><strong>FSM retry works:</strong> parse failure on attempt 1 → retry → success on attempt 2 (Posit, Aug 6)</li>
+<li style="margin-left:0ch"><strong>Approach 3 — pre-written pattern bodies:</strong> 10 patterns with Z3-proven bodies, 41 verification conditions, 0 errors (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>Imp skipped when pre-verified:</strong> Dafny Implementation checks if skeleton already verifies; if yes, translates directly — no model call. T1 run: 0 model calls for Dafny Implementation (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>T1 full pipeline (Approach 3):</strong> all 5 phases green, 1m27s wall-clock, 14K tokens (down from 50K), 2 model calls (Architecture + QA), Imp NOT called (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>Pattern registry works:</strong> architect selects pattern + stubs, pipeline composes skeleton, Z3 verifies composed skeleton (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>C# stub caps matching:</strong> expanded SelectCSharpStubs to match file/stream/network by responsibility + name (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>JSON sanitization:</strong> SanitizeJson strips invalid escape sequences before JsonDocument.Parse (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>Snowball duplicate key fixed:</strong> GroupBy before ToDictionary handles duplicate module names (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>Dafny stdlib indexed:</strong> 57 modules, 18,501 lines of Dafny source in wiki, searchable (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>Architecture evolution map:</strong> 7 approaches mapped, practical path 3→4→6, north star 7 (Posit, Aug 8)</li>
 
 </ul><h2 id="key-documents">Key Documents</h2>
 
@@ -894,7 +907,7 @@ body {
 </tr>
 <tr>
 <td>Design Review</td>
-<td>kimi-2.7-code:cloud</td>
+<td>kimi-k2.7-code:cloud</td>
 <td>Independent review — separation from architect</td>
 </tr>
 <tr>
@@ -914,8 +927,13 @@ body {
 </tr>
 <tr>
 <td>Imp appeal reviewer</td>
-<td>kimi-2.7-code:cloud</td>
+<td>kimi-k2.7-code:cloud</td>
 <td>Independent arbiter for io-shell QA disputes</td>
+</tr>
+<tr>
+<td>Pattern body generation (Approach 4)</td>
+<td>deepseek-v4-flash:cloud</td>
+<td>Fast generation engine for variant explosion</td>
 </tr>
 <tr>
 <td>File ops, wiki search</td>
@@ -936,19 +954,29 @@ body {
 <li style="margin-left:0ch"><strong>Orchestrator</strong> — FSM, dependency graph, phase controller, pipeline runner</li>
 <li style="margin-left:0ch"><strong>CLI</strong> — <code class="inline">posit run &lt;request&gt; --phase=...</code>, migration runner, DB wiring</li>
 <li style="margin-left:0ch"><strong>Data capture</strong> — 6 migrations, 4 repositories, PromptLogger, AuditRepository</li>
-<li style="margin-left:0ch"><strong>Imp appeal process</strong> — kimi-2.7-code:cloud reviews io-shell QA disputes</li>
+<li style="margin-left:0ch"><strong>Imp appeal process</strong> — kimi-k2.7-code:cloud reviews io-shell QA disputes</li>
 <li style="margin-left:0ch"><strong>Plan gaps closed</strong> — 13 key decisions documented</li>
+<li style="margin-left:0ch"><strong>Pattern registry</strong> — 10 patterns + 6 stub files, all Z3-verified, PatternRegistry.cs, ComposeSkeleton, Suggest</li>
+<li style="margin-left:0ch"><strong>Approach 3 — pre-written bodies</strong> — 10 patterns with Z3-proven bodies (41 VC, 0 errors), Imp skipped when pre-verified</li>
+<li style="margin-left:0ch"><strong>Bug fixes</strong> — snowball duplicate key, C# stub cap name matching, QA JSON sanitization, model name corrected</li>
+<li style="margin-left:0ch"><strong>Dafny stdlib reference</strong> — 57 modules indexed in wiki, searchable</li>
+<li style="margin-left:0ch"><strong>Architecture evolution map</strong> — 7 approaches, practical path 3→4→6</li>
+<li style="margin-left:0ch"><strong>HTML wiki</strong> — 10 pages, 1MB, auto-regeneratable</li>
+<li style="margin-left:0ch"><strong>AGENTS.md</strong> — project context for AI agents</li>
+<li style="margin-left:0ch"><strong>Architect enjoined to write tests</strong> — test cases mandatory for every module</li>
+<li style="margin-left:0ch"><strong>Carapace principle</strong> — file is authority, artifact carries path, skeleton is the kit</li>
+<li style="margin-left:0ch"><strong>T1 full pipeline run</strong> — all 5 phases green, 1m27s, 14K tokens, Imp NOT called</li>
 
 </ul><h3 id="next-steps">Next Steps</h3>
 
-<ul><li style="margin-left:0ch"><strong>Pattern registry: 14 more files</strong> — 8 patterns (pipeline, observer, strategy, adapter, graph/tree, cache, scheduler, reducer) + 6 stubs (crypto, auth, env, log, serialize, compress). Full registry = 17 patterns + 12 stub files = 99.99% coverage.</li>
+<ul><li style="margin-left:0ch"><strong>Approach 4 — combinatorial generation + vector DB.</strong> Parameterize pattern bodies, generate combinations, Z3-verify each, index survivors in pgvector. <code class="inline">deepseek-v4-flash:cloud</code> as generation engine. This is the MASSIVE vision — not one parser, but 50 verified parser variants.</li>
+<li style="margin-left:0ch"><strong>Pattern registry: 14 more files</strong> — 8 patterns (pipeline, observer, strategy, adapter, graph/tree, cache, scheduler, reducer) + 6 stubs (crypto, auth, env, log, serialize, compress). Full registry = 17 patterns + 12 stub files = 99.99% coverage.</li>
 <li style="margin-left:0ch"><strong>Step 4: Limits and Budgets</strong> — 200-line cap, 10 method cap, 5 class cap enforcement</li>
-<li style="margin-left:0ch"><strong>Step 5: Trial Run</strong> — full end-to-end pipeline (architecture → dafny-contracts → impl → qa)</li>
 <li style="margin-left:0ch"><strong>Session resume</strong> — <code class="inline">--session=&lt;id&gt;</code> to resume from DB-persisted state</li>
 <li style="margin-left:0ch"><strong>Security ring</strong> — before frontend clone. Crypto + auth stubs + access control logic patterns.</li>
 <li style="margin-left:0ch"><strong>Frontend pipeline clone</strong> (Blazor) — also owns status/cost/resource monitoring (items #8, #10 from gap fixes)</li>
 <li style="margin-left:0ch"><strong>Rust target for Dafny translation</strong></li>
-<li style="margin-left:0ch"><strong>kimi-2.7-code:cloud needs registration in Ollama</strong> — required before Design Review or Imp Appeal can run</li>
+<li style="margin-left:0ch"><strong>kimi-k2.7-code:cloud needs registration in Ollama</strong> — required before Design Review or Imp Appeal can run. Proxy responds but model not in /api/tags.</li>
 
 </ul><h3 id="future">Future</h3>
 <ul><li style="margin-left:0ch">Frontend pipeline clone (Blazor)</li>
@@ -969,7 +997,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-9729336" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-9496746" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.2</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -1248,7 +1276,7 @@ posit verify &lt;session-id&gt;
 </ul>
         </div>
 
-        <div class="page" id="page-9024702" data-title="Posit Architecture">
+        <div class="page" id="page-12726195" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2106,7 +2134,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-6400056" data-title="Dafny Contract Templates">
+        <div class="page" id="page-7081070" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2272,7 +2300,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-3481708" data-title="Posit Architecture Evolution Map">
+        <div class="page" id="page-5494486" data-title="Posit Architecture Evolution Map">
             <h1>Posit Architecture Evolution Map</h1>
             <div class="page-path">evolution\architecture-evolution-map.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: design</span> · <span class='meta-item'><b>tags</b>: [architecture, evolution, registry, vector-db, vision]</span> · <span class='meta-item'><b>component</b>: posit</span> · <span class='meta-item'><b>version</b>: 0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -2746,7 +2774,7 @@ NOW (Approach 2)
 <li style="margin-left:0ch"><strong>Nothing ships unproven.</strong></li></ul>
         </div>
 
-        <div class="page" id="page-12762069" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-9895490" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             
@@ -3036,7 +3064,7 @@ public class CsvFileReader
 <li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
         </div>
 
-        <div class="page" id="page-7829012" data-title="DafnyRuntime.cs — C# Runtime Reference">
+        <div class="page" id="page-6458643" data-title="DafnyRuntime.cs — C# Runtime Reference">
             <h1>DafnyRuntime.cs — C# Runtime Reference</h1>
             <div class="page-path">reference\dafny-runtime-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -5017,7 +5045,7 @@ namespace Dafny {
 
         </div>
 
-        <div class="page" id="page-6001360" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
+        <div class="page" id="page-1808299" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
             <h1>DafnyRuntimeSystemModule.cs — C# System Module Reference</h1>
             <div class="page-path">reference\dafny-runtime-system-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -8720,7 +8748,7 @@ namespace _System {
 
         </div>
 
-        <div class="page" id="page-5047565" data-title="Dafny Standard Library Reference">
+        <div class="page" id="page-9035155" data-title="Dafny Standard Library Reference">
             <h1>Dafny Standard Library Reference</h1>
             <div class="page-path">reference\dafny-stdlib.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [dafny, stdlib, reference, types, contracts]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>

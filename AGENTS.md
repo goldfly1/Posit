@@ -32,7 +32,7 @@
 ## Locked Decisions
 
 1. **Ollama-only** — all model calls through localhost:11434. No provider abstraction. `:cloud` suffix is just an Ollama tag.
-2. **Models:** `deepseek-v4-pro:cloud` (Architecture, Dafny Implementation), `kimi-2.7-code:cloud` (Design Review, Imp Appeal — NOT YET REGISTERED in Ollama), `glm-5.2:cloud` (C# Implementation, QA)
+2. **Models:** `deepseek-v4-pro:cloud` (Architecture, Dafny Implementation), `kimi-k2.7-code:cloud` (Design Review, Imp Appeal — proxy responds but not in /api/tags), `glm-5.2:cloud` (C# Implementation, QA), `deepseek-v4-flash:cloud` (Approach 4 generation engine)
 3. **Bodyless methods with `{:axiom}`** — skeletons have no method bodies. Empty `{ }` fails verification.
 4. **`{:extern}` portals** — I/O stubs in Dafny. Z3 assumes contract. `dafny translate cs` produces `partial class` holes.
 5. **Two-pass implementation** — Pass 1: Dafny bodies (dsv4pro). Pass 2: C# plugs into extern portals (glm).
@@ -44,6 +44,7 @@
 11. **Architect writes the tests** — the architect is enjoined to write test cases for every module. These are the acceptance criteria. QA tests against the architect's test cases and the module's public surface, not against the full architecture. This minimizes the QA context snowball — QA doesn't need the whole design, just the test cases and the skeleton for namespace access. Test cases are hung on the skeleton (`// test: ParseLine("a,b,c") returns ["a","b","c"]`) and carried in the `Component.TestCases` field.
 12. **Skeleton is the carapace** — the .dfy file on disk is the authority. The artifact carries the path, not the content. Names, types, contracts, dependencies are tattooed on the carapace. No guessing, no making it up. Imp inlays the function within the pre-cut shape.
 13. **Pattern registry** — the architect selects from a pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. `PatternRegistry.ComposeSkeleton()` bolts stubs onto patterns. 2 from column A, 6 from column B.
+14. **Approach 3 — pre-cut planks not blanks.** Patterns ship with Z3-proven method bodies (41 verification conditions, 0 errors). The architect selects a pattern and sets parameters. The pipeline composes the skeleton with bodies already in place. Dafny Implementation pre-verifies the skeleton — if Z3 passes, it translates directly without calling Imp. T1 run: 1m27s, 14K tokens, 2 model calls, Imp NOT called.
 
 ## Pipeline
 
