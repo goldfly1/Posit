@@ -472,18 +472,35 @@ def main():
     parser = argparse.ArgumentParser(description="Batch variant generator (batch mode)")
     parser.add_argument("--pattern", type=str, help="Pattern name")
     parser.add_argument("--all", action="store_true", help="Run all patterns")
-    parser.add_argument("--batch-size", type=int, default=10, help="Variants per pattern")
+    parser.add_argument("--batch-size", type=int, default=10, help="Variants per batch")
     parser.add_argument("--retries", type=int, default=3, help="Batch correction rounds")
+    parser.add_argument("--rounds", type=int, default=1, help="Number of 25-variant rounds per pattern (seeds each round with last verified variant)")
     parser.add_argument("--no-wiki", action="store_true", help="Disable reference card")
     args = parser.parse_args()
     
     patterns = list(PARAM_GRIDS.keys()) if args.all else [args.pattern]
     use_wiki = not args.no_wiki
+    batch_size = args.batch_size
+    rounds = args.rounds
     
     all_results = {}
     for p in patterns:
-        results = run_batch_pattern(p, args.batch_size, args.retries, use_wiki)
-        all_results[p] = results
+        if rounds > 1:
+            # Multi-round: seed each round with the last verified variant from previous round
+            round_results = {"passed": 0, "failed": 0, "tokens": 0, "model_calls": 0}
+            for r in range(rounds):
+                print(f"\n{'*'*60}")
+                print(f"* ROUND {r+1}/{rounds} for pattern '{p}'")
+                print(f"{'*'*60}")
+                results = run_batch_pattern(p, batch_size, args.retries, use_wiki)
+                round_results["passed"] += results["passed"]
+                round_results["failed"] += results["failed"]
+                round_results["tokens"] += results["tokens"]
+                round_results["model_calls"] += results.get("model_calls", 0)
+            all_results[p] = round_results
+        else:
+            results = run_batch_pattern(p, batch_size, args.retries, use_wiki)
+            all_results[p] = results
     
     # Final summary
     total_passed = sum(r["passed"] for r in all_results.values())
@@ -497,7 +514,9 @@ def main():
     print(f"FINAL: {total_passed}/{total} variants passed ({pass_pct:.0f}%)")
     print(f"Total tokens: {total_tokens}")
     print(f"Total model calls: {total_calls}")
+    print(f"Tokens per variant: {total_tokens / total:.0f}" if total > 0 else "")
     print(f"Wiki: {'ON' if use_wiki else 'OFF'}")
+    print(f"Rounds: {rounds} × {batch_size} = {rounds * batch_size} target variants")
     print(f"{'#'*60}")
 
 
