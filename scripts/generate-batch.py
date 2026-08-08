@@ -99,7 +99,7 @@ def call_flash(prompt: str, system: str = "", timeout: int = 600) -> tuple[str, 
         "model": MODEL,
         "prompt": full_prompt,
         "stream": False,
-        "options": {"num_ctx": 32768, "num_predict": 65536}
+        "options": {"num_ctx": 32768, "num_predict": 24000}
     }).encode()
 
     start = time.time()
