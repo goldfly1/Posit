@@ -47,20 +47,38 @@ public sealed class PatternRegistry
         var name = component.Name;
         var classification = component.Classification;
         var tech = component.Tech?.ToLowerInvariant() ?? "";
+        var responsibility = component.Responsibility?.ToLowerInvariant() ?? "";
 
         // Io-shell components get implementation files from the rack.
         if (classification == ModuleClassification.IoShell || tech == "c#")
         {
-            var responsibility = component.Responsibility?.ToLowerInvariant() ?? "";
+            // Match by responsibility keywords
             if (responsibility.Contains("database") || responsibility.Contains("sql") || responsibility.Contains("repository") || responsibility.Contains("persist"))
                 if (HasCSharpStub("io-database-repository"))
                     selected.Add(GetCSharpStub("io-database-repository"));
 
             if (component.StubNames?.Any(s => s.Contains("console", StringComparison.OrdinalIgnoreCase)) == true ||
+                responsibility.Contains("console") || responsibility.Contains("cli") || responsibility.Contains("command-line") ||
                 name.Contains("CLI", StringComparison.OrdinalIgnoreCase) ||
                 name.Contains("Console", StringComparison.OrdinalIgnoreCase))
                 if (HasCSharpStub("io-console-program"))
                     selected.Add(GetCSharpStub("io-console-program"));
+
+            if (component.StubNames?.Any(s => s.Contains("file", StringComparison.OrdinalIgnoreCase)) == true ||
+                responsibility.Contains("file") || responsibility.Contains("read") || responsibility.Contains("write") ||
+                name.Contains("File", StringComparison.OrdinalIgnoreCase) || name.Contains("Reader", StringComparison.OrdinalIgnoreCase) || name.Contains("Writer", StringComparison.OrdinalIgnoreCase))
+                if (HasCSharpStub("file-io"))
+                    selected.Add(GetCSharpStub("file-io"));
+
+            if (component.StubNames?.Any(s => s.Contains("stream", StringComparison.OrdinalIgnoreCase)) == true ||
+                responsibility.Contains("stream"))
+                if (HasCSharpStub("stream-io"))
+                    selected.Add(GetCSharpStub("stream-io"));
+
+            if (component.StubNames?.Any(s => s.Contains("network", StringComparison.OrdinalIgnoreCase)) == true ||
+                responsibility.Contains("http") || responsibility.Contains("network") || responsibility.Contains("api"))
+                if (HasCSharpStub("network-io"))
+                    selected.Add(GetCSharpStub("network-io"));
         }
 
         // Dafny components with {:extern} stubs need matching C# partial-class implementations.

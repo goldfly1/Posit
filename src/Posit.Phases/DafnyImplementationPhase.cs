@@ -130,6 +130,30 @@ public sealed class DafnyImplementationPhase : IPhase
         // Read the skeleton from disk — the file is the authority
         var skeletonSource = await File.ReadAllTextAsync(skeletonPath, ct);
 
+        // Approach 3: Check if the skeleton already has bodies and verifies.
+        // If the pattern shipped with pre-written bodies (Approach 3), the skeleton
+        // is already a complete program. Z3 verifies it, we translate, done.
+        // No model call needed — the planks are pre-cut.
+        var (preVerified, preOutput) = await _z3Runner.VerifyAsync(skeletonPath, ct);
+        if (preVerified)
+        {
+            Console.Error.WriteLine($"[Posit] Dafny Implementation — '{moduleName}' pre-verified (pattern bodies already proven), translating...");
+            var csharpPath = await _z3Runner.TranslateToCSharpAsync(skeletonPath, moduleName, ct);
+            var preResult = new DafnyVerificationResult
+            {
+                ModuleName = moduleName,
+                DafnySource = skeletonSource,
+                DafnyPath = skeletonPath,
+                ContractSummary = "Pre-verified from pattern registry (no model call needed)",
+                IsVerified = true,
+                VerificationOutput = preOutput,
+                TranslatedCSharpPath = csharpPath
+            };
+            return (preResult, 0, 0, true);
+        }
+
+        Console.Error.WriteLine($"[Posit] Dafny Implementation — '{moduleName}' skeleton not pre-verified, calling model to fill bodies...");
+
         var systemPrompt = BuildPrompt(context, moduleName, skeletonPath, skeletonSource);
         var prompt = context.Prompt with { SystemPrompt = systemPrompt };
 
