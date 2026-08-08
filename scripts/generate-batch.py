@@ -277,23 +277,38 @@ def run_batch_pattern(pattern_name: str, batch_size: int, retries: int, use_wiki
     
     print(f"    {len(results['passed'])} passed by substitution, {len(needs_generation)} need model generation")
     
-    # ─── Step 2: Batch-generate remaining variants (one call) ─────────
-    variant_descriptions = []
-    for idx, params, vname in needs_generation:
-        param_str = ", ".join(f"{k}={v}" for k, v in params.items())
-        variant_descriptions.append(f"Variant {idx:03d}: {param_str}")
+    # ─── Step 2: Progression-based generation (one call) ──────────────
+    # Instead of random parameter combinations, ask the model to compute
+    # a progression: start simple, add one delta at a time, build complexity.
+    # Each variant is a small step from the last. Same structures, same rules.
     
-    variants_block = "\n".join(variant_descriptions)
+    # If any variants passed by substitution, use the last one as seed
+    seed_source = base_source
+    if results["passed"]:
+        last_sub = STAGING_DIR / f"{results['passed'][-1]['name']}.dfy"
+        if last_sub.exists():
+            seed_source = last_sub.read_text()
     
-    prompt = f"""You are a Dafny code generator. Generate {len(needs_generation)} VARIANTS of the {pattern_name} pattern.
+    progression_prompt = f"""You are a Dafny code generator. Generate {len(needs_generation)} VARIANTS of the {pattern_name} pattern as a PROGRESSION.
 
-Base pattern source:
+Seed (verified base):
 ```dafny
-{base_source}
+{seed_source}
 ```
 
-Generate these variants:
-{variants_block}
+Progression algorithm — compute the sequence yourself:
+1. Start with the simplest variant (v001). Change ONE parameter from the seed.
+2. Each subsequent variant adds ONE delta from the previous:
+   - Change a parameter value (delimiter, quote char, return type)
+   - Add a feature (header skipping, quote handling, error type)
+   - Combine features from earlier variants
+3. Build complexity gradually. Never make a jump of more than one delta.
+4. Each variant must be a COMPLETE, standalone .dfy file — not a diff.
+5. Keep the same method names, types, and structures from the seed where possible.
+6. Only change what the delta requires. Everything else stays the same.
+
+Available parameters to vary:
+{json.dumps(PARAM_GRIDS.get(pattern_name, {}), indent=2, default=str)}
 
 Rules:
 1. Output each variant separated by === FILE: variant-NNN.dfy ===
@@ -308,17 +323,17 @@ Rules:
 """
     
     if ref_card:
-        prompt += f"""
+        progression_prompt += f"""
 Dafny reference card (verified — follow these patterns exactly):
 ```dafny
 {ref_card}
 ```
 """
     
-    system = "You are a Dafny expert. You write code that Z3 verifies on the first try. You never use reads on value types. You always prove bounds before indexing. You always supply decreases for recursion. You follow the reference card patterns exactly. You generate multiple complete files in one response, each separated by === FILE: name.dfy ==="
+    system = "You are a Dafny expert. You write code that Z3 verifies on the first try. You never use reads on value types. You always prove bounds before indexing. You always supply decreases for recursion. You follow the reference card patterns exactly. You compute progressions: each variant is a small delta from the last, building complexity gradually. You generate multiple complete files in one response, each separated by === FILE: name.dfy ==="
     
-    print(f"\n[2] Generating {len(needs_generation)} variants in one model call...")
-    text, inp, out, elapsed = call_flash(prompt, system, timeout=600)
+    print(f"\n[2] Generating {len(needs_generation)} variants as a progression (one model call)...")
+    text, inp, out, elapsed = call_flash(progression_prompt, system, timeout=600)
     total_tokens += inp + out
     model_calls += 1
     print(f"    Done: {elapsed:.1f}s, {inp}+{out} tokens")
