@@ -99,7 +99,7 @@ def call_flash(prompt: str, system: str = "", timeout: int = 600) -> tuple[str, 
         "model": MODEL,
         "prompt": full_prompt,
         "stream": False,
-        "options": {"num_ctx": 32768}
+        "options": {"num_ctx": 32768, "num_predict": 65536}
     }).encode()
 
     start = time.time()
@@ -320,6 +320,7 @@ Rules:
 7. Do NOT use assert unless provable from invariants
 8. Keep each variant under 200 lines, 10 methods, 5 classes
 9. Must be verifiable by Z3 (Dafny 4.11, --standard-libraries)
+10. BE CONCISE — no comments, no explanations, no blank lines between methods. Only the Dafny code. Each variant should be 30-60 lines maximum.
 """
     
     if ref_card:
