@@ -223,9 +223,8 @@ def run_batch_pattern(pattern_name: str, batch_size: int, retries: int, use_wiki
     """Generate all variants for a pattern:
     1. Try substitution (free, no model call)
     2. Batch-generate remaining variants (one model call)
-    3. Self-review (model checks its own work)
-    4. Z3 sweep all variants
-    5. Batch correction for failures
+    3. Z3 sweep all variants
+    4. Batch correction for failures
     """
     combos = get_param_combos(pattern_name, batch_size)
     if not combos:
@@ -330,52 +329,11 @@ Dafny reference card (verified — follow these patterns exactly):
     if len(dafny_files) < len(needs_generation):
         print(f"    WARNING: expected {len(needs_generation)}, got {len(dafny_files)}")
     
-    # ─── Step 3: Self-review (model checks its own work) ──────────────
-    if dafny_files:
-        print(f"\n[3] Self-review — model checking {len(dafny_files)} variants for common errors...")
-        
-        review_input = ""
-        for j, (idx, params, vname) in enumerate(needs_generation):
-            if j < len(dafny_files):
-                review_input += f"\n=== FILE: {vname}.dfy ===\n```dafny\n{dafny_files[j]}\n```\n"
-        
-        review_prompt = f"""You are a Dafny code reviewer. Review these {len(dafny_files)} Dafny files for common errors.
-
-Check each file for:
-1. reads clause on string/seq/int parameters (VALUE TYPES — remove any reads on these)
-2. Missing decreases clause on recursive functions
-3. Seq/string indexing without bounds proof (need 0 <= i < |s| before s[i])
-4. Slicing without bounds proof (need 0 <= n <= |s| before s[n..])
-5. assert statements that can't be proven from invariants
-6. Missing requires/ensures on methods
-7. Using = instead of := for assignment
-
-For each file that has errors, output the CORRECTED version.
-For files with no errors, output them unchanged.
-Output each file separated by === FILE: name.dfy ===
-
-{review_input}
-
-Dafny reference card:
-```dafny
-{ref_card}
-```
-"""
-        
-        review_text, rinp, rout, relapsed = call_flash(review_prompt, system, timeout=600)
-        total_tokens += rinp + rout
-        model_calls += 1
-        print(f"    Review done: {relapsed:.1f}s, {rinp}+{rout} tokens")
-        
-        reviewed_files = extract_dafny_files(review_text)
-        if len(reviewed_files) >= len(dafny_files):
-            dafny_files = reviewed_files
-            print(f"    Applied {len(reviewed_files)} reviewed files")
-        else:
-            print(f"    Review returned {len(reviewed_files)} files (expected {len(dafny_files)}), using original")
-    
-    # ─── Step 4: Z3 sweep — verify all at once ────────────────────────
-    print(f"\n[4] Z3 sweep — verifying {len(dafny_files)} files...")
+    # ─── Step 3: Z3 sweep — verify all at once ────────────────────────
+    # NOTE: Self-review step removed — testing showed the model rewrites
+    # files that were fine, introducing errors. Z3 error feedback is more
+    # reliable than self-review.
+    print(f"\n[3] Z3 sweep — verifying {len(dafny_files)} files...")
     
     for j, (idx, params, vname) in enumerate(needs_generation):
         if j >= len(dafny_files):
@@ -401,12 +359,12 @@ Dafny reference card:
                 "errors": '\n'.join(error_lines[:10])
             })
     
-    # ─── Step 5: Batch correction (if failures and retries remain) ────
+    # ─── Step 4: Batch correction (if failures and retries remain) ────
     for attempt in range(retries):
         if not results["failed"]:
             break
         
-        print(f"\n[5.{attempt+1}] Batch correction — {len(results['failed'])} failures, feeding errors back...")
+        print(f"\n[4.{attempt+1}] Batch correction — {len(results['failed'])} failures, feeding errors back...")
         
         corrections = []
         for fail in results["failed"]:
