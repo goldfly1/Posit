@@ -165,6 +165,10 @@ def gen_model_variant(pattern_name: str, params: dict, index: int, base_source: 
     """Generate a variant by calling the model. Returns (dafny_source, input_tokens, output_tokens, elapsed_s)."""
     param_str = json.dumps(params, indent=2)
     
+    # Load the Dafny reference card to prevent common errors
+    ref_card_path = PATTERNS_DIR / "dafny-reference-card.dfy"
+    ref_card = ref_card_path.read_text() if ref_card_path.exists() else ""
+    
     prompt = f"""You are a Dafny code generator. Generate a VARIANT of the {pattern_name} pattern.
 
 Base pattern source:
@@ -184,6 +188,11 @@ Rules:
 6. Do NOT use assert unless you can prove it from the invariants
 7. Keep it under 200 lines, 10 methods, 5 classes
 8. Must be verifiable by Z3 (Dafny 4.11, --standard-libraries)
+
+Dafny reference card (verified, follows these patterns exactly):
+```dafny
+{ref_card}
+```
 """
     
     if errors:
@@ -194,7 +203,7 @@ Previous attempt failed with these Z3 errors:
 Fix these specific errors. The code must verify cleanly.
 """
     
-    system = "You are a Dafny expert. You write code that Z3 verifies on the first try. You never use reads on value types. You always prove bounds before indexing. You always supply decreases for recursion."
+    system = "You are a Dafny expert. You write code that Z3 verifies on the first try. You never use reads on value types. You always prove bounds before indexing. You always supply decreases for recursion. You follow the reference card patterns exactly."
     
     text, inp, out, elapsed = call_flash(prompt, system)
     dafny = extract_dafny(text)
