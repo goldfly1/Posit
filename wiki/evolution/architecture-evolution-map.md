@@ -317,3 +317,33 @@ Across all approaches:
 - **The architect writes test cases.** These are the acceptance criteria. Always.
 - **Pass 2 plugs oar holes.** C# stub caps snap onto `{:extern}` portals.
 - **Nothing ships unproven.**
+
+---
+
+## Future Build-Out: Layered Architectural Decomposition
+
+**Concept:** For large projects (50+ modules), the architect doesn't design everything at once. It works in two passes:
+
+1. **Wide-area map:** The architect maps data pools and edges — which pools exist, which edges connect them, which direction data flows. This is the high-level design. Each edge is a type boundary (what crosses between locales). Each pool is a data cluster. The wide-area map is a contract, not an implementation.
+
+2. **Locale design:** Each locale (a cluster of modules around a data pool) is designed independently. The locale's skeleton only needs the edges — the `include` directives and the types that cross the boundary. The internal modules are the locale's own problem.
+
+```
+Wide-area map (first pass):
+  CSV input → [Parse locale] → [Validate locale] → validated data → [Transform locale] → SQL → [Write locale] → DB
+
+Each arrow = an edge (type boundary).
+Each box = a locale (designed independently).
+```
+
+**Why this works:** The skeleton is the carapace. The edges are tattooed on the wide-area map as `include` directives and type declarations. Locale A doesn't need locale B's internals — just its public surface. The wide-area map carries the public surfaces. Each locale design fills in the internal modules with its own pattern selection, skeleton composition, and Z3 verification.
+
+**How it fits the pipeline:**
+- Architecture phase (pass 1): produce wide-area contract — pools, edges, types
+- Architecture phase (pass 2): for each locale, select patterns + compose skeletons + Z3 verify
+- DesignContext snowball: carries the wide-area map + each locale's modules
+- The registry: searches can be scoped to a locale — "find a parser for the CSV input locale"
+
+**When this matters:** Projects with 50+ modules where the architect can't hold the whole design in one context. The wide-area map is the decomposition that makes it tractable. Each locale is a small problem. The edges are the contracts between them.
+
+**Not needed now.** Current projects (CSV-to-SQL, config validator) are 2-5 modules. Layered decomposition is for when the project is too big for one architecture pass. Add to the pipeline when the first 50-module project arrives.
