@@ -51,6 +51,8 @@
 14. **Approach 3 — pre-cut planks not blanks.** Patterns ship with Z3-proven method bodies. The architect selects a pattern and sets parameters. The pipeline composes the skeleton with bodies already in place. Dafny Implementation pre-verifies the skeleton — if Z3 passes, it translates directly without calling Imp. T1 run: 1m27s, 14K tokens, 2 model calls, Imp NOT called.
 15. **Registry vector DB.** `posit_registry.variants` table in Postgres (port 5434, shepherd/shepherd). Stores pattern, params, description, source_path, verified, embedding (768-dim pgvector). Searchable by semantic similarity. Scripts: `scripts/index-registry.py` (index + search + list), `scripts/generate-batch.py` (generate variants). ~1290 variant files on disk, ~755 indexed. Substitution = free variants. Model generation = `deepseek-v4-flash:cloud` via Ollama. 20/call = sweet spot. Thinking-mode bug: model sometimes produces 65K output tokens with 0 extractable code — fix: disable thinking via Ollama API.
 16. **Self-review HARMFUL.** Testing showed the model rewrites correct code when asked to self-review, introducing errors. Z3 error feedback is the reliable correction mechanism. Do not add self-review steps.
+17. **Flush make-weight.** Substitution variants (identical code, different header comments) are noise — deleted 495 from DB. Pattern files have NO `{{placeholder}}` substitutions — all substitution passes were make-weight. Next: add `{{feature}}` placeholders so substitution produces real code differences.
+18. **Indexer needs Z3 verification.** `--no-verify` trusts files without checking. Some failed variants indexed as verified. Honest count: ~450 genuinely distinct Z3-verified variants, not 1,165.
 
 ## Pipeline
 

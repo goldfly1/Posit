@@ -335,16 +335,16 @@ public sealed class PositOrchestrator
     /// </summary>
     private static string GetModelForPhase(PhaseId phaseId) => phaseId.Value switch
     {
-        "ideation" => "deepseek-v4-pro:cloud",
-        "architecture" => "deepseek-v4-pro:cloud",
-        "design-review" => "kimi-k2.7-code:cloud",
+        "ideation" => "deepseek-v4-flash:cloud",
+        "architecture" => "deepseek-v4-flash:cloud",
+        "design-review" => "deepseek-v4-flash:cloud",
         "dafny-contracts" => "ollama", // deterministic — no model call
-        "implementation" => "deepseek-v4-pro:cloud", // legacy alias
-        "dafny-implementation" => "deepseek-v4-pro:cloud", // Pass 1: Dafny bodies
-        "csharp-implementation" => "glm-5.2:cloud", // Pass 2: C# shells
-        "qa" => "glm-5.2:cloud",
-        "documentation" => "deepseek-v4-pro:cloud",
-        _ => "glm-5.2:cloud" // default
+        "implementation" => "deepseek-v4-flash:cloud", // legacy alias
+        "dafny-implementation" => "deepseek-v4-flash:cloud", // Pass 1: Dafny bodies
+        "csharp-implementation" => "deepseek-v4-flash:cloud", // Pass 2: C# shells
+        "qa" => "deepseek-v4-flash:cloud",
+        "documentation" => "deepseek-v4-flash:cloud",
+        _ => "deepseek-v4-flash:cloud" // default
     };
 
     /// <summary>
