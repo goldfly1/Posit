@@ -78,6 +78,43 @@ PARAM_GRIDS = {
         "collectionType": ["seq<int>", "seq<string>", "seq<seq<string>>", "seq<bool>", "seq<(int, string)>"],
         "feature": ["forward", "reverse", "filtered", "bounded"],
     },
+    "pipeline": {
+        "stages": ["3", "4", "5", "6"],
+        "feature": ["basic", "withValidation", "withAuth", "withLogging", "withErrorHandling"],
+    },
+    "observer": {
+        "eventType": ["Click", "Message", "StateChange", "DataUpdate", "Timer"],
+        "feature": ["basic", "withFilter", "withPriority", "withUnsubscribe"],
+    },
+    "strategy": {
+        "algorithm": ["BubbleSort", "QuickSort", "MergeSort", "LinearSearch", "BinarySearch"],
+        "feature": ["basic", "withComparator", "withPredicate"],
+    },
+    "graph": {
+        "traversal": ["BFS", "DFS", "Dijkstra"],
+        "feature": ["basic", "weighted", "directed", "withCycle"],
+    },
+    "cache": {
+        "evictionPolicy": ["LRU", "FIFO", "LFU"],
+        "feature": ["basic", "withTTL", "withSize", "withMaxEntries"],
+    },
+    "scheduler": {
+        "priorityType": ["FIFO", "Priority", "Deadline"],
+        "feature": ["basic", "withDelay", "withRecurring", "withCancel"],
+    },
+    "reducer": {
+        "actionType": ["Increment", "Decrement", "Set", "Add", "Remove", "Reset"],
+        "feature": ["basic", "withUndo", "withHistory"],
+    },
+    "adapter": {
+        "sourceType": ["JSON", "XML", "CSV", "YAML"],
+        "targetType": ["Object", "Map", "Record"],
+        "feature": ["basic", "withValidation", "withErrorHandling"],
+    },
+    "filter": {
+        "predicate": ["even", "odd", "positive", "nonEmpty", "startsWith", "contains"],
+        "feature": ["basic", "chained", "negated", "combined"],
+    },
 }
 
 
