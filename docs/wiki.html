@@ -186,32 +186,32 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-1537638">Posit Architecture</a></li>
+<li class="page"><a href="#page-7545472">Posit Architecture</a></li>
 </ul>
 </li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-8278848">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-1783476">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-2689306">Desktop Port Plan</a></li>
+<li class="page"><a href="#page-13650095">Desktop Port Plan</a></li>
 <li class="folder">Evolution
 <ul>
-<li class="page"><a href="#page-14625989">Architecture Evolution Map</a></li>
+<li class="page"><a href="#page-9419749">Architecture Evolution Map</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-6814222">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-6509238">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-1850059">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-13379832">Handoff 2026 08 08</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-13605108">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-3852872">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
 <li class="folder">Reference
 <ul>
-<li class="page"><a href="#page-11338162">Dafny Runtime Cs</a></li>
-<li class="page"><a href="#page-15341680">Dafny Runtime System Cs</a></li>
-<li class="page"><a href="#page-14745348">Dafny Stdlib</a></li>
+<li class="page"><a href="#page-8142624">Dafny Runtime Cs</a></li>
+<li class="page"><a href="#page-11536630">Dafny Runtime System Cs</a></li>
+<li class="page"><a href="#page-12767638">Dafny Stdlib</a></li>
 </ul>
 </li>
     </ul>
@@ -222,7 +222,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-2689306" data-title="Desktop Port Plan">
+        <div class="page" id="page-13650095" data-title="Desktop Port Plan">
             <h1>Desktop Port Plan</h1>
             <div class="page-path">desktop-port-plan.md</div>
             
@@ -630,7 +630,7 @@ body {
 </ul>
         </div>
 
-        <div class="page" id="page-6814222" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-1850059" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -647,7 +647,7 @@ body {
 
 </ul><h2 id="current-state">Current State</h2>
 
-<p><strong>Posit repo:</strong> 42+ commits, 9 projects (Posit.Dt added), build clean (0 errors, 0 warnings)</p>
+<p><strong>Posit repo:</strong> 60+ commits, 9 projects, build clean (0 errors, 0 warnings)</p>
 
 <table>
 <tr>
@@ -855,6 +855,11 @@ body {
 <li style="margin-left:0ch"><strong>Snowball duplicate key fixed:</strong> GroupBy before ToDictionary handles duplicate module names (Posit, Aug 8)</li>
 <li style="margin-left:0ch"><strong>Dafny stdlib indexed:</strong> 57 modules, 18,501 lines of Dafny source in wiki, searchable (Posit, Aug 8)</li>
 <li style="margin-left:0ch"><strong>Architecture evolution map:</strong> 7 approaches mapped, practical path 3→4→6, north star 7 (Posit, Aug 8)</li>
+<li style="margin-left:0ch"><strong>9 new patterns added:</strong> pipeline, observer, strategy, graph, cache, scheduler, reducer, adapter, filter — 75 VC, 0 errors (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>17 patterns total:</strong> 116 VC, 0 errors — all with pre-written, Z3-proven method bodies (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>Registry DB live:</strong> ~1290 variant files on disk, ~755 indexed in pgvector, searchable by semantic similarity (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>Variant generation results:</strong> substitution = 100% pass, 0 tokens. Model generation = 60-100% pass, 80-470K tokens per pattern. Self-review HARMFUL (removed). 20/call = sweet spot. &gt;20 degrades. Thinking-mode bug causes 65K output, 0 extracted. (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>Layered decomposition:</strong> wide-area map → locale design for 50+ module projects. Added to evolution wiki. (Posit, Aug 9)</li>
 
 </ul><h2 id="key-documents">Key Documents</h2>
 
@@ -956,9 +961,10 @@ body {
 <li style="margin-left:0ch"><strong>Data capture</strong> — 6 migrations, 4 repositories, PromptLogger, AuditRepository</li>
 <li style="margin-left:0ch"><strong>Imp appeal process</strong> — kimi-k2.7-code:cloud reviews io-shell QA disputes</li>
 <li style="margin-left:0ch"><strong>Plan gaps closed</strong> — 13 key decisions documented</li>
-<li style="margin-left:0ch"><strong>Pattern registry</strong> — 10 patterns + 6 stub files, all Z3-verified, PatternRegistry.cs, ComposeSkeleton, Suggest</li>
-<li style="margin-left:0ch"><strong>Approach 3 — pre-written bodies</strong> — 10 patterns with Z3-proven bodies (41 VC, 0 errors), Imp skipped when pre-verified</li>
-<li style="margin-left:0ch"><strong>Bug fixes</strong> — snowball duplicate key, C# stub cap name matching, QA JSON sanitization, model name corrected</li>
+<li style="margin-left:0ch"><strong>Pattern registry</strong> — 17 patterns + 6 stub files, all Z3-verified (116 VC, 0 errors). PatternRegistry.cs, ComposeSkeleton, Suggest. 9 new patterns added Aug 9.</li>
+<li style="margin-left:0ch"><strong>Registry DB</strong> — pgvector with ~1290 variant files on disk, ~755 indexed, searchable by semantic similarity. Scripts: generate-batch.py, index-registry.py.</li>
+<li style="margin-left:0ch"><strong>Approach 3 — pre-written bodies</strong> — 17 patterns with Z3-proven bodies (116 VC, 0 errors), Imp skipped when pre-verified</li>
+<li style="margin-left:0ch"><strong>Bug fixes</strong> — snowball duplicate key, C# stub cap name matching, QA JSON sanitization, model name corrected, round-prefixed variant naming, expanded parameter grids</li>
 <li style="margin-left:0ch"><strong>Dafny stdlib reference</strong> — 57 modules indexed in wiki, searchable</li>
 <li style="margin-left:0ch"><strong>Architecture evolution map</strong> — 7 approaches, practical path 3→4→6</li>
 <li style="margin-left:0ch"><strong>HTML wiki</strong> — 10 pages, 1MB, auto-regeneratable</li>
@@ -970,8 +976,9 @@ body {
 </ul><h3 id="next-steps">Next Steps</h3>
 
 <ul><li style="margin-left:0ch"><strong>Fix flash reasoning mode</strong> — <code class="inline">deepseek-v4-flash:cloud</code> sometimes enters thinking/reasoning mode, producing 65K output tokens with 0 extractable code. Fix: disable thinking via Ollama API (<code class="inline">&quot;think&quot;: false</code>) or switch to <code class="inline">/api/chat</code> endpoint which separates thinking from response. Successful runs used 21K output tokens (code only).</li>
-<li style="margin-left:0ch"><strong>Approach 4 — combinatorial generation + vector DB.</strong> 20 variants per batch = sweet spot (100% first-try, 24K tokens). Index verified variants in pgvector. ~3,000 meaningful variants target across 17 patterns. <code class="inline">deepseek-v4-flash:cloud</code> as generation engine.</li>
-<li style="margin-left:0ch"><strong>Pattern registry: 14 more files</strong> — 8 patterns (pipeline, observer, strategy, adapter, graph/tree, cache, scheduler, reducer) + 6 stubs (crypto, auth, env, log, serialize, compress). Full registry = 17 patterns + 12 stub files = 99.99% coverage.</li>
+<li style="margin-left:0ch"><strong>Approach 4 — combinatorial generation + vector DB (IN PROGRESS).</strong> 17 patterns with Z3-proven bodies (116 VC, 0 errors). ~1290 variant files on disk, ~755 indexed in pgvector. Batch generation: 20/call = 100% pass. Substitution = free but make-weight (needs {{feature}} placeholders for real variety). <code class="inline">deepseek-v4-flash:cloud</code> as generation engine. Thinking-mode bug causes 65K output — fix: disable thinking via Ollama API.</li>
+<li style="margin-left:0ch"><strong>Layered decomposition (FUTURE).</strong> For 50+ module projects: wide-area map (pools + edges) → locale design (each cluster independently). Added to evolution wiki. Not needed now.</li>
+<li style="margin-left:0ch"><strong>Pattern registry: 9 new patterns added</strong> — pipeline, observer, strategy, graph, cache, scheduler, reducer, adapter, filter. All Z3-proven (75 VC). Total: 17 patterns, 116 VC, 0 errors.</li>
 <li style="margin-left:0ch"><strong>Step 4: Limits and Budgets</strong> — 200-line cap, 10 method cap, 5 class cap enforcement</li>
 <li style="margin-left:0ch"><strong>Session resume</strong> — <code class="inline">--session=&lt;id&gt;</code> to resume from DB-persisted state</li>
 <li style="margin-left:0ch"><strong>Security ring</strong> — before frontend clone. Crypto + auth stubs + access control logic patterns.</li>
@@ -999,7 +1006,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-6509238" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-13379832" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.2</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -1278,7 +1285,7 @@ posit verify &lt;session-id&gt;
 </ul>
         </div>
 
-        <div class="page" id="page-2555742" data-title="Posit Architecture">
+        <div class="page" id="page-12136051" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2136,7 +2143,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-2880672" data-title="Dafny Contract Templates">
+        <div class="page" id="page-9080983" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2302,7 +2309,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-9502859" data-title="Posit Architecture Evolution Map">
+        <div class="page" id="page-15123389" data-title="Posit Architecture Evolution Map">
             <h1>Posit Architecture Evolution Map</h1>
             <div class="page-path">evolution\architecture-evolution-map.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: design</span> · <span class='meta-item'><b>tags</b>: [architecture, evolution, registry, vector-db, vision]</span> · <span class='meta-item'><b>component</b>: posit</span> · <span class='meta-item'><b>version</b>: 0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -2773,10 +2780,40 @@ NOW (Approach 2)
 <li style="margin-left:0ch"><strong>The skeleton is the carapace.</strong> The file on disk is the authority.</li>
 <li style="margin-left:0ch"><strong>The architect writes test cases.</strong> These are the acceptance criteria. Always.</li>
 <li style="margin-left:0ch"><strong>Pass 2 plugs oar holes.</strong> C# stub caps snap onto <code class="inline">{:extern}</code> portals.</li>
-<li style="margin-left:0ch"><strong>Nothing ships unproven.</strong></li></ul>
+<li style="margin-left:0ch"><strong>Nothing ships unproven.</strong></li>
+
+</ul><hr>
+
+<h2 id="future-build-out-layered-architectural-decomposition">Future Build-Out: Layered Architectural Decomposition</h2>
+
+<p><strong>Concept:</strong> For large projects (50+ modules), the architect doesn&#x27;t design everything at once. It works in two passes:</p>
+
+<ul><li><strong>Wide-area map:</strong> The architect maps data pools and edges — which pools exist, which edges connect them, which direction data flows. This is the high-level design. Each edge is a type boundary (what crosses between locales). Each pool is a data cluster. The wide-area map is a contract, not an implementation.</li>
+
+<li><strong>Locale design:</strong> Each locale (a cluster of modules around a data pool) is designed independently. The locale&#x27;s skeleton only needs the edges — the <code class="inline">include</code> directives and the types that cross the boundary. The internal modules are the locale&#x27;s own problem.</li>
+
+</ul><pre><code class="language-">
+Wide-area map (first pass):
+  CSV input → [Parse locale] → [Validate locale] → validated data → [Transform locale] → SQL → [Write locale] → DB
+
+Each arrow = an edge (type boundary).
+Each box = a locale (designed independently).
+</code></pre>
+
+<p><strong>Why this works:</strong> The skeleton is the carapace. The edges are tattooed on the wide-area map as <code class="inline">include</code> directives and type declarations. Locale A doesn&#x27;t need locale B&#x27;s internals — just its public surface. The wide-area map carries the public surfaces. Each locale design fills in the internal modules with its own pattern selection, skeleton composition, and Z3 verification.</p>
+
+<p><strong>How it fits the pipeline:</strong></p>
+<ul><li style="margin-left:0ch">Architecture phase (pass 1): produce wide-area contract — pools, edges, types</li>
+<li style="margin-left:0ch">Architecture phase (pass 2): for each locale, select patterns + compose skeletons + Z3 verify</li>
+<li style="margin-left:0ch">DesignContext snowball: carries the wide-area map + each locale&#x27;s modules</li>
+<li style="margin-left:0ch">The registry: searches can be scoped to a locale — &quot;find a parser for the CSV input locale&quot;</li>
+
+</ul><p><strong>When this matters:</strong> Projects with 50+ modules where the architect can&#x27;t hold the whole design in one context. The wide-area map is the decomposition that makes it tractable. Each locale is a small problem. The edges are the contracts between them.</p>
+
+<p><strong>Not needed now.</strong> Current projects (CSV-to-SQL, config validator) are 2-5 modules. Layered decomposition is for when the project is too big for one architecture pass. Add to the pipeline when the first 50-module project arrives.</p>
         </div>
 
-        <div class="page" id="page-3473896" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-423680" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             
@@ -3066,7 +3103,7 @@ public class CsvFileReader
 <li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
         </div>
 
-        <div class="page" id="page-906028" data-title="DafnyRuntime.cs — C# Runtime Reference">
+        <div class="page" id="page-9091720" data-title="DafnyRuntime.cs — C# Runtime Reference">
             <h1>DafnyRuntime.cs — C# Runtime Reference</h1>
             <div class="page-path">reference\dafny-runtime-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -5047,7 +5084,7 @@ namespace Dafny {
 
         </div>
 
-        <div class="page" id="page-8479259" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
+        <div class="page" id="page-475909" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
             <h1>DafnyRuntimeSystemModule.cs — C# System Module Reference</h1>
             <div class="page-path">reference\dafny-runtime-system-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -8750,7 +8787,7 @@ namespace _System {
 
         </div>
 
-        <div class="page" id="page-12986287" data-title="Dafny Standard Library Reference">
+        <div class="page" id="page-2433938" data-title="Dafny Standard Library Reference">
             <h1>Dafny Standard Library Reference</h1>
             <div class="page-path">reference\dafny-stdlib.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [dafny, stdlib, reference, types, contracts]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
