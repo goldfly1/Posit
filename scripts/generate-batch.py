@@ -35,18 +35,21 @@ STAGING_DIR.mkdir(parents=True, exist_ok=True)
 
 PARAM_GRIDS = {
     "parser": {
-        "delimiter": [",", "|", "\t", ";", " "],
-        "quoteChar": ['""', '"', "'"],
+        "delimiter": [",", "|", "\t", ";", " ", ":"],
+        "quoteChar": ['""', '"', "'", "`"],
         "hasHeader": ["true", "false"],
+        "feature": ["basic", "quoted", "escaped", "commented", "typed", "multiLine"],
     },
     "validator": {
-        "rule": ["nonEmpty", "minLength", "maxLength", "typeCheck", "range"],
-        "minVal": ["0", "1", "5"],
-        "maxVal": ["10", "50", "100", "1000"],
+        "rule": ["nonEmpty", "minLength", "maxLength", "typeCheck", "range", "regex", "unique", "required"],
+        "minVal": ["0", "1", "5", "10"],
+        "maxVal": ["10", "50", "100", "1000", "10000"],
+        "feature": ["basic", "collectErrors", "shortCircuit", "withWarnings"],
     },
     "repository": {
-        "entityType": ["User", "Product", "Order", "Session", "Config", "Task"],
+        "entityType": ["User", "Product", "Order", "Session", "Config", "Task", "Article", "Event"],
         "idType": ["int", "string"],
+        "feature": ["basic", "withUpdate", "withDelete", "withFind", "withSort", "withCount"],
     },
     "state-machine": {
         "states": [
@@ -54,22 +57,26 @@ PARAM_GRIDS = {
             ["Open", "Closed", "Error"],
             ["Pending", "Running", "Complete", "Failed"],
             ["Draft", "Review", "Published", "Archived"],
+            ["New", "Assigned", "InProgress", "Testing", "Done"],
+            ["Created", "Paid", "Shipped", "Delivered", "Cancelled"],
         ],
-        "events": [["start", "finish"], ["open", "close", "fail"], ["submit", "approve", "reject"]],
+        "events": [["start", "finish"], ["open", "close", "fail"], ["submit", "approve", "reject"], ["create", "update", "delete"]],
     },
     "transformer": {
-        "operation": ["ToUpper", "Reverse", "Sort", "Trim", "Duplicate"],
+        "operation": ["ToUpper", "Reverse", "Sort", "Trim", "Duplicate", "ToLower", "Filter", "Map", "Flatten", "Zip"],
     },
     "aggregator": {
-        "operation": ["Sum", "Max", "Min", "CountPositive", "CountNegative", "Average"],
-        "collectionType": ["seq<int>", "seq<string>"],
+        "operation": ["Sum", "Max", "Min", "CountPositive", "CountNegative", "Average", "Count", "Any", "All"],
+        "collectionType": ["seq<int>", "seq<string>", "seq<bool>"],
     },
     "builder": {
-        "separator": [", ", " | ", " - ", "; ", "\n"],
+        "separator": [", ", " | ", " - ", "; ", "\n", " :: ", " -> "],
         "validateEmpty": ["true", "false"],
+        "feature": ["basic", "withPrefix", "withSuffix", "withQuote", "withLimit"],
     },
     "iterator": {
-        "collectionType": ["seq<int>", "seq<string>", "seq<seq<string>>"],
+        "collectionType": ["seq<int>", "seq<string>", "seq<seq<string>>", "seq<bool>", "seq<(int, string)>"],
+        "feature": ["forward", "reverse", "filtered", "bounded"],
     },
 }
 
@@ -219,13 +226,14 @@ def gen_substitution_variant(pattern_name: str, params: dict, index: int) -> str
     return header + source
 
 
-def run_batch_pattern(pattern_name: str, batch_size: int, retries: int, use_wiki: bool = True):
+def run_batch_pattern(pattern_name: str, batch_size: int, retries: int, use_wiki: bool = True, round_num: int = 0):
     """Generate all variants for a pattern:
     1. Try substitution (free, no model call)
     2. Batch-generate remaining variants (one model call)
     3. Z3 sweep all variants
     4. Batch correction for failures
     """
+    round_prefix = f"r{round_num:02d}-" if round_num > 0 else ""
     combos = get_param_combos(pattern_name, batch_size)
     if not combos:
         print(f"[skip] No parameter grid for {pattern_name}")
@@ -251,7 +259,7 @@ def run_batch_pattern(pattern_name: str, batch_size: int, retries: int, use_wiki
     needs_generation = []
     
     for i, params in enumerate(combos):
-        variant_name = f"{pattern_name}-v{i:03d}"
+        variant_name = f"{pattern_name}-{round_prefix}v{i:03d}"
         variant_path = STAGING_DIR / f"{variant_name}.dfy"
         
         source = gen_substitution_variant(pattern_name, params, i)
@@ -487,7 +495,7 @@ def main():
                 print(f"\n{'*'*60}")
                 print(f"* ROUND {r+1}/{rounds} for pattern '{p}'")
                 print(f"{'*'*60}")
-                results = run_batch_pattern(p, batch_size, args.retries, use_wiki)
+                results = run_batch_pattern(p, batch_size, args.retries, use_wiki, round_num=r)
                 round_results["passed"] += results["passed"]
                 round_results["failed"] += results["failed"]
                 round_results["tokens"] += results["tokens"]
