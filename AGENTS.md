@@ -25,7 +25,11 @@
 - **Dafny:** 4.11.0 at `C:\Users\goldf\.dotnet\tools\dafny.exe`
 - **Z3:** 4.12.1 at `C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe`
 - **Ollama:** localhost:11434 — all model calls go through here
-- **PostgreSQL 18 + pgvector:** Docker container on port 5434, `shepherd` database (shared with Posit for wiki)
+- **PostgreSQL 18 + pgvector:** Docker container on port 5434, `shepherd` database (shared with Posit for wiki + registry). User: `shepherd`, password: `shepherd`.
+- **Wiki vector index:** Postgres `wiki.wiki_chunks` table on port 5434. Markdown docs indexed with embeddings. `scripts/sync-wiki-html.sh` re-indexes and regenerates HTML. `docs/wiki.html` is the human-readable output.
+- **Registry vector DB:** `posit_registry.variants` table — see decision 15 below.
+- **Dafny stdlib reference:** 57 modules (18,501 lines) indexed in `wiki/reference/dafny-stdlib.md`. Also `wiki/reference/dafny-runtime-cs.md` and `wiki/reference/dafny-runtime-system-cs.md` for C# runtime. Searchable via wiki vector index.
+- **Pattern reference card:** `patterns/dafny-reference-card.dfy` — Z3-proven syntax examples (9 VC, 0 errors). Injected into model prompts to prevent common errors.
 - **Shell:** git-bash (MSYS), POSIX syntax. NOT PowerShell.
 - **Kill dotnet:** `powershell.exe -Command "Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`
 
