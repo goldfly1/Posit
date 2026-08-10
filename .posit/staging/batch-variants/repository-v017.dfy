@@ -17,7 +17,9 @@ method Add(items: seq<Product>, entity: Product) returns (result: Result<seq<Pro
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
     invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != entity.id)
-    decreases |items| - i
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == entity.id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == entity.id {
       found := true;
@@ -45,7 +47,9 @@ method Remove(items: seq<Product>, id: int) returns (result: Result<seq<Product>
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
     invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != id)
-    decreases |items| - i
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == id {
       found := true;
@@ -64,29 +68,29 @@ method Remove(items: seq<Product>, id: int) returns (result: Result<seq<Product>
 
 method Find(items: seq<Product>, id: int) returns (result: Result<Product>)
   ensures result.Success? ==> result.value.id == id
+  ensures result.Failure? ==> result.error == "not found"
 {
   var i := 0;
-  while i < |items|
+  var found := false;
+  while i < |items| && !found
     invariant 0 <= i <= |items|
-    invariant forall k :: 0 <= k < i ==> items[k].id != id
-    decreases |items| - i
+    invariant NoDuplicates(items)
+    invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != id)
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == id {
-      result := Success(items[i]);
-      return;
+      found := true;
+    } else {
+      i := i + 1;
     }
-    i := i + 1;
   }
-  result := Failure("not found");
-}
-
-function FindMinIdx(items: seq<Product>, start: int): (idx: int)
-  requires 0 <= start < |items|
-  ensures start <= idx < |items|
-  decreases |items| - start
-{
-  if start == |items| - 1 then start
-  else
-    var rest := FindMinIdx(items, start + 1);
-    if items[start].id <= items[rest].id then start else rest
+  if found {
+    assert 0 <= i < |items|;
+    assert items[i].id == id;
+    result := Success(items[i]);
+  } else {
+    result := Failure("not found");
+  }
 }

@@ -133,20 +133,27 @@ public sealed class ArchitecturePhase : IPhase
         {
             if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
             {
+                var suggestion = PatternRegistry.Suggest(comp);
                 var patternName = !string.IsNullOrWhiteSpace(comp.PatternName)
                     ? comp.PatternName
-                    : PatternRegistry.Suggest(comp).PatternName;
+                    : suggestion.PatternName;
 
                 var stubNames = comp.StubNames?.Length > 0
                     ? comp.StubNames
-                    : PatternRegistry.Suggest(comp).StubNames;
+                    : suggestion.StubNames;
+
+                // Log semantic search result if used
+                if (suggestion.SimilarityScore > 0.7f && suggestion.BestVariantDescription != null)
+                {
+                    Console.Error.WriteLine($"[Posit] Architecture — semantic match for {comp.Name}: {suggestion.BestVariantDescription} (similarity={suggestion.SimilarityScore:F2})");
+                }
 
                 if (!_registry.HasPattern(patternName))
                 {
                     Console.Error.WriteLine($"[Posit] Architecture — pattern '{patternName}' not in registry, falling back to suggest for {comp.Name}");
-                    var suggestion = PatternRegistry.Suggest(comp);
-                    patternName = suggestion.PatternName;
-                    stubNames = suggestion.StubNames;
+                    var fallback = PatternRegistry.Suggest(comp);
+                    patternName = fallback.PatternName;
+                    stubNames = fallback.StubNames;
                 }
 
                 var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{comp.Name}");

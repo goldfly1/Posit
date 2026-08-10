@@ -8,3 +8,201 @@ Indexing 668 variant files from C:\Users\goldf\Posit\.posit\staging\batch-varian
   [4/668] adapter-r01-v003     ❌ 📝 unknown variant
   [5/668] adapter-r01-v004     ❌ 📝 unknown variant
   [6/668] adapter-r01-v005     ❌ 📝 unknown variant
+  [7/668] adapter-r01-v006     ❌ 📝 unknown variant
+  [8/668] adapter-r01-v007     ❌ 📝 unknown variant
+  [9/668] adapter-r01-v008     ❌ 📝 unknown variant
+  [10/668] adapter-r01-v009     ❌ 📝 unknown variant
+  [11/668] adapter-r01-v010     ❌ 📝 unknown variant
+  [12/668] adapter-r01-v011     ❌ 📝 unknown variant
+  [13/668] adapter-r01-v012     ❌ 📝 unknown variant
+  [14/668] adapter-r01-v013     ❌ 📝 unknown variant
+  [15/668] adapter-r01-v014     ❌ 📝 unknown variant
+  [16/668] adapter-r01-v015     ❌ 📝 unknown variant
+  [17/668] adapter-r01-v016     ❌ 📝 unknown variant
+  [18/668] adapter-r01-v017     ❌ 📝 unknown variant
+  [19/668] adapter-r01-v018     ❌ 📝 unknown variant
+  [20/668] adapter-r01-v019     ❌ 📝 unknown variant
+  [21/668] adapter-r02-v000     ✅ 📝 unknown variant
+  [22/668] adapter-r02-v001     ✅ 📝 unknown variant
+  [23/668] adapter-r02-v002     ✅ 📝 unknown variant
+  [24/668] adapter-r02-v003     ✅ 📝 unknown variant
+  [25/668] adapter-r02-v004     ✅ 📝 unknown variant
+  [26/668] adapter-r02-v005     ✅ 📝 unknown variant
+  [27/668] adapter-r02-v006     ✅ 📝 unknown variant
+  [28/668] adapter-r02-v007     ✅ 📝 unknown variant
+  [29/668] adapter-r02-v008     ✅ 📝 unknown variant
+  [30/668] adapter-r02-v009     ✅ 📝 unknown variant
+  [31/668] adapter-r02-v010     ✅ 📝 unknown variant
+  [32/668] adapter-r02-v011     ✅ 📝 unknown variant
+  [33/668] adapter-r02-v012     ✅ 📝 unknown variant
+  [34/668] adapter-r02-v013     ✅ 📝 unknown variant
+  [35/668] adapter-r02-v014     ✅ 📝 unknown variant
+  [36/668] adapter-r02-v015     ✅ 📝 unknown variant
+  [37/668] adapter-r02-v016     ✅ 📝 unknown variant
+  [38/668] adapter-r02-v017     ✅ 📝 unknown variant
+  [39/668] adapter-r02-v018     ✅ 📝 unknown variant
+  [40/668] adapter-r02-v019     ✅ 📝 unknown variant
+  [41/668] adapter-r03-v000     ❌ 📝 unknown variant
+  [42/668] adapter-r03-v001     ❌ 📝 unknown variant
+  [43/668] adapter-r03-v002     ❌ 📝 unknown variant
+  [44/668] adapter-r03-v003     ❌ 📝 unknown variant
+  [45/668] adapter-r03-v004     ❌ 📝 unknown variant
+  [46/668] adapter-r03-v005     ❌ 📝 unknown variant
+  [47/668] adapter-r03-v006     ❌ 📝 unknown variant
+  [48/668] adapter-r03-v007     ❌ 📝 unknown variant
+  [49/668] adapter-r03-v008     ❌ 📝 unknown variant
+  [50/668] adapter-r03-v009     ❌ 📝 unknown variant
+  [51/668] adapter-r03-v010     ❌ 📝 unknown variant
+  [52/668] adapter-r03-v011     ❌ 📝 unknown variant
+  [53/668] adapter-r03-v012     ❌ 📝 unknown variant
+  [54/668] adapter-r03-v013     ❌ 📝 unknown variant
+  [55/668] adapter-r03-v014     ❌ 📝 unknown variant
+  [56/668] adapter-r03-v015     ❌ 📝 unknown variant
+  [57/668] adapter-r03-v016     ❌ 📝 unknown variant
+  [58/668] adapter-r03-v017     ❌ 📝 unknown variant
+  [59/668] adapter-r03-v018     ❌ 📝 unknown variant
+  [60/668] adapter-r03-v019     ❌ 📝 unknown variant
+  [61/668] adapter-v000         ❌ 📝 unknown variant
+  [62/668] adapter-v001         ❌ 📝 unknown variant
+  [63/668] adapter-v002         ❌ 📝 unknown variant
+  [64/668] adapter-v003         ❌ 📝 unknown variant
+  [65/668] adapter-v004         ❌ 📝 unknown variant
+  [66/668] adapter-v005         ❌ 📝 unknown variant
+  [67/668] adapter-v006         ❌ 📝 unknown variant
+  [68/668] adapter-v007         ❌ 📝 unknown variant
+  [69/668] adapter-v008         ✅ 📝 unknown variant
+  [70/668] adapter-v009         ✅ 📝 unknown variant
+  [71/668] adapter-v010         ✅ 📝 unknown variant
+  [72/668] adapter-v011         ✅ 📝 unknown variant
+  [73/668] adapter-v012         ✅ 📝 unknown variant
+  [74/668] adapter-v013         ✅ 📝 unknown variant
+  [75/668] adapter-v014         ✅ 📝 unknown variant
+  [76/668] adapter-v015         ✅ 📝 unknown variant
+  [77/668] adapter-v016         ✅ 📝 unknown variant
+  [78/668] adapter-v017         ✅ 📝 unknown variant
+  [79/668] adapter-v018         ✅ 📝 unknown variant
+  [80/668] adapter-v019         ❌ 📝 unknown variant
+  [81/668] aggregator-r01-v000  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<int>)
+  [82/668] aggregator-r01-v001  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<string
+  [83/668] aggregator-r01-v002  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<bool>)
+  [84/668] aggregator-r01-v003  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<int>)
+  [85/668] aggregator-r01-v004  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<string
+  [86/668] aggregator-r01-v005  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<bool>)
+  [87/668] aggregator-r01-v006  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<int>)
+  [88/668] aggregator-r01-v007  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<string
+  [89/668] aggregator-r01-v008  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<bool>)
+  [90/668] aggregator-r01-v009  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [91/668] aggregator-r01-v010  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [92/668] aggregator-r01-v011  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [93/668] aggregator-r01-v012  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [94/668] aggregator-r01-v013  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [95/668] aggregator-r01-v014  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [96/668] aggregator-r01-v015  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<in
+  [97/668] aggregator-r01-v016  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<st
+  [98/668] aggregator-r01-v017  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<bo
+  [99/668] aggregator-r01-v018  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<int>
+  [100/668] aggregator-r01-v019  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<stri
+  [101/668] aggregator-r02-v000  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<int>)
+  [102/668] aggregator-r02-v001  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<string
+  [103/668] aggregator-r02-v002  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<bool>)
+  [104/668] aggregator-r02-v003  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<int>)
+  [105/668] aggregator-r02-v004  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<string
+  [106/668] aggregator-r02-v005  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<bool>)
+  [107/668] aggregator-r02-v006  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<int>)
+  [108/668] aggregator-r02-v007  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<string
+  [109/668] aggregator-r02-v008  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<bool>)
+  [110/668] aggregator-r02-v009  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [111/668] aggregator-r02-v010  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [112/668] aggregator-r02-v011  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [113/668] aggregator-r02-v012  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [114/668] aggregator-r02-v013  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [115/668] aggregator-r02-v014  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [116/668] aggregator-r02-v015  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<in
+  [117/668] aggregator-r02-v016  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<st
+  [118/668] aggregator-r02-v017  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<bo
+  [119/668] aggregator-r02-v018  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<int>
+  [120/668] aggregator-r02-v019  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<stri
+  [121/668] aggregator-r03-v000  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<int>)
+  [122/668] aggregator-r03-v001  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<string
+  [123/668] aggregator-r03-v002  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<bool>)
+  [124/668] aggregator-r03-v003  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<int>)
+  [125/668] aggregator-r03-v004  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<string
+  [126/668] aggregator-r03-v005  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<bool>)
+  [127/668] aggregator-r03-v006  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<int>)
+  [128/668] aggregator-r03-v007  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<string
+  [129/668] aggregator-r03-v008  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<bool>)
+  [130/668] aggregator-r03-v009  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [131/668] aggregator-r03-v010  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [132/668] aggregator-r03-v011  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [133/668] aggregator-r03-v012  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [134/668] aggregator-r03-v013  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [135/668] aggregator-r03-v014  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [136/668] aggregator-r03-v015  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<in
+  [137/668] aggregator-r03-v016  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<st
+  [138/668] aggregator-r03-v017  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<bo
+  [139/668] aggregator-r03-v018  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<int>
+  [140/668] aggregator-r03-v019  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<stri
+  [141/668] aggregator-r04-v000  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<int>)
+  [142/668] aggregator-r04-v001  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<string
+  [143/668] aggregator-r04-v002  ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<bool>)
+  [144/668] aggregator-r04-v003  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<int>)
+  [145/668] aggregator-r04-v004  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<string
+  [146/668] aggregator-r04-v005  ✅ 📝 aggregator variant (operation=Max, collectionType=seq<bool>)
+  [147/668] aggregator-r04-v006  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<int>)
+  [148/668] aggregator-r04-v007  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<string
+  [149/668] aggregator-r04-v008  ✅ 📝 aggregator variant (operation=Min, collectionType=seq<bool>)
+  [150/668] aggregator-r04-v009  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [151/668] aggregator-r04-v010  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [152/668] aggregator-r04-v011  ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [153/668] aggregator-r04-v012  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [154/668] aggregator-r04-v013  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [155/668] aggregator-r04-v014  ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [156/668] aggregator-r04-v015  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<in
+  [157/668] aggregator-r04-v016  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<st
+  [158/668] aggregator-r04-v017  ✅ 📝 aggregator variant (operation=Average, collectionType=seq<bo
+  [159/668] aggregator-r04-v018  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<int>
+  [160/668] aggregator-r04-v019  ✅ 📝 aggregator variant (operation=Count, collectionType=seq<stri
+  [161/668] aggregator-v000      ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<int>)
+  [162/668] aggregator-v001      ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<string
+  [163/668] aggregator-v002      ✅ 📝 aggregator variant (operation=Sum, collectionType=seq<bool>)
+  [164/668] aggregator-v003      ✅ 📝 aggregator variant (operation=Max, collectionType=seq<int>)
+  [165/668] aggregator-v004      ✅ 📝 aggregator variant (operation=Max, collectionType=seq<string
+  [166/668] aggregator-v005      ✅ 📝 aggregator variant (operation=Max, collectionType=seq<bool>)
+  [167/668] aggregator-v006      ✅ 📝 aggregator variant (operation=Min, collectionType=seq<int>)
+  [168/668] aggregator-v007      ✅ 📝 aggregator variant (operation=Min, collectionType=seq<string
+  [169/668] aggregator-v008      ✅ 📝 aggregator variant (operation=Min, collectionType=seq<bool>)
+  [170/668] aggregator-v009      ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [171/668] aggregator-v010      ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [172/668] aggregator-v011      ✅ 📝 aggregator variant (operation=CountPositive, collectionType=
+  [173/668] aggregator-v012      ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [174/668] aggregator-v013      ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [175/668] aggregator-v014      ✅ 📝 aggregator variant (operation=CountNegative, collectionType=
+  [176/668] aggregator-v015      ✅ 📝 aggregator variant (operation=Average, collectionType=seq<in
+  [177/668] aggregator-v016      ✅ 📝 aggregator variant (operation=Average, collectionType=seq<st
+  [178/668] aggregator-v017      ✅ 📝 aggregator variant (operation=Average, collectionType=seq<bo
+  [179/668] aggregator-v018      ✅ 📝 aggregator variant (operation=Count, collectionType=seq<int>
+  [180/668] aggregator-v019      ✅ 📝 aggregator variant (operation=Count, collectionType=seq<stri
+  [181/668] cache-r01-v000       ✅ 📝 unknown variant
+  [182/668] cache-r01-v001       ✅ 📝 unknown variant
+  [183/668] cache-r01-v002       ❌ 📝 unknown variant
+  [184/668] cache-r01-v003       ❌ 📝 unknown variant
+  [185/668] cache-r01-v004       ✅ 📝 unknown variant
+  [186/668] cache-r01-v005       ✅ 📝 unknown variant
+  [187/668] cache-r01-v006       ✅ 📝 unknown variant
+  [188/668] cache-r01-v007       ❌ 📝 unknown variant
+  [189/668] cache-r01-v008       ❌ 📝 unknown variant
+  [190/668] cache-r01-v009       ❌ 📝 unknown variant
+  [191/668] cache-r01-v010       ❌ 📝 unknown variant
+  [192/668] cache-r01-v011       ❌ 📝 unknown variant
+  [193/668] cache-r02-v000       ❌ 📝 unknown variant
+  [194/668] cache-r02-v001       ❌ 📝 unknown variant
+  [195/668] cache-r02-v002       ❌ 📝 unknown variant
+  [196/668] cache-r02-v003       ❌ 📝 unknown variant
+  [197/668] cache-r02-v004       ❌ 📝 unknown variant
+  [198/668] cache-r02-v005       ❌ 📝 unknown variant
+  [199/668] cache-r02-v006       ❌ 📝 unknown variant
+  [200/668] cache-r02-v007       ❌ 📝 unknown variant
+  [201/668] cache-r02-v008       ❌ 📝 unknown variant
+  [202/668] cache-r02-v009       ❌ 📝 unknown variant
+  [203/668] cache-r02-v010       ❌ 📝 unknown variant
+  [204/668] cache-r02-v011       ❌ 📝 unknown variant

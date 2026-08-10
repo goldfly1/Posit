@@ -296,33 +296,144 @@ public sealed class PatternRegistry
     /// responsibility, and classification. This is deterministic guidance for
     /// the architect model, not a hard rule.
     /// </summary>
+    /// <summary>
+    /// Search the variant registry for the closest match to the given component description.
+    /// Uses pgvector cosine similarity to find the best pre-proven variant.
+    /// Returns null if no match found or DB unavailable.
+    /// </summary>
+    public static VariantSearchResult? SearchVariants(string componentDescription)
+    {
+        try
+        {
+            // Get embedding from Ollama
+            var embedding = GetEmbedding(componentDescription);
+            if (embedding.Length == 0) return null;
+
+            // Query pgvector for nearest match
+            using var conn = new Npgsql.NpgsqlConnection(
+                "Host=localhost;Port=5434;Database=shepherd;Username=shepherd;Password=shepherd");
+            conn.Open();
+
+            var vectorStr = $"[{string.Join(",", embedding.Select(v => v.ToString("G8")))}]";
+            using var cmd = new Npgsql.NpgsqlCommand(@"
+                SELECT id, pattern, description, source_path, vc_count,
+                       1 - (embedding <=> @vec::vector) AS similarity
+                FROM posit_registry.variants
+                WHERE verified = true
+                ORDER BY embedding <=> @vec::vector
+                LIMIT 1", conn);
+
+            cmd.Parameters.AddWithValue("@vec", vectorStr);
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                return new VariantSearchResult(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetInt32(4),
+                    (float)reader.GetDouble(5)
+                );
+            }
+            return null;
+        }
+        catch
+        {
+            // DB unavailable — fall back to keyword matching
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get embedding from Ollama nomic-embed-text model.
+    /// </summary>
+    private static float[] GetEmbedding(string text)
+    {
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                model = "nomic-embed-text",
+                prompt = text
+            });
+            using var client = new System.Net.Http.HttpClient();
+            var content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = client.PostAsync("http://localhost:11434/api/embeddings", content).Result;
+            if (!response.IsSuccessStatusCode) return [];
+            var responseJson = response.Content.ReadAsStringAsync().Result;
+            using var doc = System.Text.Json.JsonDocument.Parse(responseJson);
+            if (doc.RootElement.TryGetProperty("embedding", out var embArr))
+            {
+                return embArr.EnumerateArray().Select(e => e.GetSingle()).ToArray();
+            }
+            return [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     public static RegistrySuggestion Suggest(Component component)
     {
         var name = component.Name.ToLowerInvariant();
         var responsibility = component.Responsibility.ToLowerInvariant();
         var text = $"{name} {responsibility}";
 
-        var pattern = "transformer"; // default
+        // Try semantic search first — find the closest pre-proven variant in the registry
+        var semanticMatch = SearchVariants(text);
+        if (semanticMatch is { Similarity: > 0.7f })
+        {
+            // Found a good match in the registry — use its pattern
+            var pattern = semanticMatch.Pattern;
+            var semanticStubs = new List<string>();
+
+            // Still determine stubs from keywords
+            if (text.Contains("file") || text.Contains("csv") || text.Contains("read") || text.Contains("write"))
+                semanticStubs.Add("file-io");
+            if (text.Contains("console") || text.Contains("cli") || text.Contains("print") || text.Contains("readline"))
+                semanticStubs.Add("console-io");
+            if (text.Contains("database") || text.Contains("sql") || text.Contains("db") || text.Contains("persist"))
+                semanticStubs.Add("database-io");
+            if (text.Contains("http") || text.Contains("network") || text.Contains("api") || text.Contains("socket"))
+                semanticStubs.Add("network-io");
+            if (text.Contains("stream") || text.Contains("chunk") || text.Contains("pipe"))
+                semanticStubs.Add("stream-io");
+            if (text.Contains("time") || text.Contains("random") || text.Contains("timestamp"))
+                semanticStubs.Add("time-random");
+
+            return new RegistrySuggestion(
+                pattern,
+                semanticStubs.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                semanticMatch.SourcePath,
+                semanticMatch.Description,
+                semanticMatch.Similarity
+            );
+        }
+
+        // Fall back to keyword matching
+        var fallbackPattern = "transformer"; // default
         var stubs = new List<string>();
 
         if (text.Contains("parse") || text.Contains("parser"))
-            pattern = "parser";
+            fallbackPattern = "parser";
         else if (text.Contains("valid") || text.Contains("validate"))
-            pattern = "validator";
+            fallbackPattern = "validator";
         else if (text.Contains("store") || text.Contains("repository") || text.Contains("persist") || text.Contains("database"))
-            pattern = "repository";
+            fallbackPattern = "repository";
         else if (text.Contains("state") || text.Contains("transition") || text.Contains("workflow"))
-            pattern = "state-machine";
+            fallbackPattern = "state-machine";
         else if (text.Contains("aggregate") || text.Contains("sum") || text.Contains("count") || text.Contains("fold"))
-            pattern = "aggregator";
+            fallbackPattern = "aggregator";
         else if (text.Contains("build") || text.Contains("construct") || text.Contains("assemble"))
-            pattern = "builder";
+            fallbackPattern = "builder";
         else if (text.Contains("iter") || text.Contains("travers") || text.Contains("enumerate"))
-            pattern = "iterator";
+            fallbackPattern = "iterator";
         else if (text.Contains("heap") || text.Contains("own") || text.Contains("repr") || text.Contains("mutable.*state"))
-            pattern = "frames";
+            fallbackPattern = "frames";
         else if (text.Contains("transform") || text.Contains("convert") || text.Contains("map"))
-            pattern = "transformer";
+            fallbackPattern = "transformer";
 
         if (text.Contains("file") || text.Contains("csv") || text.Contains("read") || text.Contains("write"))
             stubs.Add("file-io");
@@ -337,7 +448,7 @@ public sealed class PatternRegistry
         if (text.Contains("time") || text.Contains("random") || text.Contains("timestamp"))
             stubs.Add("time-random");
 
-        return new RegistrySuggestion(pattern, stubs.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+        return new RegistrySuggestion(fallbackPattern, stubs.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
     private void Load()
@@ -400,5 +511,6 @@ public sealed class PatternRegistry
 
 public sealed record PatternEntry(string Name, string Source, string FilePath, string[] Dependencies);
 public sealed record StubEntry(string Name, string Source, string FilePath, string[] Dependencies);
-public sealed record RegistrySuggestion(string PatternName, string[] StubNames);
+public sealed record RegistrySuggestion(string PatternName, string[] StubNames, string? BestVariantPath = null, string? BestVariantDescription = null, float SimilarityScore = 0f);
 public sealed record CSharpStubEntry(string Name, string Source, string FilePath);
+public sealed record VariantSearchResult(string Id, string Pattern, string Description, string SourcePath, int VcCount, float Similarity);

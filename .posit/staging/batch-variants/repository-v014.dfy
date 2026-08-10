@@ -17,7 +17,9 @@ method Add(items: seq<Product>, entity: Product) returns (result: Result<seq<Pro
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
     invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != entity.id)
-    decreases |items| - i
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == entity.id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == entity.id {
       found := true;
@@ -45,7 +47,9 @@ method Remove(items: seq<Product>, id: int) returns (result: Result<seq<Product>
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
     invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != id)
-    decreases |items| - i
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == id {
       found := true;

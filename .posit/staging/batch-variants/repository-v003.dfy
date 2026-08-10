@@ -17,7 +17,9 @@ method Add(items: seq<User>, entity: User) returns (result: Result<seq<User>>)
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
     invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != entity.id)
-    decreases |items| - i
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == entity.id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == entity.id {
       found := true;
@@ -45,7 +47,9 @@ method Remove(items: seq<User>, id: int) returns (result: Result<seq<User>>)
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
     invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != id)
-    decreases |items| - i
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == id {
       found := true;
@@ -64,18 +68,29 @@ method Remove(items: seq<User>, id: int) returns (result: Result<seq<User>>)
 
 method Find(items: seq<User>, id: int) returns (result: Result<User>)
   ensures result.Success? ==> result.value.id == id
+  ensures result.Failure? ==> result.error == "not found"
 {
   var i := 0;
-  while i < |items|
+  var found := false;
+  while i < |items| && !found
     invariant 0 <= i <= |items|
-    invariant forall k :: 0 <= k < i ==> items[k].id != id
-    decreases |items| - i
+    invariant NoDuplicates(items)
+    invariant !found ==> (forall k :: 0 <= k < i ==> items[k].id != id)
+    invariant found ==> i < |items|
+    invariant found ==> items[i].id == id
+    decreases |items| - i + (if found then 0 else 1)
   {
     if items[i].id == id {
-      result := Success(items[i]);
-      return;
+      found := true;
+    } else {
+      i := i + 1;
     }
-    i := i + 1;
   }
-  result := Failure("not found");
+  if found {
+    assert 0 <= i < |items|;
+    assert items[i].id == id;
+    result := Success(items[i]);
+  } else {
+    result := Failure("not found");
+  }
 }

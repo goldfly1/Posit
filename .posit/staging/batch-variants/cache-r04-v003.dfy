@@ -49,6 +49,7 @@ class Cache {
     {
       if items[i].key == k {
         items := items[..i] + [Pair(k, v)] + items[i+1..];
+        assert items[i] == Pair(k, v);
         return;
       }
       i := i + 1;

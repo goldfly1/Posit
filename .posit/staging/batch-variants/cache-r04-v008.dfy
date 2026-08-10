@@ -51,6 +51,7 @@ class Cache<K(==), V(==)> {
     modifies this
     ensures Valid()
     ensures old(|items|) <= |items| <= old(|items|) + 1
+    ensures |items| >= 1
     ensures items[|items|-1] == Pair(k, v)
   {
     EvictIfNeeded();

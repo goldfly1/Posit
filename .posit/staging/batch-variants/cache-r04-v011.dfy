@@ -6,6 +6,7 @@ class Cache {
   const capacity: int
 
   predicate Valid() reads this {
+    capacity >= 1 &&
     |items| <= capacity &&
     (forall i, j :: 0 <= i < j < |items| ==> items[i].key != items[j].key)
   }
@@ -24,6 +25,7 @@ class Cache {
     requires Valid()
     modifies this
     ensures Valid()
+    ensures |items| >= 1
     ensures exists i :: 0 <= i < |items| && items[i].key == k && items[i].value == v
   {
     var i := 0;
@@ -32,10 +34,10 @@ class Cache {
       invariant 0 <= i <= |items|
       invariant !found ==> forall j :: 0 <= j < i ==> items[j].key != k
       invariant Valid()
-      decreases |items| - i
+      decreases if found then 0 else |items| - i
     {
       if items[i].key == k {
-        items[i] := Pair(k, v);
+        items := items[..i] + [Pair(k, v)] + items[i+1..];
         found := true;
       } else {
         i := i + 1;
@@ -46,6 +48,8 @@ class Cache {
         items := items[1..];
       }
       items := items + [Pair(k, v)];
+    } else {
+      assert items[i] == Pair(k, v);
     }
   }
 
@@ -53,23 +57,21 @@ class Cache {
     requires Valid()
     ensures Valid()
     ensures res == None ==> forall i :: 0 <= i < |items| ==> items[i].key != k
-    ensures res == Some(v) ==> exists i :: 0 <= i < |items| && items[i].key == k && items[i].value == v
+    ensures res.Some? ==> exists i :: 0 <= i < |items| && items[i].key == k && items[i].value == res.value
   {
     var i := 0;
-    res := None;
     while i < |items|
       invariant 0 <= i <= |items|
       invariant Valid()
-      invariant res == None ==> forall j :: 0 <= j < i ==> items[j].key != k
+      invariant forall j :: 0 <= j < i ==> items[j].key != k
       decreases |items| - i
     {
       if items[i].key == k {
-        res := Some(items[i].value);
-        i := |items|; 
-      } else {
-        i := i + 1;
+        return Some(items[i].value);
       }
+      i := i + 1;
     }
+    return None;
   }
 
   method Remove(k: int)
@@ -77,6 +79,7 @@ class Cache {
     modifies this
     ensures Valid()
     ensures forall i :: 0 <= i < |items| ==> items[i].key != k
+    ensures |items| <= old(|items|)
   {
     var i := 0;
     var found := false;
@@ -84,7 +87,7 @@ class Cache {
       invariant 0 <= i <= |items|
       invariant Valid()
       invariant !found ==> forall j :: 0 <= j < i ==> items[j].key != k
-      decreases |items| - i
+      decreases if found then 0 else |items| - i
     {
       if items[i].key == k {
         items := items[..i] + items[i+1..];

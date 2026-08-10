@@ -38,13 +38,13 @@ method Subscribe(subs: seq<Subscription>, subscriberId: int, priority: int) retu
 {
   var i := 0;
   var found := false;
-  while i < |subs| && !found
+  while i < |subs|
     invariant 0 <= i <= |subs|
     invariant NoDupSubs(subs)
     invariant !found ==> (forall k :: 0 <= k < i ==> !(subs[k].subscriberId == subscriberId && subs[k].eventName == EventType))
     decreases |subs| - i
   {
-    if subs[i].subscriberId == subscriberId && subs[i].eventName == EventType {
+    if !found && subs[i].subscriberId == subscriberId && subs[i].eventName == EventType {
       found := true;
     }
     i := i + 1;
@@ -64,21 +64,22 @@ method Unsubscribe(subs: seq<Subscription>, subscriberId: int) returns (result: 
   decreases |subs|
 {
   var i := 0;
-  var found := false;
-  while i < |subs| && !found
+  var found := -1;
+  while i < |subs|
     invariant 0 <= i <= |subs|
+    invariant -1 <= found <= i
     invariant NoDupSubs(subs)
-    invariant !found ==> (forall k :: 0 <= k < i ==> !(subs[k].subscriberId == subscriberId && subs[k].eventName == EventType))
+    invariant found >= 0 ==> (subs[found].subscriberId == subscriberId && subs[found].eventName == EventType)
+    invariant found < 0 ==> (forall k :: 0 <= k < i ==> !(subs[k].subscriberId == subscriberId && subs[k].eventName == EventType))
     decreases |subs| - i
   {
-    if subs[i].subscriberId == subscriberId && subs[i].eventName == EventType {
-      found := true;
-    } else {
-      i := i + 1;
+    if found < 0 && subs[i].subscriberId == subscriberId && subs[i].eventName == EventType {
+      found := i;
     }
+    i := i + 1;
   }
-  if found {
-    var newSubs := subs[..i] + subs[i+1..];
+  if found >= 0 {
+    var newSubs := subs[..found] + subs[found+1..];
     result := Success(newSubs);
   } else {
     result := Failure("not found");

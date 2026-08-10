@@ -32,6 +32,7 @@ class Cache<K(==), V(==)> {
     modifies this
     ensures Valid()
     ensures old(|items|) <= |items| <= old(|items|) + 1
+    ensures |items| >= 1
     ensures items[|items|-1] == Pair(k, v)
   {
     EvictIfNeeded();
@@ -53,7 +54,7 @@ class Cache<K(==), V(==)> {
       invariant Valid()
       invariant !found ==> exists j :: i <= j < |items| && items[j].key == k
       invariant found ==> (0 <= i < |items| && items[i].key == k)
-      decreases |items| - i
+      decreases if found then 0 else |items| - i
     {
       if items[i].key == k {
         found := true;
@@ -61,6 +62,7 @@ class Cache<K(==), V(==)> {
         i := i + 1;
       }
     }
+    assert found;
     var p := items[i];
     items := items[..i] + items[i+1..] + [p];
   }
