@@ -282,6 +282,8 @@ def main():
     indexed = 0
     verified_count = 0
     embedded_count = 0
+    dedup_count = 0
+    seen_hashes = set()
     
     for i, dfy_file in enumerate(dfy_files):
         variant = parse_variant_metadata(dfy_file)
@@ -291,6 +293,17 @@ def main():
         if not carapace_ok:
             print(f"  [{i+1}/{len(dfy_files)}] {dfy_file.stem:30s} ❌ CARAPACE FAIL: {carapace_msg}")
             continue
+        
+        # Dedup: hash the code (minus header comments) and skip if already seen
+        content = dfy_file.read_text()
+        # Strip header comments (first 3 lines — variant header)
+        code_lines = [l for l in content.split('\n') if not l.startswith('// Variant') and not l.startswith('// Generated')]
+        code_hash = hash(''.join(code_lines).strip())
+        if code_hash in seen_hashes:
+            print(f"  [{i+1}/{len(dfy_files)}] {dfy_file.stem:30s} ⏭️ DEDUP (identical code)")
+            dedup_count += 1
+            continue
+        seen_hashes.add(code_hash)
         
         # Verify with Z3 (unless --no-verify)
         if args.no_verify:
@@ -320,6 +333,7 @@ def main():
     print(f"  Indexed: {indexed}")
     print(f"  Verified: {verified_count}/{indexed}")
     print(f"  Embedded: {embedded_count}/{indexed}")
+    print(f"  Deduped:  {dedup_count} (identical code skipped)")
     print(f"{'='*60}")
     
     # Show DB stats
