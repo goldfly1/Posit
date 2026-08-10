@@ -65,6 +65,21 @@ def verify_dafny(dafny_path: str) -> tuple[bool, int, str]:
         return False, 0, str(e)
 
 
+def verify_batch_parallel(file_paths: list, workers: int = 6) -> dict:
+    """Verify multiple Dafny files in parallel. Returns {path: (success, vc_count, output)}."""
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    results = {}
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(verify_dafny, str(f)): str(f) for f in file_paths}
+        for future in as_completed(futures):
+            path = futures[future]
+            try:
+                results[path] = future.result()
+            except Exception as e:
+                results[path] = (False, 0, str(e))
+    return results
+
+
 def parse_variant_metadata(file_path: Path) -> dict:
     """Extract pattern name and params from variant file header."""
     content = file_path.read_text()
@@ -283,33 +298,43 @@ def main():
     verified_count = 0
     embedded_count = 0
     dedup_count = 0
+    carapace_fail_count = 0
     seen_hashes = set()
     
+    # Phase 1: carapace + dedup filter (fast, no Z3)
+    candidates = []
     for i, dfy_file in enumerate(dfy_files):
         variant = parse_variant_metadata(dfy_file)
         
         # Check carapace limits (200-line, 10-method, 5-class caps)
         carapace_ok, carapace_msg = check_carapace(dfy_file)
         if not carapace_ok:
-            print(f"  [{i+1}/{len(dfy_files)}] {dfy_file.stem:30s} ❌ CARAPACE FAIL: {carapace_msg}")
+            carapace_fail_count += 1
             continue
         
         # Dedup: hash the code (minus header comments) and skip if already seen
         content = dfy_file.read_text()
-        # Strip header comments (first 3 lines — variant header)
         code_lines = [l for l in content.split('\n') if not l.startswith('// Variant') and not l.startswith('// Generated')]
         code_hash = hash(''.join(code_lines).strip())
         if code_hash in seen_hashes:
-            print(f"  [{i+1}/{len(dfy_files)}] {dfy_file.stem:30s} ⏭️ DEDUP (identical code)")
             dedup_count += 1
             continue
         seen_hashes.add(code_hash)
         
-        # Verify with Z3 (unless --no-verify)
-        if args.no_verify:
-            verified, vc_count = True, 0
-        else:
-            verified, vc_count, _ = verify_dafny(str(dfy_file))
+        candidates.append((dfy_file, variant))
+    
+    print(f"\n  Filter: {len(dfy_files)} files → {len(candidates)} candidates (carapace fail: {carapace_fail_count}, dedup: {dedup_count})")
+    
+    # Phase 2: Z3 verification in parallel (6 workers)
+    if args.no_verify:
+        z3_results = {str(f): (True, 0, "") for f, v in candidates}
+    else:
+        print(f"  Z3 verifying {len(candidates)} files with 6 parallel workers...")
+        z3_results = verify_batch_parallel([f for f, v in candidates], workers=6)
+    
+    # Phase 3: embed + index
+    for i, (dfy_file, variant) in enumerate(candidates):
+        verified, vc_count, _ = z3_results.get(str(dfy_file), (False, 0, ""))
         
         if verified:
             verified_count += 1
