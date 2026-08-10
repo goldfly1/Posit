@@ -99,6 +99,14 @@ public sealed class PatternRegistry
                 selected.Add(GetCSharpStub(stubName));
         }
 
+        // Fallback for dafny components: if no C# stub matched, give them a file-io shell
+        // so the carapace enforcement doesn't abort on dafny components with externs.
+        if (selected.Count == 0 && (classification == ModuleClassification.Dafny || classification == ModuleClassification.Mixed))
+        {
+            if (HasCSharpStub("file-io"))
+                selected.Add(GetCSharpStub("file-io"));
+        }
+
         return selected.Distinct().ToList();
     }
 
