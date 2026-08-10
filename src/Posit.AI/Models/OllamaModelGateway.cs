@@ -53,8 +53,9 @@ public sealed class OllamaModelGateway : IModelGateway
                 new OllamaMessage { Role = "user", Content = user ?? string.Empty }
             ],
             Stream = false,
-            // Enable thinking for Architecture phase (to see reasoning), disable for QA (prevents 65K runaway)
-            Think = context.PhaseId.Value == "architecture",
+            // Thinking OFF — causes 65K+ output runaway. Traces saved to .posit/staging/thinking/ when enabled.
+            // To re-enable: Think = context.PhaseId.Value == "architecture"
+            Think = false,
             Options = new OllamaOptions
             {
                 Temperature = (float)route.Temperature,
