@@ -107,6 +107,28 @@ public sealed class PatternRegistry
                 selected.Add(GetCSharpStub("file-io"));
         }
 
+        // Domain-specific stubs: match spec keywords to domain stub templates
+        var specText = (component.Responsibility ?? "").ToLowerInvariant();
+        if (specText.Contains("product") || specText.Contains("cart") || specText.Contains("order") ||
+            specText.Contains("payment") || specText.Contains("inventory") || specText.Contains("shipping") ||
+            specText.Contains("tax") || specText.Contains("commerce") || specText.Contains("marketplace"))
+        {
+            if (HasCSharpStub("ecommerce"))
+                selected.Add(GetCSharpStub("ecommerce"));
+        }
+        if (specText.Contains("pipeline") || specText.Contains("build") || specText.Contains("deploy") ||
+            specText.Contains("artifact") || specText.Contains("ci/cd") || specText.Contains("job") && specText.Contains("step"))
+        {
+            if (HasCSharpStub("cicd"))
+                selected.Add(GetCSharpStub("cicd"));
+        }
+        if (specText.Contains("patient") || specText.Contains("medical") || specText.Contains("prescription") ||
+            specText.Contains("lab") || specText.Contains("insurance") || specText.Contains("hipaa"))
+        {
+            if (HasCSharpStub("healthcare"))
+                selected.Add(GetCSharpStub("healthcare"));
+        }
+
         return selected.Distinct().ToList();
     }
 

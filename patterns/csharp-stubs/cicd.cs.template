@@ -1,0 +1,67 @@
+// {{ComponentName}} — CI/CD domain stub
+// Auto-bound when spec mentions: pipeline, build, deploy, artifact, job, step, stage
+// Provides CI/CD-specific C# implementations for extern portals.
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class CICDIO
+    {
+        // Portal: RunStep(command) returns (exitCode: int, output: string)
+        public static (int ExitCode, string Output) RunStep(string command)
+        {
+            // TODO: Execute shell command in sandboxed environment
+            var psi = new ProcessStartInfo
+            {
+                FileName = "bash",
+                Arguments = $"-c \"{command}\"",
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            };
+            try
+            {
+                var proc = Process.Start(psi);
+                proc.WaitForExit();
+                return (proc.ExitCode, proc.StandardOutput.ReadToEnd());
+            }
+            catch (Exception ex)
+            {
+                return (1, ex.Message);
+            }
+        }
+
+        // Portal: StoreArtifact(name, content) returns (artifactId: string)
+        public static string StoreArtifact(string name, byte[] content)
+        {
+            // TODO: Store artifact in artifact manager (S3, local cache, etc.)
+            var artifactId = Guid.NewGuid().ToString();
+            return artifactId;
+        }
+
+        // Portal: RetrieveArtifact(artifactId) returns (content: seq<byte>)
+        public static byte[] RetrieveArtifact(string artifactId)
+        {
+            // TODO: Retrieve artifact from storage
+            return Array.Empty<byte>();
+        }
+
+        // Portal: NotifyChannel(channel, message) returns (delivered: bool)
+        public static bool NotifyChannel(string channel, string message)
+        {
+            // TODO: Send notification (Slack, email, webhook, etc.)
+            return true;
+        }
+
+        // Portal: GetPipelineStatus(pipelineId) returns (status: string)
+        public static string GetPipelineStatus(string pipelineId)
+        {
+            // TODO: Query pipeline status from state store
+            return "pending";
+        }
+    }
+}

@@ -1,0 +1,56 @@
+// {{ComponentName}} — E-commerce domain stub
+// Auto-bound when spec mentions: product, cart, order, payment, inventory, shipping, tax
+// Provides e-commerce-specific C# implementations for extern portals.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class CommerceIO
+    {
+        // Portal: QueryProducts(filter) returns (products: seq<Product>)
+        public static string[] QueryProducts(string filter)
+        {
+            // TODO: Connect to product database, apply filter, return results
+            return Array.Empty<string>();
+        }
+
+        // Portal: GetCart(cartId) returns (items: seq<CartItem>)
+        public static string[] GetCart(string cartId)
+        {
+            // TODO: Load cart from session/database
+            return Array.Empty<string>();
+        }
+
+        // Portal: ProcessPayment(amount, method) returns (result: Result<string>)
+        public static (bool Success, string TransactionId, string Error) ProcessPayment(decimal amount, string method)
+        {
+            // TODO: Integrate payment gateway (Stripe, PayPal, etc.)
+            return (true, Guid.NewGuid().ToString(), "");
+        }
+
+        // Portal: UpdateInventory(productId, delta) returns (newCount: int)
+        public static int UpdateInventory(string productId, int delta)
+        {
+            // TODO: Update inventory in database
+            return 0;
+        }
+
+        // Portal: CalculateShipping(address, weight) returns (cost: decimal)
+        public static decimal CalculateShipping(string address, decimal weight)
+        {
+            // TODO: Call shipping carrier API (UPS, FedEx, etc.)
+            return 0m;
+        }
+
+        // Portal: CalculateTax(amount, region) returns (tax: decimal)
+        public static decimal CalculateTax(decimal amount, string region)
+        {
+            // TODO: Call tax service (TaxJar, Avalara, etc.)
+            return 0m;
+        }
+    }
+}
