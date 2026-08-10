@@ -1,0 +1,49 @@
+// {{ComponentName}} — Time and Random portal caps
+// Auto-bound to Dafny stub: time-random
+// DO NOT invent new structure. This file only inlays function behind pre-cut portals.
+
+using System;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class TimeRandomIO
+    {
+        // Portal: GetCurrentTime() returns (timestamp: string)
+        public static string GetCurrentTime()
+        {
+            return DateTimeOffset.UtcNow.ToString("o");
+        }
+
+        // Portal: GetCurrentTimeMillis() returns (millis: int)
+        public static long GetCurrentTimeMillis()
+        {
+            return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        }
+
+        // Portal: RandomInt(min, max) returns (value: int)
+        public static int RandomInt(int min, int max)
+        {
+            var rng = Random.Shared;
+            return rng.Next(min, max);
+        }
+
+        // Portal: RandomFloat() returns (value: real)
+        public static double RandomFloat()
+        {
+            return Random.Shared.NextDouble();
+        }
+
+        // Portal: Sleep(millis)
+        public static void Sleep(int millis)
+        {
+            System.Threading.Thread.Sleep(millis);
+        }
+
+        // Portal: GetCurrentDate() returns (date: string)
+        public static string GetCurrentDate()
+        {
+            return DateTime.UtcNow.ToString("yyyy-MM-dd");
+        }
+    }
+}

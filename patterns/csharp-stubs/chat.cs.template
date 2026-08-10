@@ -1,0 +1,46 @@
+// {{ComponentName}} — Chat/messaging domain stub
+// Auto-bound when spec mentions: chat, message, channel, direct message, group, notification, presence
+using System;
+using System.Collections.Generic;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class ChatIO
+    {
+        // Portal: SendMessage(channelId, message) returns (messageId: string)
+        public static string SendMessage(string channelId, string message)
+        {
+            // TODO: Persist message, notify channel subscribers
+            return Guid.NewGuid().ToString();
+        }
+
+        // Portal: GetMessages(channelId, offset, count) returns (messages: seq<string>)
+        public static string[] GetMessages(string channelId, int offset, int count)
+        {
+            // TODO: Load message history with pagination
+            return Array.Empty<string>();
+        }
+
+        // Portal: GetUserPresence(userId) returns (status: string)
+        public static string GetUserPresence(string userId)
+        {
+            // TODO: Query presence service (online, away, offline)
+            return "offline";
+        }
+
+        // Portal: CreateChannel(name, isPrivate) returns (channelId: string)
+        public static string CreateChannel(string name, bool isPrivate)
+        {
+            // TODO: Create channel in messaging store
+            return Guid.NewGuid().ToString();
+        }
+
+        // Portal: JoinChannel(channelId, userId) returns (joined: bool)
+        public static bool JoinChannel(string channelId, string userId)
+        {
+            // TODO: Add user to channel membership
+            return true;
+        }
+    }
+}

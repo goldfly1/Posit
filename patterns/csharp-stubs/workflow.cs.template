@@ -1,0 +1,46 @@
+// {{ComponentName}} — Workflow/automation domain stub
+// Auto-bound when spec mentions: workflow, approval, task, state, transition, business process, BPM
+using System;
+using System.Collections.Generic;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class WorkflowIO
+    {
+        // Portal: StartWorkflow(workflowType, entityId) returns (instanceId: string)
+        public static string StartWorkflow(string workflowType, string entityId)
+        {
+            // TODO: Create workflow instance, set initial state
+            return Guid.NewGuid().ToString();
+        }
+
+        // Portal: GetWorkflowState(instanceId) returns (state: string)
+        public static string GetWorkflowState(string instanceId)
+        {
+            // TODO: Query current state of workflow instance
+            return "pending";
+        }
+
+        // Portal: TransitionState(instanceId, action) returns (newState: string)
+        public static string TransitionState(string instanceId, string action)
+        {
+            // TODO: Execute state transition, validate guard conditions
+            return "completed";
+        }
+
+        // Portal: GetWorkflowHistory(instanceId) returns (events: seq<string>)
+        public static string[] GetWorkflowHistory(string instanceId)
+        {
+            // TODO: Return audit trail of state transitions
+            return Array.Empty<string>();
+        }
+
+        // Portal: AssignTask(instanceId, assignee) returns (assigned: bool)
+        public static bool AssignTask(string instanceId, string assignee)
+        {
+            // TODO: Assign workflow task to user
+            return true;
+        }
+    }
+}

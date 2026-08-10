@@ -1,0 +1,53 @@
+// {{ComponentName}} — Banking/finance domain stub
+// Auto-bound when spec mentions: account, transaction, balance, transfer, deposit, withdraw, payment
+using System;
+using System.Collections.Generic;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class BankingIO
+    {
+        // Portal: GetAccount(accountId) returns (balance: decimal, currency: string)
+        public static (decimal Balance, string Currency) GetAccount(string accountId)
+        {
+            // TODO: Query account from core banking system
+            return (0m, "USD");
+        }
+
+        // Portal: Transfer(fromAccount, toAccount, amount) returns (transactionId: string)
+        public static string Transfer(string fromAccount, string toAccount, decimal amount)
+        {
+            // TODO: Execute double-entry transfer with atomicity
+            return Guid.NewGuid().ToString();
+        }
+
+        // Portal: Deposit(accountId, amount) returns (newBalance: decimal)
+        public static decimal Deposit(string accountId, decimal amount)
+        {
+            // TODO: Credit account, return new balance
+            return 0m;
+        }
+
+        // Portal: Withdraw(accountId, amount) returns (result: Result<decimal>)
+        public static (bool Success, decimal NewBalance, string Error) Withdraw(string accountId, decimal amount)
+        {
+            // TODO: Debit account if sufficient funds
+            return (true, 0m, "");
+        }
+
+        // Portal: GetTransactionHistory(accountId, count) returns (transactions: seq<string>)
+        public static string[] GetTransactionHistory(string accountId, int count)
+        {
+            // TODO: Query transaction ledger
+            return Array.Empty<string>();
+        }
+
+        // Portal: CheckFraud(transaction) returns (riskScore: int)
+        public static int CheckFraud(string transactionJson)
+        {
+            // TODO: Run fraud detection rules
+            return 0;
+        }
+    }
+}

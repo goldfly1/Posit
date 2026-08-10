@@ -128,6 +128,42 @@ public sealed class PatternRegistry
             if (HasCSharpStub("healthcare"))
                 selected.Add(GetCSharpStub("healthcare"));
         }
+        if (specText.Contains("chat") || specText.Contains("message") || specText.Contains("channel") ||
+            specText.Contains("messaging") || specText.Contains("presence"))
+        {
+            if (HasCSharpStub("chat"))
+                selected.Add(GetCSharpStub("chat"));
+        }
+        if (specText.Contains("account") || specText.Contains("transaction") || specText.Contains("balance") ||
+            specText.Contains("transfer") || specText.Contains("deposit") || specText.Contains("withdraw") || specText.Contains("banking"))
+        {
+            if (HasCSharpStub("banking"))
+                selected.Add(GetCSharpStub("banking"));
+        }
+        if (specText.Contains("schedule") || specText.Contains("appointment") || specText.Contains("calendar") ||
+            specText.Contains("booking") || specText.Contains("availability"))
+        {
+            if (HasCSharpStub("scheduling"))
+                selected.Add(GetCSharpStub("scheduling"));
+        }
+        if (specText.Contains("search") || specText.Contains("index") || specText.Contains("catalog") ||
+            specText.Contains("recommend") || specText.Contains("browse"))
+        {
+            if (HasCSharpStub("search"))
+                selected.Add(GetCSharpStub("search"));
+        }
+        if (specText.Contains("workflow") || specText.Contains("approval") || specText.Contains("business process") ||
+            specText.Contains("bpm"))
+        {
+            if (HasCSharpStub("workflow"))
+                selected.Add(GetCSharpStub("workflow"));
+        }
+        if (specText.Contains("monitor") || specText.Contains("metric") || specText.Contains("alert") ||
+            specText.Contains("health") || specText.Contains("dashboard") || specText.Contains("observability"))
+        {
+            if (HasCSharpStub("monitoring"))
+                selected.Add(GetCSharpStub("monitoring"));
+        }
 
         return selected.Distinct().ToList();
     }

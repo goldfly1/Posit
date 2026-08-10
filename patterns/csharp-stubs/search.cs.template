@@ -1,0 +1,46 @@
+// {{ComponentName}} — Search/indexing domain stub
+// Auto-bound when spec mentions: search, index, query, filter, recommend, catalog, browse
+using System;
+using System.Collections.Generic;
+using _module;
+
+namespace {{ComponentName}}
+{
+    public static partial class SearchIO
+    {
+        // Portal: SearchIndex(query, filters) returns (results: seq<string>)
+        public static string[] SearchIndex(string query, string filters)
+        {
+            // TODO: Query search index (Elasticsearch, Algolia, etc.)
+            return Array.Empty<string>();
+        }
+
+        // Portal: IndexDocument(docId, content, metadata) returns (indexed: bool)
+        public static bool IndexDocument(string docId, string content, string metadata)
+        {
+            // TODO: Add document to search index
+            return true;
+        }
+
+        // Portal: RemoveFromIndex(docId) returns (removed: bool)
+        public static bool RemoveFromIndex(string docId)
+        {
+            // TODO: Remove document from index
+            return true;
+        }
+
+        // Portal: GetRecommendations(userId, count) returns (recommendations: seq<string>)
+        public static string[] GetRecommendations(string userId, int count)
+        {
+            // TODO: Query recommendation engine
+            return Array.Empty<string>();
+        }
+
+        // Portal: FilterByPredicate(items, predicate) returns (filtered: seq<string>)
+        public static string[] FilterByPredicate(string[] items, string predicate)
+        {
+            // TODO: Apply predicate filter to items
+            return items;
+        }
+    }
+}
