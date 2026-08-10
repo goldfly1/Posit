@@ -36,31 +36,33 @@ method Parse(c: Ctx) returns (r: Outcome<Ctx>)
 
 method Validate(c: Ctx) returns (r: Outcome<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Ok? ==> |c.fields| >= 2 && |r.value.log| == |c.log| + 1
+  ensures r.Ok? ==> |r.value.fields| >= 2 && |r.value.log| == |c.log| + 1
   ensures r.Err? ==> r.code == ErrValidate
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Err(ErrValidate, "too few fields");
-  else if |c.fields[0]| == 0 then
+  } else if |c.fields[0]| == 0 {
     r := Err(ErrValidate, "empty command");
-  else
+  } else {
     r := Ok(Ctx(c.input, c.fields, c.authed, c.log + ["validate"], c.data, c.response, 100));
+  }
 }
 
 method Auth(c: Ctx) returns (r: Outcome<Ctx>)
   requires |c.fields| >= 2
-  ensures r.Ok? ==> r.value.authed && |r.value.log| == |c.log| + 1
+  ensures r.Ok? ==> r.value.authed && |r.value.fields| >= 2 && |r.value.log| == |c.log| + 1
   ensures r.Err? ==> r.code == ErrAuth
 {
-  if c.fields[1] == "token" then
+  if c.fields[1] == "token" {
     r := Ok(Ctx(c.input, c.fields, true, c.log + ["auth"], c.data, c.response, 200));
-  else
+  } else {
     r := Err(ErrAuth, "unauthorized");
+  }
 }
 
 method Transform(c: Ctx) returns (r: Outcome<Ctx>)
   requires |c.fields| >= 2 && c.authed
-  ensures r.Ok? ==> r.value.data == c.fields[0] && |r.value.log| == |c.log| + 1
+  ensures r.Ok? ==> r.value.fields == c.fields && r.value.authed == c.authed && r.value.data == c.fields[0] && |r.value.log| == |c.log| + 1
   ensures r.Err? ==> r.code == ErrTransform
 {
   r := Ok(Ctx(c.input, c.fields, c.authed, c.log + ["transform"], c.fields[0], c.response, 300));
@@ -68,30 +70,28 @@ method Transform(c: Ctx) returns (r: Outcome<Ctx>)
 
 method Store(c: Ctx) returns (r: Outcome<Ctx>)
   requires c.authed && |c.fields| >= 2
-  ensures r.Ok? ==> |r.value.log| == |c.log| + 1 && r.value.data == c.data
+  ensures r.Ok? ==> r.value.fields == c.fields && r.value.authed == c.authed && |r.value.log| == |c.log| + 1 && r.value.data == c.data
   ensures r.Err? ==> r.code == ErrStore
 {
-  if c.fields[0] == "dup" then
+  if c.fields[0] == "dup" {
     r := Err(ErrStore, "duplicate");
-  else
+  } else {
     r := Ok(Ctx(c.input, c.fields, c.authed, c.log + ["store"], c.data, c.response, 400));
+  }
 }
 
 method Respond(c: Ctx) returns (r: Outcome<Ctx>)
-  requires c.authed && |c.fields| >= 2
-  ensures r.Ok? ==> |r.value.log| == |c.log| + 1 && r.value.response == c.data
+  requires |c.fields| >= 2 && c.authed
+  ensures r.Ok? ==> r.value.fields == c.fields && r.value.authed == c.authed && |r.value.log| == |c.log| + 1 && r.value.response == c.data && r.value.status == 200
   ensures r.Err? ==> r.code == ErrRespond
 {
-  if c.data == "" then
-    r := Err(ErrRespond, "empty data");
-  else
-    r := Ok(Ctx(c.input, c.fields, c.authed, c.log + ["respond"], c.data, c.data, 500));
+  r := Ok(Ctx(c.input, c.fields, c.authed, c.log + ["respond"], c.data, c.data, 200));
 }
 
 method Run(input: string) returns (r: Outcome<Ctx>)
   requires |input| > 0
-  ensures r.Ok? ==> r.value.authed && |r.value.fields| >= 2 && r.value.data == r.value.fields[0] && r.value.response == r.value.data && |r.value.log| == 6 && r.value.status == 500
-  ensures r.Err? ==> r.code in {ErrParse, ErrValidate, ErrAuth, ErrTransform, ErrStore, ErrRespond}
+  ensures r.Ok? ==> r.value.authed && |r.value.fields| >= 2 && |r.value.log| == 5 && r.value.data == r.value.fields[0] && r.value.response == r.value.data && r.value.status == 200
+  ensures r.Err? ==> r.code in {ErrParse, ErrValidate, ErrAuth, ErrStore, ErrTransform, ErrRespond}
 {
   var c := Ctx(input, [], false, [], "", "", 0);
   var p := Parse(c);

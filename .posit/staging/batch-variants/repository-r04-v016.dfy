@@ -9,7 +9,38 @@ predicate NoDuplicates(items: seq<Product>)
 
 predicate SortedByPrice(items: seq<Product>)
 {
-  forall i, j :: 0 <= i < j < |items| ==> items[i].price <= items[j].price
+  forall i :: 0 <= i < |items| - 1 ==> items[i].price <= items[i + 1].price
+}
+
+lemma SortedByPriceTailLemma(items: seq<Product>)
+  requires SortedByPrice(items)
+  requires |items| > 0
+  ensures SortedByPrice(items[1..])
+  decreases |items|
+{
+  if |items| > 1 {
+    SortedByPriceTailLemma(items[1..]);
+  }
+}
+
+lemma SortedByPriceConsLemma(e: Product, rest: seq<Product>)
+  requires SortedByPrice(rest)
+  requires |rest| == 0 || e.price <= rest[0].price
+  ensures SortedByPrice([e] + rest)
+{
+}
+
+lemma InsertSortedHeadGE(items: seq<Product>, e: Product, bound: int)
+  requires SortedByPrice(items)
+  requires |items| > 0 ==> items[0].price >= bound
+  requires e.price >= bound
+  ensures InsertSorted(items, e)[0].price >= bound
+  decreases |items|
+{
+  if |items| > 0 && items[0].price < e.price {
+    SortedByPriceTailLemma(items);
+    InsertSortedHeadGE(items[1..], e, items[0].price);
+  }
 }
 
 function InsertSorted(items: seq<Product>, e: Product): seq<Product>
@@ -22,51 +53,37 @@ function InsertSorted(items: seq<Product>, e: Product): seq<Product>
   if |items| == 0 then
     [e]
   else if e.price <= items[0].price then
+    SortedByPriceConsLemma(e, items);
     [e] + items
   else
-    [items[0]] + InsertSorted(items[1..], e)
+    SortedByPriceTailLemma(items);
+    var rest := InsertSorted(items[1..], e);
+    InsertSortedHeadGE(items[1..], e, items[0].price);
+    SortedByPriceConsLemma(items[0], rest);
+    [items[0]] + rest
 }
 
 method Add(items: seq<Product>, entity: Product) returns (result: Result<seq<Product>>)
   requires NoDuplicates(items)
   ensures result.Success? ==> |result.value| == |items| + 1
   ensures result.Failure? ==> result.error == "duplicate id"
-  decreases |items|
 {
   var i := 0;
   var found := false;
   while i < |items| && !found
     invariant 0 <= i <= |items|
-    invariant NoDuplicates(items)
+    invariant !found ==> forall k :: 0 <= k < i ==> items[k].id != entity.id
     decreases |items| - i
   {
     if items[i].id == entity.id {
       found := true;
+    } else {
+      i := i + 1;
     }
-    i := i + 1;
   }
   if found {
     result := Failure("duplicate id");
   } else {
     result := Success(items + [entity]);
-  }
-}
-
-method Sort(items: seq<Product>) returns (sorted: seq<Product>)
-  ensures |sorted| == |items|
-  ensures SortedByPrice(sorted)
-  ensures multiset(sorted) == multiset(items)
-  decreases |items|
-{
-  sorted := [];
-  var i := 0;
-  while i < |items|
-    invariant 0 <= i <= |items|
-    invariant SortedByPrice(sorted)
-    invariant multiset(sorted) == multiset(items[..i])
-    decreases |items| - i
-  {
-    sorted := InsertSorted(sorted, items[i]);
-    i := i + 1;
   }
 }

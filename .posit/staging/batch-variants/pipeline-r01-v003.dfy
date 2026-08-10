@@ -34,22 +34,23 @@ method Parse(c: Ctx) returns (r: Result<Ctx>)
 
 method Validate(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Success? ==> |c.fields| >= 2 && r.value.authed && |r.value.log| == |c.log| + 1
+  ensures r.Success? ==> |r.value.fields| >= 2 && r.value.authed && |r.value.log| == |c.log| + 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Failure("too few fields");
-  else if |c.fields[0]| == 0 then
+  } else if |c.fields[0]| == 0 {
     r := Failure("empty command");
-  else if c.fields[1] == "token" then
+  } else if c.fields[1] == "token" {
     r := Success(Ctx(c.input, c.fields, true, c.log + ["validate"]));
-  else
+  } else {
     r := Failure("unauthorized");
+  }
 }
 
 method Store(c: Ctx) returns (r: Result<Ctx>)
   requires c.authed && |c.fields| >= 2
-  ensures r.Success? ==> r.value.authed && |r.value.log| == |c.log| + 1
+  ensures r.Success? ==> r.value.authed && |r.value.fields| >= 2 && |r.value.log| == |c.log| + 1
 {
   r := Success(Ctx(c.input, c.fields, c.authed, c.log + ["store"]));
 }

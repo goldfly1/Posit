@@ -409,3 +409,288 @@ Indexing 668 variant files from C:\Users\goldf\Posit\.posit\staging\batch-varian
   [405/668] parser-r01-v006      ✅ 📝 parser variant
   [406/668] parser-r01-v007      ✅ 📝 parser variant
   [407/668] parser-r01-v008      ✅ 📝 parser variant
+  [408/668] parser-r01-v009      ✅ 📝 parser variant
+  [409/668] parser-r01-v010      ❌ 📝 parser variant
+  [410/668] parser-r01-v011      ✅ 📝 parser variant
+  [411/668] parser-r01-v012      ✅ 📝 parser variant
+  [412/668] parser-r01-v013      ✅ 📝 parser variant
+  [413/668] parser-r01-v014      ✅ 📝 parser variant
+  [414/668] parser-r01-v015      ✅ 📝 parser variant
+  [415/668] parser-r01-v016      ❌ 📝 parser variant
+  [416/668] parser-r01-v017      ✅ 📝 parser variant
+  [417/668] parser-r01-v018      ✅ 📝 parser variant
+  [418/668] parser-r01-v019      ✅ 📝 parser variant
+  [419/668] parser-r02-v000      ✅ 📝 parser variant
+  [420/668] parser-r02-v001      ✅ 📝 parser variant
+  [421/668] parser-r02-v002      ✅ 📝 parser variant
+  [422/668] parser-r02-v003      ✅ 📝 parser variant
+  [423/668] parser-r02-v004      ✅ 📝 parser variant
+  [424/668] parser-r02-v005      ✅ 📝 parser variant
+  [425/668] parser-r02-v006      ✅ 📝 parser variant
+  [426/668] parser-r02-v007      ✅ 📝 parser variant
+  [427/668] parser-r02-v008      ✅ 📝 parser variant
+  [428/668] parser-r02-v009      ✅ 📝 parser variant
+  [429/668] parser-r02-v010      ✅ 📝 parser variant
+  [430/668] parser-r02-v011      ✅ 📝 parser variant
+  [431/668] parser-r02-v012      ✅ 📝 parser variant
+  [432/668] parser-r02-v013      ✅ 📝 parser variant
+  [433/668] parser-r02-v014      ✅ 📝 parser variant
+  [434/668] parser-r02-v015      ✅ 📝 parser variant
+  [435/668] parser-r02-v016      ✅ 📝 parser variant
+  [436/668] parser-r02-v017      ✅ 📝 parser variant
+  [437/668] parser-r02-v018      ✅ 📝 parser variant
+  [438/668] parser-r02-v019      ✅ 📝 parser variant
+  [439/668] parser-r03-v000      ✅ 📝 parser variant
+  [440/668] parser-r03-v001      ✅ 📝 parser variant
+  [441/668] parser-r03-v002      ✅ 📝 parser variant
+  [442/668] parser-r03-v003      ✅ 📝 parser variant
+  [443/668] parser-r03-v004      ✅ 📝 parser variant
+  [444/668] parser-r03-v005      ✅ 📝 parser variant
+  [445/668] parser-r03-v006      ✅ 📝 parser variant
+  [446/668] parser-r03-v007      ✅ 📝 parser variant
+  [447/668] parser-r03-v008      ✅ 📝 parser variant
+  [448/668] parser-r03-v009      ✅ 📝 parser variant
+  [449/668] parser-r03-v010      ✅ 📝 parser variant
+  [450/668] parser-r03-v011      ✅ 📝 parser variant
+  [451/668] parser-r03-v012      ✅ 📝 parser variant
+  [452/668] parser-r03-v013      ✅ 📝 parser variant
+  [453/668] parser-r03-v014      ✅ 📝 parser variant
+  [454/668] parser-r03-v015      ✅ 📝 parser variant
+  [455/668] parser-r03-v016      ✅ 📝 parser variant
+  [456/668] parser-r03-v017      ✅ 📝 parser variant
+  [457/668] parser-r03-v018      ✅ 📝 parser variant
+  [458/668] parser-r03-v019      ✅ 📝 parser variant
+  [459/668] parser-r04-v000      ✅ 📝 parser variant
+  [460/668] parser-r04-v001      ✅ 📝 parser variant
+  [461/668] parser-r04-v002      ✅ 📝 parser variant
+  [462/668] parser-r04-v003      ✅ 📝 parser variant
+  [463/668] parser-r04-v004      ✅ 📝 parser variant
+  [464/668] parser-r04-v005      ✅ 📝 parser variant
+  [465/668] parser-r04-v006      ✅ 📝 parser variant
+  [466/668] parser-r04-v007      ✅ 📝 parser variant
+  [467/668] parser-r04-v008      ✅ 📝 parser variant
+  [468/668] parser-r04-v009      ✅ 📝 parser variant
+  [469/668] parser-r04-v010      ✅ 📝 parser variant
+  [470/668] parser-r04-v011      ✅ 📝 parser variant
+  [471/668] parser-r04-v012      ✅ 📝 parser variant
+  [472/668] parser-r04-v013      ✅ 📝 parser variant
+  [473/668] parser-r04-v014      ✅ 📝 parser variant
+  [474/668] parser-r04-v015      ✅ 📝 parser variant
+  [475/668] parser-r04-v016      ✅ 📝 parser variant
+  [476/668] parser-r04-v017      ✅ 📝 parser variant
+  [477/668] parser-r04-v018      ✅ 📝 parser variant
+  [478/668] parser-r04-v019      ✅ 📝 parser variant
+  [479/668] parser-v000          ✅ 📝 parser variant
+  [480/668] parser-v001          ✅ 📝 parser variant
+  [481/668] parser-v002          ✅ 📝 parser variant
+  [482/668] parser-v003          ✅ 📝 parser variant
+  [483/668] parser-v004          ✅ 📝 parser variant
+  [484/668] parser-v005          ✅ 📝 parser variant
+  [485/668] parser-v006          ✅ 📝 parser variant
+  [486/668] parser-v007          ✅ 📝 parser variant
+  [487/668] parser-v008          ✅ 📝 parser variant
+  [488/668] parser-v009          ✅ 📝 parser variant
+  [489/668] parser-v010          ✅ 📝 parser variant
+  [490/668] parser-v011          ✅ 📝 parser variant
+  [491/668] parser-v012          ✅ 📝 parser variant
+  [492/668] parser-v013          ✅ 📝 parser variant
+  [493/668] parser-v014          ✅ 📝 parser variant
+  [494/668] parser-v015          ✅ 📝 parser variant
+  [495/668] parser-v016          ✅ 📝 parser variant
+  [496/668] parser-v017          ✅ 📝 parser variant
+  [497/668] parser-v018          ✅ 📝 parser variant
+  [498/668] parser-v019          ✅ 📝 parser variant
+  [499/668] state-machine-r01-v000 ✅ 📝 state-machine variant
+  [500/668] state-machine-r01-v001 ✅ 📝 state-machine variant
+  [501/668] state-machine-r01-v002 ✅ 📝 state-machine variant
+  [502/668] state-machine-r01-v003 ✅ 📝 state-machine variant
+  [503/668] state-machine-r01-v004 ✅ 📝 state-machine variant
+  [504/668] state-machine-r01-v005 ✅ 📝 state-machine variant
+  [505/668] state-machine-r01-v006 ✅ 📝 state-machine variant
+  [506/668] state-machine-r01-v007 ✅ 📝 state-machine variant
+  [507/668] state-machine-r01-v008 ✅ 📝 state-machine variant
+  [508/668] state-machine-r01-v009 ✅ 📝 state-machine variant
+  [509/668] state-machine-r01-v010 ✅ 📝 state-machine variant
+  [510/668] state-machine-r01-v011 ✅ 📝 state-machine variant
+  [511/668] state-machine-r01-v012 ✅ 📝 state-machine variant
+  [512/668] state-machine-r01-v013 ✅ 📝 state-machine variant
+  [513/668] state-machine-r01-v014 ✅ 📝 state-machine variant
+  [514/668] state-machine-r01-v015 ✅ 📝 state-machine variant
+  [515/668] state-machine-r01-v016 ✅ 📝 state-machine variant
+  [516/668] state-machine-r01-v017 ✅ 📝 state-machine variant
+  [517/668] state-machine-r01-v018 ✅ 📝 state-machine variant
+  [518/668] state-machine-r01-v019 ✅ 📝 state-machine variant
+  [519/668] state-machine-r02-v000 ✅ 📝 state-machine variant
+  [520/668] state-machine-r02-v001 ✅ 📝 state-machine variant
+  [521/668] state-machine-r02-v002 ✅ 📝 state-machine variant
+  [522/668] state-machine-r02-v003 ✅ 📝 state-machine variant
+  [523/668] state-machine-r02-v004 ✅ 📝 state-machine variant
+  [524/668] state-machine-r02-v005 ✅ 📝 state-machine variant
+  [525/668] state-machine-r02-v006 ✅ 📝 state-machine variant
+  [526/668] state-machine-r02-v007 ✅ 📝 state-machine variant
+  [527/668] state-machine-r02-v008 ✅ 📝 state-machine variant
+  [528/668] state-machine-r02-v009 ✅ 📝 state-machine variant
+  [529/668] state-machine-r02-v010 ✅ 📝 state-machine variant
+  [530/668] state-machine-r02-v011 ✅ 📝 state-machine variant
+  [531/668] state-machine-r02-v012 ✅ 📝 state-machine variant
+  [532/668] state-machine-r02-v013 ✅ 📝 state-machine variant
+  [533/668] state-machine-r02-v014 ✅ 📝 state-machine variant
+  [534/668] state-machine-r02-v015 ✅ 📝 state-machine variant
+  [535/668] state-machine-r02-v016 ✅ 📝 state-machine variant
+  [536/668] state-machine-r02-v017 ✅ 📝 state-machine variant
+  [537/668] state-machine-r02-v018 ✅ 📝 state-machine variant
+  [538/668] state-machine-r02-v019 ✅ 📝 state-machine variant
+  [539/668] state-machine-r03-v000 ✅ 📝 state-machine variant
+  [540/668] state-machine-r03-v001 ✅ 📝 state-machine variant
+  [541/668] state-machine-r03-v002 ✅ 📝 state-machine variant
+  [542/668] state-machine-r03-v003 ✅ 📝 state-machine variant
+  [543/668] state-machine-r03-v004 ✅ 📝 state-machine variant
+  [544/668] state-machine-r03-v005 ✅ 📝 state-machine variant
+  [545/668] state-machine-r03-v006 ✅ 📝 state-machine variant
+  [546/668] state-machine-r03-v007 ✅ 📝 state-machine variant
+  [547/668] state-machine-r03-v008 ✅ 📝 state-machine variant
+  [548/668] state-machine-r03-v009 ✅ 📝 state-machine variant
+  [549/668] state-machine-r03-v010 ✅ 📝 state-machine variant
+  [550/668] state-machine-r03-v011 ✅ 📝 state-machine variant
+  [551/668] state-machine-r03-v012 ✅ 📝 state-machine variant
+  [552/668] state-machine-r03-v013 ✅ 📝 state-machine variant
+  [553/668] state-machine-r03-v014 ✅ 📝 state-machine variant
+  [554/668] state-machine-r03-v015 ✅ 📝 state-machine variant
+  [555/668] state-machine-r03-v016 ✅ 📝 state-machine variant
+  [556/668] state-machine-r03-v017 ✅ 📝 state-machine variant
+  [557/668] state-machine-r03-v018 ✅ 📝 state-machine variant
+  [558/668] state-machine-r03-v019 ✅ 📝 state-machine variant
+  [559/668] state-machine-r04-v000 ✅ 📝 state-machine variant
+  [560/668] state-machine-r04-v001 ✅ 📝 state-machine variant
+  [561/668] state-machine-r04-v002 ✅ 📝 state-machine variant
+  [562/668] state-machine-r04-v003 ✅ 📝 state-machine variant
+  [563/668] state-machine-r04-v004 ✅ 📝 state-machine variant
+  [564/668] state-machine-r04-v005 ✅ 📝 state-machine variant
+  [565/668] state-machine-r04-v006 ✅ 📝 state-machine variant
+  [566/668] state-machine-r04-v007 ✅ 📝 state-machine variant
+  [567/668] state-machine-r04-v008 ✅ 📝 state-machine variant
+  [568/668] state-machine-r04-v009 ✅ 📝 state-machine variant
+  [569/668] state-machine-r04-v010 ✅ 📝 state-machine variant
+  [570/668] state-machine-r04-v011 ✅ 📝 state-machine variant
+  [571/668] state-machine-r04-v012 ✅ 📝 state-machine variant
+  [572/668] state-machine-r04-v013 ✅ 📝 state-machine variant
+  [573/668] state-machine-r04-v014 ✅ 📝 state-machine variant
+  [574/668] state-machine-r04-v015 ✅ 📝 state-machine variant
+  [575/668] state-machine-r04-v016 ✅ 📝 state-machine variant
+  [576/668] state-machine-r04-v017 ✅ 📝 state-machine variant
+  [577/668] state-machine-r04-v018 ✅ 📝 state-machine variant
+  [578/668] state-machine-r04-v019 ✅ 📝 state-machine variant
+  [579/668] state-machine-v000   ✅ 📝 state-machine variant
+  [580/668] state-machine-v001   ✅ 📝 state-machine variant
+  [581/668] state-machine-v002   ✅ 📝 state-machine variant
+  [582/668] state-machine-v003   ✅ 📝 state-machine variant
+  [583/668] state-machine-v004   ✅ 📝 state-machine variant
+  [584/668] state-machine-v005   ✅ 📝 state-machine variant
+  [585/668] state-machine-v006   ✅ 📝 state-machine variant
+  [586/668] state-machine-v007   ✅ 📝 state-machine variant
+  [587/668] state-machine-v008   ✅ 📝 state-machine variant
+  [588/668] state-machine-v009   ✅ 📝 state-machine variant
+  [589/668] state-machine-v010   ✅ 📝 state-machine variant
+  [590/668] state-machine-v011   ✅ 📝 state-machine variant
+  [591/668] state-machine-v012   ✅ 📝 state-machine variant
+  [592/668] state-machine-v013   ✅ 📝 state-machine variant
+  [593/668] state-machine-v014   ✅ 📝 state-machine variant
+  [594/668] state-machine-v015   ✅ 📝 state-machine variant
+  [595/668] state-machine-v016   ✅ 📝 state-machine variant
+  [596/668] state-machine-v017   ✅ 📝 state-machine variant
+  [597/668] state-machine-v018   ✅ 📝 state-machine variant
+  [598/668] state-machine-v019   ✅ 📝 state-machine variant
+  [599/668] transformer-r01-v000 ✅ 📝 transformer variant (operation=ToUpper)
+  [600/668] transformer-r01-v001 ✅ 📝 transformer variant (operation=Reverse)
+  [601/668] transformer-r01-v002 ✅ 📝 transformer variant (operation=Sort)
+  [602/668] transformer-r01-v003 ✅ 📝 transformer variant (operation=Trim)
+  [603/668] transformer-r01-v004 ✅ 📝 transformer variant (operation=Duplicate)
+  [604/668] transformer-r01-v005 ✅ 📝 transformer variant (operation=ToLower)
+  [605/668] transformer-r01-v006 ✅ 📝 transformer variant (operation=Filter)
+  [606/668] transformer-r01-v007 ✅ 📝 transformer variant (operation=Map)
+  [607/668] transformer-r01-v008 ✅ 📝 transformer variant (operation=Flatten)
+  [608/668] transformer-r01-v009 ✅ 📝 transformer variant (operation=Zip)
+  [609/668] transformer-r02-v000 ✅ 📝 transformer variant (operation=ToUpper)
+  [610/668] transformer-r02-v001 ✅ 📝 transformer variant (operation=Reverse)
+  [611/668] transformer-r02-v002 ✅ 📝 transformer variant (operation=Sort)
+  [612/668] transformer-r02-v003 ✅ 📝 transformer variant (operation=Trim)
+  [613/668] transformer-r02-v004 ✅ 📝 transformer variant (operation=Duplicate)
+  [614/668] transformer-r02-v005 ✅ 📝 transformer variant (operation=ToLower)
+  [615/668] transformer-r02-v006 ✅ 📝 transformer variant (operation=Filter)
+  [616/668] transformer-r02-v007 ✅ 📝 transformer variant (operation=Map)
+  [617/668] transformer-r02-v008 ✅ 📝 transformer variant (operation=Flatten)
+  [618/668] transformer-r02-v009 ✅ 📝 transformer variant (operation=Zip)
+  [619/668] transformer-r03-v000 ✅ 📝 transformer variant (operation=ToUpper)
+  [620/668] transformer-r03-v001 ✅ 📝 transformer variant (operation=Reverse)
+  [621/668] transformer-r03-v002 ✅ 📝 transformer variant (operation=Sort)
+  [622/668] transformer-r03-v003 ✅ 📝 transformer variant (operation=Trim)
+  [623/668] transformer-r03-v004 ✅ 📝 transformer variant (operation=Duplicate)
+  [624/668] transformer-r03-v005 ✅ 📝 transformer variant (operation=ToLower)
+  [625/668] transformer-r03-v006 ✅ 📝 transformer variant (operation=Filter)
+  [626/668] transformer-r03-v007 ✅ 📝 transformer variant (operation=Map)
+  [627/668] transformer-r03-v008 ✅ 📝 transformer variant (operation=Flatten)
+  [628/668] transformer-r03-v009 ✅ 📝 transformer variant (operation=Zip)
+  [629/668] transformer-r04-v000 ✅ 📝 transformer variant (operation=ToUpper)
+  [630/668] transformer-r04-v001 ✅ 📝 transformer variant (operation=Reverse)
+  [631/668] transformer-r04-v002 ✅ 📝 transformer variant (operation=Sort)
+  [632/668] transformer-r04-v003 ✅ 📝 transformer variant (operation=Trim)
+  [633/668] transformer-r04-v004 ✅ 📝 transformer variant (operation=Duplicate)
+  [634/668] transformer-r04-v005 ✅ 📝 transformer variant (operation=ToLower)
+  [635/668] transformer-r04-v006 ✅ 📝 transformer variant (operation=Filter)
+  [636/668] transformer-r04-v007 ✅ 📝 transformer variant (operation=Map)
+  [637/668] transformer-r04-v008 ✅ 📝 transformer variant (operation=Flatten)
+  [638/668] transformer-r04-v009 ✅ 📝 transformer variant (operation=Zip)
+  [639/668] transformer-v000     ✅ 📝 transformer variant (operation=ToUpper)
+  [640/668] transformer-v001     ✅ 📝 transformer variant (operation=Reverse)
+  [641/668] transformer-v002     ✅ 📝 transformer variant (operation=Sort)
+  [642/668] transformer-v003     ✅ 📝 transformer variant (operation=Trim)
+  [643/668] transformer-v004     ✅ 📝 transformer variant (operation=Duplicate)
+  [644/668] transformer-v005     ✅ 📝 transformer variant (operation=ToLower)
+  [645/668] transformer-v006     ✅ 📝 transformer variant (operation=Filter)
+  [646/668] transformer-v007     ✅ 📝 transformer variant (operation=Map)
+  [647/668] transformer-v008     ✅ 📝 transformer variant (operation=Flatten)
+  [648/668] transformer-v009     ✅ 📝 transformer variant (operation=Zip)
+  [649/668] validator-v000       ✅ 📝 validator variant
+  [650/668] validator-v001       ✅ 📝 validator variant
+  [651/668] validator-v002       ✅ 📝 validator variant
+  [652/668] validator-v003       ✅ 📝 validator variant
+  [653/668] validator-v004       ✅ 📝 validator variant
+  [654/668] validator-v005       ✅ 📝 validator variant
+  [655/668] validator-v006       ✅ 📝 validator variant
+  [656/668] validator-v007       ✅ 📝 validator variant
+  [657/668] validator-v008       ✅ 📝 validator variant
+  [658/668] validator-v009       ✅ 📝 validator variant
+  [659/668] validator-v010       ✅ 📝 validator variant
+  [660/668] validator-v011       ✅ 📝 validator variant
+  [661/668] validator-v012       ✅ 📝 validator variant
+  [662/668] validator-v013       ✅ 📝 validator variant
+  [663/668] validator-v014       ✅ 📝 validator variant
+  [664/668] validator-v015       ✅ 📝 validator variant
+  [665/668] validator-v016       ✅ 📝 validator variant
+  [666/668] validator-v017       ✅ 📝 validator variant
+  [667/668] validator-v018       ✅ 📝 validator variant
+  [668/668] validator-v019       ✅ 📝 validator variant
+
+============================================================
+SUMMARY
+  Indexed: 668
+  Verified: 593/668
+  Embedded: 668/668
+============================================================
+
+  pattern               total  verified
+  --------------------------------------
+  aggregator                1         1
+  builder                   1         1
+  filter                    1         1
+  graph                     1         0
+  iterator                  1         1
+  parser                   99        97
+  reducer                   1         1
+  repository               23        23
+  state-machine            92        92
+  transformer              50        50
+  unknown                 299       222
+  validator                20        20
+
+Done. Use --search to query, --list to see stats.

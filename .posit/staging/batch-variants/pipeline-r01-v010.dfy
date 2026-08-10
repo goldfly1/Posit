@@ -34,34 +34,38 @@ method Parse(c: Ctx) returns (r: Result<Ctx>)
 
 method Validate(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
+  ensures r.Success? ==> |r.value.fields| >= 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields[0]| == 0 then
+  if |c.fields[0]| == 0 {
     r := Failure("empty command");
-  else
+  } else {
     r := Success(c);
+  }
 }
 
 method Auth(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
+  ensures r.Success? ==> |r.value.fields| >= 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Failure("no token");
-  else
+  } else {
     r := Success(c);
+  }
 }
 
 method Transform(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Success? ==> r.value.data == c.fields[0]
+  ensures r.Success? ==> r.value.fields == c.fields && r.value.data == c.fields[0]
 {
   r := Success(Ctx(c.input, c.fields, c.fields[0]));
 }
 
 method Store(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Success? ==> r.value.data == c.data
+  ensures r.Success? ==> r.value.fields == c.fields && r.value.data == c.data
 {
   r := Success(c);
 }

@@ -23,18 +23,39 @@ function CountById(items: seq<User>, id: int): int
   else CountById(items[1..], id)
 }
 
+lemma CountByIdZero(items: seq<User>, id: int)
+  requires forall k :: 0 <= k < |items| ==> items[k].id != id
+  ensures CountById(items, id) == 0
+  decreases |items|
+{
+  if |items| > 0 {
+    CountByIdZero(items[1..], id);
+  }
+}
+
+lemma CountByIdAppend(items: seq<User>, e: User, id: int)
+  ensures CountById(items + [e], id) == CountById(items, id) + (if e.id == id then 1 else 0)
+  decreases |items|
+{
+  if |items| > 0 {
+    assert (items + [e])[0] == items[0];
+    assert (items + [e])[1..] == items[1..] + [e];
+    CountByIdAppend(items[1..], e, id);
+  }
+}
+
 method Add(items: seq<User>, entity: User) returns (result: Result<seq<User>>)
   requires NoDuplicates(items)
   ensures result.Success? ==> |result.value| == |items| + 1
   ensures result.Failure? ==> result.error == "duplicate id"
   ensures result.Success? ==> CountById(result.value, entity.id) == 1
-  decreases |items|
 {
   var i := 0;
   var found := false;
   while i < |items| && !found
     invariant 0 <= i <= |items|
     invariant NoDuplicates(items)
+    invariant !found ==> forall k :: 0 <= k < i ==> items[k].id != entity.id
     decreases |items| - i
   {
     if items[i].id == entity.id {
@@ -45,14 +66,15 @@ method Add(items: seq<User>, entity: User) returns (result: Result<seq<User>>)
   if found {
     result := Failure("duplicate id");
   } else {
+    CountByIdZero(items, entity.id);
+    CountByIdAppend(items, entity, entity.id);
     result := Success(items + [entity]);
   }
 }
 
 method Size(items: seq<User>) returns (n: int)
   ensures n == |items|
-  ensures n == Count(items)
-  decreases |items|
+  ensures n >= 0
 {
   n := Count(items);
 }

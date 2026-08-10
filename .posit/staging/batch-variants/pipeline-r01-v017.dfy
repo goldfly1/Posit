@@ -34,52 +34,54 @@ method Parse(c: Ctx) returns (r: Result<Ctx>)
 
 method Validate(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Success? ==> |c.fields| >= 2 && |r.value.log| == |c.log| + 1
+  ensures r.Success? ==> |r.value.fields| >= 2 && |r.value.log| == |c.log| + 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Failure("too few fields");
-  else if |c.fields[0]| == 0 then
+  } else if |c.fields[0]| == 0 {
     r := Failure("empty command");
-  else
+  } else {
     r := Success(Ctx(c.input, c.fields, c.authed, c.log + ["validate"], c.data, c.response));
+  }
 }
 
 method Auth(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 2
-  ensures r.Success? ==> r.value.authed && |r.value.log| == |c.log| + 1
+  ensures r.Success? ==> r.value.authed && |r.value.fields| >= 2 && |r.value.log| == |c.log| + 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if c.fields[1] == "token" then
+  if c.fields[1] == "token" {
     r := Success(Ctx(c.input, c.fields, true, c.log + ["auth"], c.data, c.response));
-  else
+  } else {
     r := Failure("unauthorized");
+  }
 }
 
 method Transform(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 2 && c.authed
-  ensures r.Success? ==> r.value.data == c.fields[0] && |r.value.log| == |c.log| + 1
+  ensures r.Success? ==> r.value.fields == c.fields && r.value.authed == c.authed && r.value.data == c.fields[0] && |r.value.log| == |c.log| + 1
 {
   r := Success(Ctx(c.input, c.fields, c.authed, c.log + ["transform"], c.fields[0], c.response));
 }
 
 method Store(c: Ctx) returns (r: Result<Ctx>)
   requires c.authed && |c.fields| >= 2
-  ensures r.Success? ==> |r.value.log| == |c.log| + 1 && r.value.data == c.data
+  ensures r.Success? ==> r.value.fields == c.fields && r.value.authed == c.authed && |r.value.log| == |c.log| + 1 && r.value.data == c.data
 {
   r := Success(Ctx(c.input, c.fields, c.authed, c.log + ["store"], c.data, c.response));
 }
 
 method Respond(c: Ctx) returns (r: Result<Ctx>)
-  requires c.authed && |c.fields| >= 2
-  ensures r.Success? ==> |r.value.log| == |c.log| + 1 && r.value.response == c.data
+  requires |c.fields| >= 2 && c.authed
+  ensures r.Success? ==> r.value.fields == c.fields && r.value.authed == c.authed && |r.value.log| == |c.log| + 1 && r.value.response == c.data
 {
   r := Success(Ctx(c.input, c.fields, c.authed, c.log + ["respond"], c.data, c.data));
 }
 
 method Run(input: string) returns (r: Result<Ctx>)
   requires |input| > 0
-  ensures r.Success? ==> r.value.authed && |r.value.fields| >= 2 && r.value.data == r.value.fields[0] && r.value.response == r.value.data && |r.value.log| == 6
+  ensures r.Success? ==> r.value.authed && |r.value.fields| >= 2 && |r.value.log| == 5 && r.value.data == r.value.fields[0] && r.value.response == r.value.data
 {
   var c := Ctx(input, [], false, [], "", "");
   var p := Parse(c);

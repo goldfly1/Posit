@@ -34,22 +34,26 @@ method Parse(c: Ctx) returns (r: Result<Ctx>)
 
 method Validate(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
+  ensures r.Success? ==> |r.value.fields| >= 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields[0]| == 0 then
+  if |c.fields[0]| == 0 {
     r := Failure("empty command");
-  else
+  } else {
     r := Success(c);
+  }
 }
 
 method Auth(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
+  ensures r.Success? ==> |r.value.fields| >= 1
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Failure("no token");
-  else
+  } else {
     r := Success(c);
+  }
 }
 
 method Store(c: Ctx) returns (r: Result<Ctx>)

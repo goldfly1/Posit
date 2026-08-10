@@ -36,28 +36,30 @@ method Parse(c: Ctx) returns (r: Outcome<Ctx>)
 
 method Validate(c: Ctx) returns (r: Outcome<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Ok? ==> |c.fields| >= 2 && r.value.authed && |r.value.log| == |c.log| + 1
+  ensures r.Ok? ==> |r.value.fields| >= 2 && r.value.authed && |r.value.log| == |c.log| + 1
   ensures r.Err? ==> r.code == ErrValidate
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Err(ErrValidate, "too few fields");
-  else if |c.fields[0]| == 0 then
+  } else if |c.fields[0]| == 0 {
     r := Err(ErrValidate, "empty command");
-  else if c.fields[1] == "token" then
+  } else if c.fields[1] == "token" {
     r := Ok(Ctx(c.input, c.fields, true, c.log + ["validate"]));
-  else
+  } else {
     r := Err(ErrValidate, "unauthorized");
+  }
 }
 
 method Store(c: Ctx) returns (r: Outcome<Ctx>)
   requires c.authed && |c.fields| >= 2
-  ensures r.Ok? ==> |r.value.log| == |c.log| + 1
+  ensures r.Ok? ==> r.value.authed && |r.value.fields| >= 2 && |r.value.log| == |c.log| + 1
   ensures r.Err? ==> r.code == ErrStore
 {
-  if c.fields[0] == "dup" then
+  if c.fields[0] == "dup" {
     r := Err(ErrStore, "duplicate");
-  else
+  } else {
     r := Ok(Ctx(c.input, c.fields, c.authed, c.log + ["store"]));
+  }
 }
 
 method Run(input: string) returns (r: Outcome<Ctx>)

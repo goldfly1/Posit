@@ -34,26 +34,28 @@ method Parse(c: Ctx) returns (r: Result<Ctx>)
 
 method Validate(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 1
-  ensures r.Success? ==> |c.fields| >= 2
+  ensures r.Success? ==> |r.value.fields| >= 2
   ensures r.Failure? ==> |r.error| > 0
 {
-  if |c.fields| < 2 then
+  if |c.fields| < 2 {
     r := Failure("too few fields");
-  else if |c.fields[0]| == 0 then
+  } else if |c.fields[0]| == 0 {
     r := Failure("empty command");
-  else
+  } else {
     r := Success(c);
+  }
 }
 
 method Auth(c: Ctx) returns (r: Result<Ctx>)
   requires |c.fields| >= 2
-  ensures r.Success? ==> r.value.authed
+  ensures r.Success? ==> r.value.authed && |r.value.fields| >= 2
   ensures r.Failure? ==> |r.error| > 0
 {
-  if c.fields[1] == "token" then
+  if c.fields[1] == "token" {
     r := Success(Ctx(c.input, c.fields, true));
-  else
+  } else {
     r := Failure("unauthorized");
+  }
 }
 
 method Store(c: Ctx) returns (r: Result<Ctx>)
