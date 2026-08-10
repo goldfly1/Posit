@@ -336,7 +336,7 @@ public sealed class PositOrchestrator
     private static string GetModelForPhase(PhaseId phaseId) => phaseId.Value switch
     {
         "ideation" => "deepseek-v4-flash:cloud",
-        "architecture" => "glm-5.2:cloud",
+        "architecture" => "deepseek-v4-flash:cloud",
         "design-review" => "deepseek-v4-flash:cloud",
         "dafny-contracts" => "ollama", // deterministic — no model call
         "implementation" => "deepseek-v4-flash:cloud", // legacy alias
