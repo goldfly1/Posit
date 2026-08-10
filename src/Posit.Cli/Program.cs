@@ -7,7 +7,7 @@ using Posit.Phases;
 using Posit.Tools;
 
 // === Posit CLI — spec compiler pipeline ===
-// Usage: posit run "build a CSV parser" [--phase=architecture,dafny-contracts,...]
+// Usage: posit run --spec="build a CSV parser" [--phases=architecture,dafny-contracts,...]
 //        posit status <session-id>
 //        posit artifacts <session-id>
 
@@ -18,19 +18,18 @@ if (cliArgs.Length == 0)
     Console.Error.WriteLine("Posit — a spec compiler. Nothing ships unproven.");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  posit run <request> [--phase=<phases>]     Run the pipeline");
-    Console.Error.WriteLine("  posit status <session-id>                  Show session status");
-    Console.Error.WriteLine("  posit resume <session-id>                   Resume a failed/unfinished session");
-    Console.Error.WriteLine("  posit artifacts <session-id>                List artifacts");
-    Console.Error.WriteLine("  posit verify <session-id>                  Verify C# output in Docker");
+    Console.Error.WriteLine("  posit run --spec=\"<request>\" [--phases=<phases>]   Run the pipeline");
+    Console.Error.WriteLine("  posit status <session-id>                          Show session status");
+    Console.Error.WriteLine("  posit resume <session-id>                           Resume a failed/unfinished session");
+    Console.Error.WriteLine("  posit artifacts <session-id>                        List artifacts");
+    Console.Error.WriteLine("  posit verify <session-id>                           Verify C# output in Docker");
     Console.Error.WriteLine();
-    Console.Error.WriteLine("Phases: ideation, architecture, dafny-contracts, dafny-implementation,");
+    Console.Error.WriteLine("Phases: architecture, dafny-contracts, dafny-implementation,");
     Console.Error.WriteLine("        csharp-implementation, qa");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Models (via Ollama on localhost:11434):");
-    Console.Error.WriteLine("  deepseek-v4-pro:cloud  — Architecture, Dafny Implementation");
-    Console.Error.WriteLine("  kimi-k2.7-code:cloud    — Design Review, Imp Appeal");
-    Console.Error.WriteLine("  glm-5.2:cloud          — C# Implementation, QA");
+    Console.Error.WriteLine("  deepseek-v4-flash:cloud  — All phases (architecture, QA, etc.)");
+    Console.Error.WriteLine("  glm-5.2:cloud            — Alternative architect (more consistent pattern selection)");
     return 0;
 }
 
