@@ -429,7 +429,8 @@ public sealed class PositOrchestrator
 
             foreach (var component in componentsNeedingCSharp)
             {
-                if (!presentRoots.Contains(component))
+                // Match component name to file roots: "DagEngine" matches "DagEngineExtern.cs"
+                if (!presentRoots.Any(r => r.StartsWith(component, StringComparison.OrdinalIgnoreCase)))
                 {
                     errors.Add($"carapace.missing_component: '{component}' requires a C# stub cap but has no files in the C# Implementation output");
                 }
