@@ -234,17 +234,39 @@ static async Task<int> VerifyCommand(string[] args)
 
 static async Task<int> RunCommand(string[] args)
 {
-    if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
+    // Parse --spec="..." or --spec "..." and --phases=... from args
+    string? request = null;
+    for (var i = 0; i < args.Length; i++)
     {
-        Console.Error.WriteLine("Usage: posit run <request> [--phase=<phases>]");
-        Console.Error.WriteLine("Example: posit run \"Build a CSV parser library\"");
+        if (args[i].StartsWith("--spec="))
+        {
+            request = args[i]["--spec=".Length..];
+        }
+        else if (args[i] == "--spec" && i + 1 < args.Length)
+        {
+            request = args[++i];
+        }
+        else if (args[i].StartsWith("--phases="))
+        {
+            // handled below
+        }
+        else if (request is null && !args[i].StartsWith("--"))
+        {
+            // First non-flag argument is the request (backward compat)
+            request = args[i];
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(request))
+    {
+        Console.Error.WriteLine("Usage: posit run --spec=\"<request>\" [--phases=<phases>]");
+        Console.Error.WriteLine("Example: posit run --spec=\"Build a CSV parser library\"");
         return 1;
     }
 
-    var request = args[0];
-    var phaseArg = args.Skip(1).FirstOrDefault(a => a.StartsWith("--phase="));
+    var phaseArg = args.FirstOrDefault(a => a.StartsWith("--phases="));
     var phases = phaseArg is not null
-        ? phaseArg["--phase=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries)
+        ? phaseArg["--phases=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => new PhaseId(p.Trim())).ToArray()
         : [KnownPhases.Architecture, KnownPhases.DafnyContracts,
            KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation,
