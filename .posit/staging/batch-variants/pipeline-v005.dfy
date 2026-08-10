@@ -26,7 +26,7 @@ method Parse(input: string, d: string) returns (fields: seq<string>)
 
 method Validate(fields: seq<string>) returns (v: VRes)
   requires |fields| >= 1
-  ensures v.Valid? ==> |fields| >= 1 && |fields| <= 3
+  ensures v.Valid? ==> |fields| >= 1 && |fields| <= 3 && |fields[0]| > 0
   ensures v.Invalid? ==> |v.msg| > 0
   decreases |fields|
 {
@@ -71,5 +71,6 @@ method Handle(input: string, d: string, es: seq<Entity>, nextId: int) returns (r
   var v := Validate(f);
   if v.Invalid? { r := Failure(v.msg); return; }
   var e := Record(nextId, f[0]);
-  r := Respond(Store(es, e));
+  var s := Store(es, e);
+  r := Respond(s);
 }

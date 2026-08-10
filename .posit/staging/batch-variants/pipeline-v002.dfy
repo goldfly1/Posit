@@ -65,9 +65,12 @@ method Handle(input: string, d: string, token: string, es: seq<Entity>, nextId: 
   ensures r.Success? ==> NoDup(r.value)
   decreases |es|
 {
-  if !CheckToken(token) { r := Failure("auth failed: empty token"); return; }
+  var tokOk := CheckToken(token);
+  if !tokOk { r := Failure("auth failed"); return; }
   var f := Parse(input, d);
-  if !ValidatePayload(f[0]) { r := Failure("validation failed: empty payload"); return; }
+  var ok := ValidatePayload(f[0]);
+  if !ok { r := Failure("validation failed"); return; }
   var e := Record(nextId, f[0]);
-  r := Respond(Store(es, e));
+  var s := Store(es, e);
+  r := Respond(s);
 }

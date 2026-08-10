@@ -61,7 +61,9 @@ method Handle(input: string, d: string, es: seq<Entity>, nextId: int) returns (r
   decreases |es|
 {
   var f := Parse(input, d);
-  if !ValidatePayload(f[0]) { r := Failure("validation failed: empty payload"); return; }
+  var ok := ValidatePayload(f[0]);
+  if !ok { r := Failure("validation failed"); return; }
   var e := Record(nextId, f[0]);
-  r := Respond(Store(es, e));
+  var s := Store(es, e);
+  r := Respond(s);
 }

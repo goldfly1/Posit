@@ -57,5 +57,6 @@ method Handle(input: string, d: string, es: seq<Entity>, nextId: int) returns (r
 {
   var f := Parse(input, d);
   var e := Record(nextId, f[0]);
-  r := Respond(Store(es, e));
+  var s := Store(es, e);
+  r := Respond(s);
 }

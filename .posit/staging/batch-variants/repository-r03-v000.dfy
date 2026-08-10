@@ -14,9 +14,9 @@ method Add(items: seq<User>, u: User) returns (result: Result<seq<User>>)
 {
   var i := 0; var found := false;
   while i < |items| && !found
-    invariant 0 <= i <= |items|
-    invariant NoDuplicates(items)
-    invariant found ==> exists k :: 0 <= k < |items| && items[k].id == u.id
+    invariant 0 <= i <= |items| && NoDuplicates(items)
+    invariant !found ==> forall k :: 0 <= k < i ==> items[k].id != u.id
+    invariant found ==> exists k :: 0 <= k < i && items[k].id == u.id
     decreases |items| - i
   {
     if items[i].id == u.id { found := true; }

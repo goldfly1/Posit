@@ -64,14 +64,14 @@ method Handle(input: string, d: string, token: string, es: seq<Entity>, nextId: 
   decreases |es|
 {
   log := [];
-  if !CheckToken(token) { log := log + ["auth failed"]; r := Failure(AuthErr, "auth failed"); return; }
+  var tokOk := CheckToken(token);
+  if !tokOk { log := log + ["auth failed"]; r := Failure(AuthErr, "auth failed"); return; }
   log := log + ["auth ok"];
   var f := Parse(input, d);
-  log := log + ["parsed"];
-  if !ValidatePayload(f[0]) { log := log + ["validation failed"]; r := Failure(ValidationErr, "empty payload"); return; }
+  var ok := ValidatePayload(f[0]);
+  if !ok { log := log + ["validation failed"]; r := Failure(ValidationErr, "validation failed"); return; }
   log := log + ["validation ok"];
   var e := Record(nextId, f[0]);
-  var stored := Store(es, e);
-  log := log + ["stored"];
-  r := stored;
+  r := Store(es, e);
+  if r.Success? { log := log + ["store ok"]; } else { log := log + ["store failed"]; }
 }

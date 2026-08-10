@@ -8,7 +8,7 @@ predicate NoDuplicates(items: seq<User>)
 
 predicate IsSorted(items: seq<User>)
 {
-  forall i :: 0 <= i + 1 < |items| ==> items[i].id <= items[i+1].id
+  forall i :: 0 <= i < |items| - 1 ==> items[i].id <= items[i+1].id
 }
 
 method Add(items: seq<User>, u: User) returns (result: Result<seq<User>>)
@@ -20,6 +20,8 @@ method Add(items: seq<User>, u: User) returns (result: Result<seq<User>>)
   var i := 0; var found := false;
   while i < |items| && !found
     invariant 0 <= i <= |items| && NoDuplicates(items)
+    invariant !found ==> forall k :: 0 <= k < i ==> items[k].id != u.id
+    invariant found ==> exists k :: 0 <= k < i && items[k].id == u.id
     decreases |items| - i
   {
     if items[i].id == u.id { found := true; }
