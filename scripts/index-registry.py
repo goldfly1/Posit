@@ -124,6 +124,29 @@ def parse_variant_metadata(file_path: Path) -> dict:
     }
 
 
+def check_carapace(file_path: Path) -> tuple[bool, str]:
+    """Check carapace limits: 200-line cap, 10-method cap, 5-class cap per module.
+    Returns (passes, reason)."""
+    content = file_path.read_text()
+    lines = content.split('\n')
+    line_count = len(lines)
+    
+    # Count methods (method declarations, not in comments)
+    method_count = sum(1 for l in lines if re.match(r'\s*(method|function|lemma)\s', l) and not l.strip().startswith('//'))
+    
+    # Count class declarations
+    class_count = sum(1 for l in lines if re.match(r'\s*class\s', l) and not l.strip().startswith('//'))
+    
+    if line_count > 200:
+        return False, f"line cap exceeded: {line_count} > 200"
+    if method_count > 10:
+        return False, f"method cap exceeded: {method_count} > 10"
+    if class_count > 5:
+        return False, f"class cap exceeded: {class_count} > 5"
+    
+    return True, f"lines={line_count}, methods={method_count}, classes={class_count}"
+
+
 def db_connect():
     """Connect to Postgres."""
     import psycopg2
@@ -262,6 +285,12 @@ def main():
     
     for i, dfy_file in enumerate(dfy_files):
         variant = parse_variant_metadata(dfy_file)
+        
+        # Check carapace limits (200-line, 10-method, 5-class caps)
+        carapace_ok, carapace_msg = check_carapace(dfy_file)
+        if not carapace_ok:
+            print(f"  [{i+1}/{len(dfy_files)}] {dfy_file.stem:30s} ❌ CARAPACE FAIL: {carapace_msg}")
+            continue
         
         # Verify with Z3 (unless --no-verify)
         if args.no_verify:
