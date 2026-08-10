@@ -66,10 +66,11 @@ def verify_dafny(dafny_path: str) -> tuple[bool, int, str]:
 
 
 def verify_batch_parallel(file_paths: list, workers: int = 6) -> dict:
-    """Verify multiple Dafny files in parallel. Returns {path: (success, vc_count, output)}."""
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    """Verify multiple Dafny files in parallel. Returns {path: (success, vc_count, output)}.
+    Uses ThreadPoolExecutor since Z3 runs as subprocess (GIL doesn't block)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     results = {}
-    with ProcessPoolExecutor(max_workers=workers) as executor:
+    with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(verify_dafny, str(f)): str(f) for f in file_paths}
         for future in as_completed(futures):
             path = futures[future]
