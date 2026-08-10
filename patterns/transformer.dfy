@@ -8,6 +8,7 @@
 //   filterEmpty: bool — whether to drop empty results (default false)
 
 // Apply a transformation to each element of a sequence
+// SUBSTITUTION_MARKER: operation=ToUpper (replaced by generate-batch.py)
 method TransformAll(input: seq<string>) returns (output: seq<string>)
   requires |input| > 0
   ensures |output| == |input|
