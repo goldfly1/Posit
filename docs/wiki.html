@@ -186,32 +186,37 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-7545472">Posit Architecture</a></li>
+<li class="page"><a href="#page-12501796">Posit Architecture</a></li>
 </ul>
 </li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-1783476">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-8538687">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-13650095">Desktop Port Plan</a></li>
+<li class="page"><a href="#page-14566282">Desktop Port Plan</a></li>
 <li class="folder">Evolution
 <ul>
-<li class="page"><a href="#page-9419749">Architecture Evolution Map</a></li>
+<li class="page"><a href="#page-9190992">Architecture Evolution Map</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-1850059">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-13379832">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-7019051">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-11305442">Handoff 2026 08 08</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-3852872">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-4470557">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
 <li class="folder">Reference
 <ul>
-<li class="page"><a href="#page-8142624">Dafny Runtime Cs</a></li>
-<li class="page"><a href="#page-11536630">Dafny Runtime System Cs</a></li>
-<li class="page"><a href="#page-12767638">Dafny Stdlib</a></li>
+<li class="page"><a href="#page-10558359">Dafny Runtime Cs</a></li>
+<li class="page"><a href="#page-15138219">Dafny Runtime System Cs</a></li>
+<li class="page"><a href="#page-7332301">Dafny Stdlib</a></li>
+</ul>
+</li>
+<li class="folder">Trials
+<ul>
+<li class="page"><a href="#page-1098468">Trial Specs</a></li>
 </ul>
 </li>
     </ul>
@@ -222,7 +227,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-13650095" data-title="Desktop Port Plan">
+        <div class="page" id="page-14566282" data-title="Desktop Port Plan">
             <h1>Desktop Port Plan</h1>
             <div class="page-path">desktop-port-plan.md</div>
             
@@ -630,7 +635,7 @@ body {
 </ul>
         </div>
 
-        <div class="page" id="page-1850059" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-7019051" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -859,7 +864,9 @@ body {
 <li style="margin-left:0ch"><strong>17 patterns total:</strong> 116 VC, 0 errors — all with pre-written, Z3-proven method bodies (Posit, Aug 9)</li>
 <li style="margin-left:0ch"><strong>Registry DB live:</strong> ~1290 variant files on disk, ~755 indexed in pgvector, searchable by semantic similarity (Posit, Aug 9)</li>
 <li style="margin-left:0ch"><strong>Variant generation results:</strong> substitution = 100% pass, 0 tokens. Model generation = 60-100% pass, 80-470K tokens per pattern. Self-review HARMFUL (removed). 20/call = sweet spot. &gt;20 degrades. Thinking-mode bug causes 65K output, 0 extracted. (Posit, Aug 9)</li>
-<li style="margin-left:0ch"><strong>Layered decomposition:</strong> wide-area map → locale design for 50+ module projects. Added to evolution wiki. (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>Flushed make-weight:</strong> Deleted 495 substitution variants (identical code, different comments) from DB. Honest count: ~450 genuinely distinct Z3-verified variants, not 1,165. (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>Indexer verification gap:</strong> <code class="inline">--no-verify</code> flag trusts files without Z3 checking. Some failed variants indexed as verified. Fix: re-index with Z3. (Posit, Aug 9)</li>
+<li style="margin-left:0ch"><strong>Pattern files lack placeholders:</strong> No <code class="inline">{{feature}}</code> or <code class="inline">{{parameter}}</code> in any .dfy pattern file. All substitution passes produced identical code with different header comments. Next: add real placeholders for genuine variety. (Posit, Aug 9)</li>
 
 </ul><h2 id="key-documents">Key Documents</h2>
 
@@ -1006,7 +1013,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-13379832" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-11305442" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.2</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -1181,13 +1188,282 @@ body {
 <li style="margin-left:0ch">Tests: 38 passed, 0 failed</li>
 <li style="margin-left:0ch">Verification: <strong>PASSED</strong></li>
 
-</ul><h3 id="t4-workflowengine-in-progress-">T4 — WorkflowEngine (in progress)</h3>
+</ul><h3 id="t5-document-processing-pipeline-replaced-rust-ffi-">T5 — Document Processing Pipeline (replaced Rust FFI)</h3>
 
-<ul><li style="margin-left:0ch">Session: <code class="inline">d_EeeTLSYEynJyTZch1QDA0000</code></li>
-<li style="margin-left:0ch">Status: Resumed after <code class="inline">ArchitecturePhase</code> cycle-detection bug fix</li>
-<li style="margin-left:0ch">Initial symptom: validator reported cycles <code class="inline">Data -&gt; Contracts</code>, <code class="inline">DataAccess -&gt; Data</code>, <code class="inline">CLI -&gt; Data</code></li>
-<li style="margin-left:0ch">Root cause: DFS checked <code class="inline">visiting.Add</code> before <code class="inline">visited.Contains</code>, so already-visited nodes leaked back into the visiting set and every later edge looked cyclic</li>
-<li style="margin-left:0ch">Fix: swap the two checks so <code class="inline">visited</code> is checked first</li>
+<ul><li style="margin-left:0ch">Spec: Document processing pipeline — reads files, extracts text, classifies by type, extracts key fields, validates against business rules, stores in searchable index</li>
+<li style="margin-left:0ch">Expected patterns: parser, transformer, filter, repository</li>
+<li style="margin-left:0ch">Status: Pending (replaced T5 Rust FFI which was deferred)</li>
+
+</ul><h3 id="t4-workflowengine-rerun-with-fixes-">T4 — WorkflowEngine (rerun with fixes)</h3>
+
+<ul><li style="margin-left:0ch">Spec: Multi-project .NET workflow engine with sequential/parallel steps, conditional branching, persistent state</li>
+<li style="margin-left:0ch">Expected patterns: state-machine, pipeline, repository</li>
+<li style="margin-left:0ch">Previous run: green (45K tokens, pattern mismatch — picked parser instead of state-machine)</li>
+<li style="margin-left:0ch">Rerun with: pattern selection rules in prompt, thinking disabled, stub cap fallback</li>
+
+</ul><h3 id="t6-t12-rerun-with-3-fixes">T6-T12 — Rerun with 3 fixes</h3>
+
+<p>All trials rerun with:</p>
+<ul><li>Generic stub cap fallback (no more carapace aborts)</li>
+<li>Pattern selection rules in architect prompt (17 patterns with when-to-use guidance)</li>
+<li><code class="inline">&quot;think&quot;: false</code> in Ollama API (no more 65K reasoning runaway)</li>
+
+</ul><h3 id="first-batch-results-before-fixes-preserved-as-trail-">First batch results (before fixes — preserved as trail)</h3>
+
+<table>
+<tr>
+<th>Trial</th>
+<th>Result</th>
+<th>Issue</th>
+</tr>
+<tr>
+<td>T1-T3</td>
+<td>✅ green</td>
+<td>No issues</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>✅ green</td>
+<td>Pattern mismatch (parser for workflow engine)</td>
+</tr>
+<tr>
+<td>T6</td>
+<td>✅ green</td>
+<td>Pattern mismatch (pipeline for observability)</td>
+</tr>
+<tr>
+<td>T7</td>
+<td>❌ aborted</td>
+<td>Missing stub cap: VerificationOrchestrator</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>❌ aborted</td>
+<td>Missing stub cap: ProcessRunner</td>
+</tr>
+<tr>
+<td>T9</td>
+<td>✅ green</td>
+<td>Pattern mismatch</td>
+</tr>
+<tr>
+<td>T10</td>
+<td>✅ green</td>
+<td>Pattern mismatch</td>
+</tr>
+<tr>
+<td>T11</td>
+<td>✅ green</td>
+<td>Pattern mismatch</td>
+</tr>
+<tr>
+<td>T12</td>
+<td>⚠️ partial</td>
+<td>QA failed (65K thinking-mode output)</td>
+</tr>
+</table>
+
+<p>First batch: 7 green, 2 aborted, 1 partial = 70% pass rate.</p>
+
+<h3 id="second-batch-results-with-3-fixes-9-9-green-">Second batch results (with 3 fixes) — 9/9 GREEN ✅</h3>
+
+<table>
+<tr>
+<th>Trial</th>
+<th>Tokens</th>
+<th>C# files</th>
+<th>Tests</th>
+<th>Status</th>
+</tr>
+<tr>
+<td>T4</td>
+<td>86K</td>
+<td>12</td>
+<td>2</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>58K</td>
+<td>14</td>
+<td>4</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T6</td>
+<td>39K</td>
+<td>5</td>
+<td>5</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T7</td>
+<td>40K</td>
+<td>10</td>
+<td>4</td>
+<td>✅ (was aborted)</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>43K</td>
+<td>11</td>
+<td>5</td>
+<td>✅ (was aborted)</td>
+</tr>
+<tr>
+<td>T9</td>
+<td>70K</td>
+<td>17</td>
+<td>3</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T10</td>
+<td>36K</td>
+<td>6</td>
+<td>2</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T11</td>
+<td>35K</td>
+<td>8</td>
+<td>4</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T12</td>
+<td>43K</td>
+<td>11</td>
+<td>5</td>
+<td>✅ (QA was broken)</td>
+</tr>
+</table>
+
+<p><strong>100% pass rate.</strong> Zero aborts, zero QA failures. All 3 fixes confirmed:</p>
+<ul><li>Stub cap fallback — T7, T8 now pass (were aborted)</li>
+<li>Pattern selection rules — pipeline, aggregator now selected</li>
+<li><code class="inline">think: false</code> — T12 QA fixed, test output doubled</li>
+
+</ul><p><strong>Combined: T1-T12 = 12/12 green.</strong></p>
+
+<p>Progression: 70% → 100% in one fix cycle.</p>
+
+<h3 id="verification-findings-honest-">Verification findings (honest)</h3>
+
+<ul><li style="margin-left:0ch">Z3 proof: REAL — 13+ VC per trial, 0 errors, Dafny contracts verified</li>
+<li style="margin-left:0ch">Dafny → C# translation: REAL — valid C# with embedded runtime</li>
+<li style="margin-left:0ch">C# extern stubs: REAL — File.ReadAllText, File.WriteAllText, etc.</li>
+<li style="margin-left:0ch">C# compilation: FAILS — Dafny runtime types collide when multiple translated files assembled</li>
+<li style="margin-left:0ch">Tests: Dafny <code class="inline">{:axiom}</code> contract verifications, not executable xUnit test suites</li>
+<li style="margin-left:0ch">Pattern selection: IMPROVED but still biased toward CSV patterns</li>
+
+</ul><h3 id="trial-tiers">Trial Tiers</h3>
+
+<table>
+<tr>
+<th>Tier</th>
+<th>Trials</th>
+<th>Modules</th>
+<th>Scale</th>
+</tr>
+<tr>
+<td>Tier 0</td>
+<td>T1-T12</td>
+<td>2-8</td>
+<td>Single-purpose systems (DONE — 12/12 green)</td>
+</tr>
+<tr>
+<td>Tier 1</td>
+<td>T13-T16</td>
+<td>10-15</td>
+<td>Multi-system platforms</td>
+</tr>
+<tr>
+<td>Tier 2</td>
+<td>T17-T20</td>
+<td>15-25</td>
+<td>Enterprise-scale</td>
+</tr>
+<tr>
+<td>Tier 3</td>
+<td>T21-T24</td>
+<td>25-40</td>
+<td>Large-scale distributed</td>
+</tr>
+</table>
+
+<h2 id="tier-0-results-t1-t12-">Tier 0 Results (T1-T12)</h2>
+
+<h3 id="batch-1-before-fixes-70-pass-rate">Batch 1 (before fixes) — 70% pass rate</h3>
+<p>7 green, 2 aborted (stub cap), 1 partial (QA thinking-mode)</p>
+
+<h3 id="batch-2-with-3-fixes-100-pass-rate">Batch 2 (with 3 fixes) — 100% pass rate</h3>
+<p>9/9 green. Fixes: stub cap fallback, pattern selection rules, think:false</p>
+
+<h3 id="batch-3-universal-pipeline-prompt-spec-fix-6-6-green">Batch 3 (universal pipeline prompt + spec fix) — 6/6 GREEN</h3>
+
+<p>All trials with real spec text reaching the model (CLI --spec bug fixed).</p>
+
+<table>
+<tr>
+<th>Trial</th>
+<th>Spec</th>
+<th>Components</th>
+<th>Green?</th>
+</tr>
+<tr>
+<td>T1</td>
+<td>CSV-to-JSON CLI</td>
+<td>CsvParser, CLI</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>Document processing</td>
+<td>DocumentPipeline, FileReader, IndexStore</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T7</td>
+<td>Marketplace</td>
+<td>BudgetEnforcer, ServiceRegistry, PaymentProcessor, FailureInjector</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>CI/CD pipeline</td>
+<td>DagResolver, JobScheduler, StepExecutor, ExpressionEvaluator, ArtifactManager, NotificationSystem, PipelineEngine</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T12</td>
+<td>Task scheduler</td>
+<td>SchedulerCore, RetryPolicy, WorkerPool, DeadLetterQueue, StatusTracker, SchedulerOrchestrator</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>T13</td>
+<td>E-commerce (Tier 1)</td>
+<td>ProductCatalog, ShoppingCart, OrderProcessing, Payment, Inventory, Shipping, Tax, Notifications, AdminDashboard, AuditLog, RBAC</td>
+<td>✅</td>
+</tr>
+</table>
+
+<p><strong>6/6 green with real specs.</strong> Every component named for its domain. Zero CSV. Pattern selection correct (graph for DAGs, scheduler for queues, state-machine for step execution, strategy for retry).</p>
+
+<h3 id="critical-fixes-applied-aug-10-">Critical fixes applied (Aug 10)</h3>
+
+<ul><li><strong>CLI spec fix</strong> — <code class="inline">args[0]</code> was <code class="inline">--spec</code> not the spec text. Root cause of CSV bias. Model was flying blind.</li>
+<li><strong>Universal pipeline panel</strong> — <code class="inline">pipeline.dfy</code> enriched with parse→validate→transform→store→result (10 VC, Z3-proven, 183 lines)</li>
+<li><strong>Prompt alignment</strong> — pipeline listed first as UNIVERSAL default, CSV examples removed</li>
+<li><strong>Stub cap fallback</strong> — dafny/mixed components get file-io fallback if no stub matches</li>
+<li><strong>Carapace prefix matching</strong> — <code class="inline">DagResolver</code> matches <code class="inline">DagResolverExtern.cs</code></li>
+<li><strong><code class="inline">--allow-warnings</code> on translate cs</strong> — graph pattern quantifier warning was silently aborting translation</li>
+<li><strong><code class="inline">think: false</code></strong> — disabled reasoning mode (65K output runaway). Cognitive traces saved to <code class="inline">.posit/staging/thinking/</code> when enabled.</li>
+<li><strong>Runtime collision fix</strong> — <code class="inline">--no-include-runtime</code> + shared <code class="inline">Posit.DafnyRuntime</code> project</li>
+<li><strong>Carapace checking in indexer</strong> — 200-line, 10-method, 5-class caps enforced</li>
+<li><strong>Domain-specific C# stubs</strong> — e-commerce, CI/CD, healthcare templates with <code class="inline">{{ComponentName}}</code> placeholders</li>
 <li style="margin-left:0ch">Commit: <code class="inline">ec02c01</code></li>
 
 </ul><h2 id="carapace-enforcement">Carapace Enforcement</h2>
@@ -1285,7 +1561,7 @@ posit verify &lt;session-id&gt;
 </ul>
         </div>
 
-        <div class="page" id="page-12136051" data-title="Posit Architecture">
+        <div class="page" id="page-8887248" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2143,7 +2419,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-9080983" data-title="Dafny Contract Templates">
+        <div class="page" id="page-1642856" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2309,7 +2585,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-15123389" data-title="Posit Architecture Evolution Map">
+        <div class="page" id="page-962316" data-title="Posit Architecture Evolution Map">
             <h1>Posit Architecture Evolution Map</h1>
             <div class="page-path">evolution\architecture-evolution-map.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: design</span> · <span class='meta-item'><b>tags</b>: [architecture, evolution, registry, vector-db, vision]</span> · <span class='meta-item'><b>component</b>: posit</span> · <span class='meta-item'><b>version</b>: 0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -2811,9 +3087,43 @@ Each box = a locale (designed independently).
 </ul><p><strong>When this matters:</strong> Projects with 50+ modules where the architect can&#x27;t hold the whole design in one context. The wide-area map is the decomposition that makes it tractable. Each locale is a small problem. The edges are the contracts between them.</p>
 
 <p><strong>Not needed now.</strong> Current projects (CSV-to-SQL, config validator) are 2-5 modules. Layered decomposition is for when the project is too big for one architecture pass. Add to the pipeline when the first 50-module project arrives.</p>
+
+<h2 id="pattern-selection-experiments-aug-10-">Pattern Selection Experiments (Aug 10)</h2>
+
+<p>Three experiments to diagnose CSV bias in pattern selection:</p>
+
+<table>
+<tr>
+<th>Experiment</th>
+<th>What changed</th>
+<th>Result</th>
+</tr>
+<tr>
+<td>1. Demote favorites</td>
+<td>parser/validator/transformer moved to bottom with AVOID tags</td>
+<td>Still CSV — flash ignored demotion</td>
+</tr>
+<tr>
+<td>2. Complete removal</td>
+<td>parser/validator/transformer removed from menu entirely</td>
+<td>Still CSV — flash outputs &#x27;parser&#x27; even when not listed</td>
+</tr>
+<tr>
+<td>3. Switch model</td>
+<td>glm-5.2:cloud instead of flash</td>
+<td>Still CSV — same bias in both models</td>
+</tr>
+</table>
+
+<p><strong>Root cause:</strong> Both models latch onto &#x27;CSV parser&#x27; examples in the pattern descriptions. The bias is in the prompt content, not the model or the ordering.</p>
+
+<p><strong>Fix — universal composite panel:</strong> Enriched pipeline.dfy to include parse → validate → transform → store → result as built-in stages. 14 VC, Z3-proven. The architect picks one pipeline panel instead of three separate parser/validator/transformer components. Named by system role (WorkflowPipeline, TaskSchedulerPipeline), not by CSV.</p>
+
+<p><strong>Prompt updated:</strong> pipeline listed first as &#x27;UNIVERSAL panel — use this as the foundation for every system.&#x27; Specialist patterns bolt on when needed.</p>
+
         </div>
 
-        <div class="page" id="page-423680" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-4859553" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             
@@ -3103,7 +3413,7 @@ public class CsvFileReader
 <li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
         </div>
 
-        <div class="page" id="page-9091720" data-title="DafnyRuntime.cs — C# Runtime Reference">
+        <div class="page" id="page-9939406" data-title="DafnyRuntime.cs — C# Runtime Reference">
             <h1>DafnyRuntime.cs — C# Runtime Reference</h1>
             <div class="page-path">reference\dafny-runtime-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -5084,7 +5394,7 @@ namespace Dafny {
 
         </div>
 
-        <div class="page" id="page-475909" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
+        <div class="page" id="page-10531415" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
             <h1>DafnyRuntimeSystemModule.cs — C# System Module Reference</h1>
             <div class="page-path">reference\dafny-runtime-system-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -8787,7 +9097,7 @@ namespace _System {
 
         </div>
 
-        <div class="page" id="page-2433938" data-title="Dafny Standard Library Reference">
+        <div class="page" id="page-15056203" data-title="Dafny Standard Library Reference">
             <h1>Dafny Standard Library Reference</h1>
             <div class="page-path">reference\dafny-stdlib.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [dafny, stdlib, reference, types, contracts]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -27583,6 +27893,61 @@ module Std.Wrappers {
 
 </code></pre>
 
+        </div>
+
+        <div class="page" id="page-8784381" data-title="Trials\Trial Specs">
+            <h1>Trials\Trial Specs</h1>
+            <div class="page-path">trials\trial-specs.md</div>
+            
+            <h1 id="posit-trial-specs-exponential-scale">Posit Trial Specs — Exponential Scale</h1>
+
+<h2 id="tier-1-t1-t12-already-running-">Tier 1: T1-T12 (already running)</h2>
+<p>Single-purpose systems, 2-8 modules each.</p>
+
+<h2 id="tier-2-t13-t16-10-15-modules-">Tier 2: T13-T16 (10-15 modules)</h2>
+<p>Multi-system platforms with cross-cutting concerns.</p>
+
+<h3 id="t13-e-commerce-platform">T13 — E-Commerce Platform</h3>
+<p>A multi-project e-commerce platform with product catalog, shopping cart, order processing, payment integration, inventory management, shipping calculation, tax calculation, customer notifications, and admin dashboard. Supports product search, filtering, and recommendations. Includes audit logging and role-based access control.</p>
+
+<h3 id="t14-healthcare-records-system">T14 — Healthcare Records System</h3>
+<p>A patient records management system with patient registration, medical history tracking, appointment scheduling, prescription management, lab results processing, billing, and insurance claim submission. Supports HL7 FHIR data format, access audit trails, and HIPAA-compliant data handling. Multi-project with Patient, Clinical, Billing, Scheduling, and Integration modules.</p>
+
+<h3 id="t15-real-time-chat-platform">T15 — Real-Time Chat Platform</h3>
+<p>A real-time messaging platform with user presence, direct messages, group channels, message threading, file attachments, read receipts, typing indicators, message search, notification preferences, and admin moderation tools. Supports WebSocket connections, message persistence, and pagination for history.</p>
+
+<h3 id="t16-banking-transaction-system">T16 — Banking Transaction System</h3>
+<p>A banking core with account management, transaction processing, balance inquiry, fund transfers, statement generation, fraud detection rules, currency conversion, standing orders, and regulatory reporting. Supports double-entry bookkeeping, transaction atomicity, and audit trails. Multi-project with Accounts, Transactions, Reporting, Fraud, and Integration modules.</p>
+
+<h2 id="tier-3-t17-t20-15-25-modules-">Tier 3: T17-T20 (15-25 modules)</h2>
+<p>Enterprise-scale systems with distributed components.</p>
+
+<h3 id="t17-erp-system">T17 — ERP System</h3>
+<p>A modular ERP with procurement, inventory, manufacturing, sales order management, CRM, human resources, payroll, financial accounting, project management, asset management, warehouse management, quality control, supplier management, and business intelligence reporting. Each module is a separate project with shared contracts and cross-module workflows.</p>
+
+<h3 id="t18-microservices-api-gateway">T18 — Microservices API Gateway</h3>
+<p>A complete API gateway with request routing, load balancing, circuit breakers, rate limiting, authentication (JWT + OAuth2), authorization (RBAC + ABAC), request/response transformation, API versioning, service discovery, health monitoring, distributed tracing, request aggregation, response caching, webhook management, and developer portal with API documentation.</p>
+
+<h3 id="t19-devops-platform">T19 — DevOps Platform</h3>
+<p>A DevOps platform with CI/CD pipeline orchestration, container registry, infrastructure as code management, secrets management, monitoring dashboards, log aggregation, alerting rules, incident management, deployment tracking, environment management, release notes generation, rollback automation, capacity planning, and team collaboration features.</p>
+
+<h3 id="t20-multi-tenant-saas-framework">T20 — Multi-Tenant SaaS Framework</h3>
+<p>A multi-tenant SaaS framework with tenant provisioning, tenant isolation, per-tenant configuration, billing and usage metering, feature flags per tenant, tenant-specific branding, data export/import, audit logging, GDPR compliance tools, admin console, tenant API keys, webhook configuration, and per-tenant rate limiting.</p>
+
+<h2 id="tier-4-t21-t24-25-40-modules-">Tier 4: T21-T24 (25-40 modules)</h2>
+<p>Large-scale distributed systems.</p>
+
+<h3 id="t21-social-media-platform">T21 — Social Media Platform</h3>
+<p>A social media platform with user profiles, posts, comments, likes, shares, follow/follower graph, news feed generation, content moderation, hashtag indexing, search, direct messaging, notifications, story/expiry content, live streaming, groups, events, polls, ad targeting, analytics dashboard, content recommendations, media processing pipeline, CDN integration, spam detection, and API platform for third-party apps.</p>
+
+<h3 id="t22-logistics-and-supply-chain">T22 — Logistics and Supply Chain</h3>
+<p>A supply chain management system with supplier management, purchase orders, goods receipt, warehouse management with bin tracking, inventory valuation, pick/pack/ship workflows, carrier integration, shipment tracking, route optimization, customs documentation, demand forecasting, safety stock calculation, bill of materials, production planning, quality inspection, returns processing, and financial reconciliation.</p>
+
+<h3 id="t23-streaming-video-platform">T23 — Streaming Video Platform</h3>
+<p>A video streaming platform with content ingestion, transcoding pipeline, thumbnail generation, metadata management, content delivery network integration, user subscriptions, payment processing, watch history, recommendation engine, search, watchlist, parental controls, subtitle/caption management, ad insertion, viewer analytics, concurrent stream limiting, offline download, and content licensing management.</p>
+
+<h3 id="t24-autonomous-vehicle-control-system">T24 — Autonomous Vehicle Control System</h3>
+<p>An autonomous vehicle control system with sensor data fusion, perception pipeline, object detection, lane tracking, path planning, trajectory optimization, speed control, steering control, brake control, traffic sign recognition, intersection handling, parking assist, obstacle avoidance, GPS integration, map management, telemetry logging, over-the-air updates, diagnostic monitoring, failsafe state machine, emergency stop, and regulatory compliance logging.</p>
         </div>
 </div>
 <script>

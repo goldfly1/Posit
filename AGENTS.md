@@ -52,7 +52,13 @@
 15. **Registry vector DB.** `posit_registry.variants` table in Postgres (port 5434, shepherd/shepherd). Stores pattern, params, description, source_path, verified, embedding (768-dim pgvector). Searchable by semantic similarity. Scripts: `scripts/index-registry.py` (index + search + list), `scripts/generate-batch.py` (generate variants). ~1290 variant files on disk, ~755 indexed. Substitution = free variants. Model generation = `deepseek-v4-flash:cloud` via Ollama. 20/call = sweet spot. Thinking-mode bug: model sometimes produces 65K output tokens with 0 extractable code — fix: disable thinking via Ollama API.
 16. **Self-review HARMFUL.** Testing showed the model rewrites correct code when asked to self-review, introducing errors. Z3 error feedback is the reliable correction mechanism. Do not add self-review steps.
 17. **Flush make-weight.** Substitution variants (identical code, different header comments) are noise — deleted 495 from DB. Pattern files have NO `{{placeholder}}` substitutions — all substitution passes were make-weight. Next: add `{{feature}}` placeholders so substitution produces real code differences.
-18. **Indexer needs Z3 verification.** `--no-verify` trusts files without checking. Some failed variants indexed as verified. Honest count: ~450 genuinely distinct Z3-verified variants, not 1,165.
+18. **Indexer needs Z3 verification.** `--no-verify` trusts files without checking. Always index with Z3. Carapace checking (200-line, 10-method, 5-class caps) enforced in indexer.
+19. **Universal pipeline panel.** `pipeline.dfy` enriched with parse→validate→transform→store→result (10 VC, 183 lines, Z3-proven). Listed first in prompt as UNIVERSAL default. Specialist patterns bolt on when needed.
+20. **CLI spec fix (CRITICAL).** `args[0]` was `--spec` flag, not spec text. Root cause of CSV bias — model was flying blind. Fixed: `--spec="..."` parsing.
+21. **`--allow-warnings` on translate cs.** Graph pattern quantifier warning was silently aborting C# translation. DagResolver had no TranslatedCSharpPath.
+22. **Runtime collision fixed.** `--no-include-runtime` + shared `Posit.DafnyRuntime` project (pre-built DLL). Translated C# files reference shared runtime, no type collisions.
+23. **Domain-specific C# stubs.** E-commerce, CI/CD, healthcare templates with `{{ComponentName}}` placeholders. PatternRegistry matches spec keywords to domain stubs.
+24. **`think: false` by default.** Thinking mode causes 65K output runaway. Traces saved to `.posit/staging/thinking/` when enabled for Architecture phase.
 
 ## Pipeline
 
