@@ -76,7 +76,7 @@ public sealed class Z3Runner
     /// <summary>
     /// Runs `dafny translate cs` on a verified .dfy file. Writes the translated
     /// C# to a file in the staging directory and returns the file path.
-    /// Uses --no-include-runtime — the Dafny runtime is provided by the shared
+    /// Uses default translation (no --include-runtime) — the Dafny runtime is provided by the shared
     /// Posit.DafnyRuntime project, not embedded in each translated file.
     /// </summary>
     public async Task<string?> TranslateToCSharpAsync(
