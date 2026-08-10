@@ -347,3 +347,19 @@ Each box = a locale (designed independently).
 **When this matters:** Projects with 50+ modules where the architect can't hold the whole design in one context. The wide-area map is the decomposition that makes it tractable. Each locale is a small problem. The edges are the contracts between them.
 
 **Not needed now.** Current projects (CSV-to-SQL, config validator) are 2-5 modules. Layered decomposition is for when the project is too big for one architecture pass. Add to the pipeline when the first 50-module project arrives.
+
+## Pattern Selection Experiments (Aug 10)
+
+Three experiments to diagnose CSV bias in pattern selection:
+
+| Experiment | What changed | Result |
+|-----------|-------------|--------|
+| 1. Demote favorites | parser/validator/transformer moved to bottom with AVOID tags | Still CSV — flash ignored demotion |
+| 2. Complete removal | parser/validator/transformer removed from menu entirely | Still CSV — flash outputs 'parser' even when not listed |
+| 3. Switch model | glm-5.2:cloud instead of flash | Still CSV — same bias in both models |
+
+**Root cause:** Both models latch onto 'CSV parser' examples in the pattern descriptions. The bias is in the prompt content, not the model or the ordering.
+
+**Fix — universal composite panel:** Enriched pipeline.dfy to include parse → validate → transform → store → result as built-in stages. 14 VC, Z3-proven. The architect picks one pipeline panel instead of three separate parser/validator/transformer components. Named by system role (WorkflowPipeline, TaskSchedulerPipeline), not by CSV.
+
+**Prompt updated:** pipeline listed first as 'UNIVERSAL panel — use this as the foundation for every system.' Specialist patterns bolt on when needed.

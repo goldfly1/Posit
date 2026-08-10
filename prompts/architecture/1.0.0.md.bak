@@ -206,17 +206,18 @@ If a component genuinely does not match any registry pattern, set `patternName` 
 
 **Registry menu — when to use each pattern:**
 
-**`pipeline` is the UNIVERSAL panel.** Every project uses it as the foundation. It has parse → validate → transform → store → result built in. Name it for the system's role (WorkflowPipeline, TaskSchedulerPipeline, etc.). Specialist patterns bolt on when needed.
-
 | Pattern | Use when the module... | Example |
 |---------|----------------------|---------|
-| `pipeline` | processes requests through parse → validate → transform → store | UNIVERSAL — use this as the foundation for every system |
+| `parser` | splits delimited input into fields/records | CSV parser, log parser, command parser |
+| `validator` | checks input against rules, collects errors | form validation, schema validation, constraint checking |
 | `repository` | stores entities with unique IDs, CRUD | user store, config store, session store, data access layer |
 | `state-machine` | has finite states with guarded transitions | workflow engine, order lifecycle, auth flow, protocol handler |
+| `transformer` | applies an operation to each element of a collection | data mapping, format conversion, ETL step |
 | `aggregator` | folds/reduces a collection to a single value | sum, max, count, scoring, statistics |
 | `builder` | accumulates parts then assembles a result with invariants | query builder, request builder, message assembler |
 | `iterator` | traverses a collection with position tracking | tree walker, list enumerator, pagination |
 | `result` | Success/Failure datatype for error handling | wrap any operation that can fail |
+| `pipeline` | processes data through a chain of stages | middleware, request → auth → validate → handle → respond |
 | `observer` | publish/subscribe event bus | event system, notification service, reactive updates |
 | `strategy` | interchangeable algorithms behind one interface | sort strategy, payment method, compression algorithm |
 | `graph` | nodes, edges, traversal, pathfinding | dependency graph, social network, route planner |
@@ -225,9 +226,6 @@ If a component genuinely does not match any registry pattern, set `patternName` 
 | `reducer` | action → state mutation with undo | Redux-style state, command pattern, undo/redo |
 | `adapter` | wraps external API in clean interface | third-party integration, legacy adapter, format converter |
 | `filter` | predicate-based collection filtering | search, query, where-clause, data pruning |
-| `parser` | splits delimited input into fields/records | CSV parser, log parser, command parser |
-| `validator` | checks input against rules, collects errors | form validation, schema validation, constraint checking |
-| `transformer` | applies an operation to each element of a collection | data mapping, format conversion, ETL step |
 
 **Pattern selection rules:**
 - If the spec mentions "workflow", "lifecycle", "states", "transitions" → use `state-machine`

@@ -1,135 +1,235 @@
 // Pattern: Pipeline (Approach 3 — pre-written body with parameters)
-// responsibility: Request -> middleware chain -> response
-// test: RunPipeline([AddPrefix("X: "), AddSuffix(" [ok]")], "hello") returns "X: hello [ok]"
-// test: RunPipeline([], "hello") returns "hello"
-// test: RunPipeline([AddPrefix("pre-")], "hello") returns "pre-hello"
+// responsibility: Universal request handler — parse → validate → transform → store → respond
+// test: HandleRequest("task|create|Buy groceries") returns Success(1)
+// test: HandleRequest("task|create|") returns Failure("validation failed: empty title")
+// test: HandleRequest("") returns Failure("parse failed: empty input")
+// test: HandleRequest("task|create|Buy groceries|extra") returns Failure("parse failed: too many fields")
 //
-// Parameters:
-//   middlewares: seq<Middleware> — ordered chain of request transformers
-//   failFast: bool — whether to stop on first empty result (default true)
+// This is the UNIVERSAL panel. Every project uses this as the foundation.
+// The architect names it for the system's role (WorkflowPipeline, TaskSchedulerPipeline, etc.)
+// and customizes the entity type, validation rules, and transformation.
+// Specialist patterns (state-machine, graph, cache, scheduler) bolt on when needed.
 //
-// Pre-cut planks: the chain iteration, result accumulation, and response
-// building are all pre-written and Z3-proven. The architect sets the
-// parameters. Imp's job is empty or near-empty.
+// Parameters (architect customizes these):
+//   inputDelimiter: string — field separator in input (default "|")
+//   minFields: int — minimum required fields (default 2: command + action)
+//   maxFields: int — maximum allowed fields (default 3: command + action + payload)
+//   entityType: datatype — the domain entity (default: Record)
+//
+// Pre-cut planks: the parse step, validate step, transform step, store step,
+// and result building are all pre-written and Z3-proven. The architect sets
+// the parameters and entity type. Imp's job is empty or near-empty.
 
 include "result.dfy"
 
-// A middleware is a named transformation: input string -> output string.
-datatype Middleware =
-  | AddPrefix(prefix: string)
-  | AddSuffix(suffix: string)
-  | ToUpperTransform
-  | Identity
+// === Domain Entity (architect customizes) ===
+datatype Entity =
+  | Record(id: int, command: string, action: string, payload: string)
 
-// Apply a single middleware to a string, producing the transformed string.
-function ApplyMiddleware(mw: Middleware, input: string): string
-  ensures |ApplyMiddleware(mw, input)| >= |input|
-  decreases mw, |input|
+// === Stage 1: PARSE — split delimited input into fields ===
+
+function GetDelimiter(delimiter: string): char
+  requires |delimiter| == 1
 {
-  match mw
-  case AddPrefix(prefix) => prefix + input
-  case AddSuffix(suffix) => input + suffix
-  case ToUpperTransform => ToUpperStr(input)
-  case Identity => input
+  delimiter[0]
 }
 
-// Run the full pipeline: fold middlewares left-to-right over the input.
-method RunPipeline(middlewares: seq<Middleware>, input: string) returns (output: string)
-  ensures |output| >= |input|
-  decreases |middlewares|
+method ParseInput(input: string, delimiter: string) returns (fields: seq<string>)
+  requires |input| > 0
+  requires |delimiter| == 1
+  ensures |fields| >= 1
+  decreases |input|
 {
-  output := input;
+  var delim := GetDelimiter(delimiter);
+  fields := [];
+  var currentField := "";
   var i := 0;
-  while i < |middlewares|
-    invariant 0 <= i <= |middlewares|
-    invariant |output| >= |input|
-    decreases |middlewares| - i
+  while i < |input|
+    invariant 0 <= i <= |input|
+    invariant |fields| >= 0
+    decreases |input| - i
   {
-    output := ApplyMiddleware(middlewares[i], output);
+    if input[i] == delim {
+      fields := fields + [currentField];
+      currentField := "";
+    } else {
+      currentField := currentField + [input[i]];
+    }
     i := i + 1;
+  }
+  fields := fields + [currentField];
+}
+
+// === Stage 2: VALIDATE — check parsed fields against rules ===
+
+datatype ValidationResult =
+  | Valid
+  | Invalid(errors: seq<string>)
+
+method ValidateFields(fields: seq<string>, minFields: int, maxFields: int) returns (result: ValidationResult)
+  requires minFields >= 0
+  requires maxFields >= minFields
+  ensures result.Valid? ==> |fields| >= minFields && |fields| <= maxFields
+  ensures result.Invalid? ==> |result.errors| >= 1
+  decreases |fields|
+{
+  var errors := [];
+  if |fields| < minFields {
+    errors := errors + ["validation failed: too few fields"];
+  }
+  if |fields| > maxFields {
+    errors := errors + ["validation failed: too many fields"];
+  }
+  if |fields| > 0 && |fields[0]| == 0 {
+    errors := errors + ["validation failed: empty command"];
+  }
+  if |fields| > 1 && |fields[1]| == 0 {
+    errors := errors + ["validation failed: empty action"];
+  }
+  if |errors| == 0 {
+    result := Valid;
+  } else {
+    result := Invalid(errors);
   }
 }
 
-// Run pipeline and return a Result (Success with output, or Failure on empty
-// middleware chain — though empty chain is valid, returns Success with input).
-method RunPipelineResult(middlewares: seq<Middleware>, input: string) returns (result: Result<string>)
-  ensures result.Success?
-  ensures result.Success? ==> |result.value| >= |input|
-  decreases |middlewares|
+// === Stage 3: TRANSFORM — convert validated fields into domain entity ===
+
+method TransformToEntity(fields: seq<string>, nextId: int) returns (entity: Entity)
+  requires |fields| >= 2
+  ensures entity.id == nextId
+  decreases |fields|
 {
-  var output := RunPipeline(middlewares, input);
-  result := Success(output);
+  var payload := if |fields| >= 3 then fields[2] else "";
+  entity := Record(nextId, fields[0], fields[1], payload);
 }
 
-// Count how many middlewares in the chain are non-identity.
-method CountActive(middlewares: seq<Middleware>) returns (count: int)
-  ensures count >= 0
-  ensures count <= |middlewares|
-  decreases |middlewares|
+// === Stage 4: STORE — add entity to in-memory store with ID uniqueness ===
+
+predicate NoDuplicateIds(entities: seq<Entity>)
 {
-  count := 0;
+  forall i, j :: 0 <= i < j < |entities| ==> entities[i].id != entities[j].id
+}
+
+method StoreEntity(entities: seq<Entity>, entity: Entity) returns (result: Result<seq<Entity>>)
+  requires NoDuplicateIds(entities)
+  ensures result.Success? ==> NoDuplicateIds(result.value)
+  ensures result.Success? ==> |result.value| == |entities| + 1
+  ensures result.Failure? ==> result.error == "duplicate id"
+  decreases |entities|
+{
   var i := 0;
-  while i < |middlewares|
-    invariant 0 <= i <= |middlewares|
-    invariant count <= i
-    decreases |middlewares| - i
+  var found := false;
+  while i < |entities|
+    invariant 0 <= i <= |entities|
+    invariant NoDuplicateIds(entities)
+    invariant found ==> exists j :: 0 <= j < |entities| && entities[j].id == entity.id
+    invariant !found ==> forall j :: 0 <= j < i ==> entities[j].id != entity.id
+    decreases |entities| - i
   {
-    if middlewares[i] != Identity {
-      count := count + 1;
+    if entities[i].id == entity.id {
+      found := true;
+    }
+    i := i + 1;
+  }
+  if found {
+    result := Failure("duplicate id");
+  } else {
+    result := Success(entities + [entity]);
+  }
+}
+// === Stage 5: PIPELINE ORCHESTRATION — run all stages in sequence ===
+
+method HandleRequest(
+    input: string,
+    delimiter: string,
+    minFields: int,
+    maxFields: int,
+    entities: seq<Entity>,
+    nextId: int
+) returns (result: Result<seq<Entity>>)
+  requires |input| > 0
+  requires |delimiter| == 1
+  requires minFields >= 2
+  requires maxFields >= minFields
+  requires NoDuplicateIds(entities)
+  ensures result.Success? ==> NoDuplicateIds(result.value)
+  ensures result.Failure? ==> true
+  decreases |entities|
+{
+  // Stage 1: Parse
+  var fields := ParseInput(input, delimiter);
+  
+  // Stage 2: Validate
+  var validation := ValidateFields(fields, minFields, maxFields);
+  if validation.Invalid? {
+    result := Failure(validation.errors[0]);
+    return;
+  }
+  
+  // After validation, fields count is within [minFields, maxFields]
+  // The architect sets minFields=2, maxFields=3 for standard commands
+  assert |fields| >= minFields;
+  assert |fields| <= maxFields;
+  
+  // Stage 3: Transform
+  assert |fields| >= 2;
+  var entity := TransformToEntity(fields, nextId);
+  
+  // Stage 4: Store
+  assert NoDuplicateIds(entities);
+  result := StoreEntity(entities, entity);
+}
+
+// === Utility: Query stored entities by command ===
+
+method QueryByCommand(entities: seq<Entity>, command: string) returns (matches: seq<Entity>)
+  ensures |matches| <= |entities|
+  decreases |entities|
+{
+  matches := [];
+  var i := 0;
+  while i < |entities|
+    invariant 0 <= i <= |entities|
+    invariant |matches| <= i
+    decreases |entities| - i
+  {
+    if entities[i].command == command {
+      matches := matches + [entities[i]];
     }
     i := i + 1;
   }
 }
 
-// Prepend a middleware to the front of an existing pipeline.
-method PrependMiddleware(middlewares: seq<Middleware>, mw: Middleware) returns (chain: seq<Middleware>)
-  ensures |chain| == |middlewares| + 1
-  ensures chain[0] == mw
-  decreases |middlewares|
+// === Utility: Count entities ===
+
+method CountEntities(entities: seq<Entity>) returns (count: int)
+  ensures count == |entities|
+  ensures count >= 0
+  decreases |entities|
 {
-  chain := [mw] + middlewares;
+  count := |entities|;
 }
 
-// Helper: uppercase a string (value-type recursion, no reads).
-function ToUpperStr(s: string): string
-  ensures |ToUpperStr(s)| == |s|
-  decreases |s|
-{
-  if |s| == 0 then ""
-  else if 'a' <= s[0] && s[0] <= 'z' then [CharUp(s[0])] + ToUpperStr(s[1..])
-  else [s[0]] + ToUpperStr(s[1..])
-}
+// === Utility: Get next available ID ===
 
-// Helper: convert a single lowercase char to uppercase.
-function CharUp(c: char): char
-  ensures 'a' <= c <= 'z' ==> 'A' <= CharUp(c) <= 'Z'
+method GetNextId(entities: seq<Entity>) returns (nextId: int)
+  requires NoDuplicateIds(entities)
+  ensures nextId >= 0
+  ensures forall i :: 0 <= i < |entities| ==> entities[i].id != nextId
+  decreases |entities|
 {
-  match c
-  case 'a' => 'A'
-  case 'b' => 'B'
-  case 'c' => 'C'
-  case 'd' => 'D'
-  case 'e' => 'E'
-  case 'f' => 'F'
-  case 'g' => 'G'
-  case 'h' => 'H'
-  case 'i' => 'I'
-  case 'j' => 'J'
-  case 'k' => 'K'
-  case 'l' => 'L'
-  case 'm' => 'M'
-  case 'n' => 'N'
-  case 'o' => 'O'
-  case 'p' => 'P'
-  case 'q' => 'Q'
-  case 'r' => 'R'
-  case 's' => 'S'
-  case 't' => 'T'
-  case 'u' => 'U'
-  case 'v' => 'V'
-  case 'w' => 'W'
-  case 'x' => 'X'
-  case 'y' => 'Y'
-  case 'z' => 'Z'
-  case _ => c
+  nextId := 0;
+  var i := 0;
+  while i < |entities|
+    invariant 0 <= i <= |entities|
+    invariant nextId >= 0
+    invariant forall j :: 0 <= j < i ==> entities[j].id < nextId
+    decreases |entities| - i
+  {
+    if entities[i].id >= nextId {
+      nextId := entities[i].id + 1;
+    }
+    i := i + 1;
+  }
 }
