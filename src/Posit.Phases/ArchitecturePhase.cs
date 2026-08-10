@@ -152,6 +152,16 @@ public sealed class ArchitecturePhase : IPhase
                 var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{comp.Name}");
                 var skeleton = _registry.ComposeSkeleton(comp.Name, patternName, stubNames);
                 await File.WriteAllTextAsync(dafnyPath, skeleton, ct);
+
+                // Carapace enforcement: check 200-line, 10-method, 5-class caps on composed skeleton
+                var skeletonLines = skeleton.Split('\n').Length;
+                var skeletonMethods = System.Text.RegularExpressions.Regex.Matches(skeleton, @"^\s*(method|function|lemma)\s", System.Text.RegularExpressions.RegexOptions.Multiline).Count;
+                var skeletonClasses = System.Text.RegularExpressions.Regex.Matches(skeleton, @"^\s*class\s", System.Text.RegularExpressions.RegexOptions.Multiline).Count;
+                if (skeletonLines > 200 || skeletonMethods > 10 || skeletonClasses > 5)
+                {
+                    Console.Error.WriteLine($"[Posit] Architecture — CARAPACE WARNING: {comp.Name} skeleton exceeds caps (lines={skeletonLines}, methods={skeletonMethods}, classes={skeletonClasses}). Pattern may need decomposition.");
+                }
+
                 _registry.MaterializeDependencies(comp.Name, patternName, stubNames, Path.GetDirectoryName(dafnyPath)!);
                 componentsWithPath.Add(comp with
                 {

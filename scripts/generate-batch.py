@@ -27,7 +27,7 @@ STAGING_DIR = POSIT_ROOT / ".posit" / "staging" / "batch-variants"
 DAFNY = "C:/Users/goldf/.dotnet/tools/dafny.exe"
 Z3 = "C:/Users/goldf/.dotnet/tools/z3/bin/z3.exe"
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "deepseek-v4-flash:cloud"
+MODEL = "glm-5.2:cloud"
 
 STAGING_DIR.mkdir(parents=True, exist_ok=True)
 
