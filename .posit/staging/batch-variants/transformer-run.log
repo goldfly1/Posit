@@ -1,0 +1,159 @@
+
+************************************************************
+* ROUND 1/5 for pattern 'transformer'
+************************************************************
+
+============================================================
+Pattern: transformer | Batch: 10 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 10 parameter substitutions...
+    transformer-v000: ✅ PASS (substitution, free)
+    transformer-v001: ✅ PASS (substitution, free)
+    transformer-v002: ✅ PASS (substitution, free)
+    transformer-v003: ✅ PASS (substitution, free)
+    transformer-v004: ✅ PASS (substitution, free)
+    transformer-v005: ✅ PASS (substitution, free)
+    transformer-v006: ✅ PASS (substitution, free)
+    transformer-v007: ✅ PASS (substitution, free)
+    transformer-v008: ✅ PASS (substitution, free)
+    transformer-v009: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: transformer
+  Passed: 10/10 (100% — all substitution!)
+  Failed: 0/10
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 2/5 for pattern 'transformer'
+************************************************************
+
+============================================================
+Pattern: transformer | Batch: 10 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 10 parameter substitutions...
+    transformer-r01-v000: ✅ PASS (substitution, free)
+    transformer-r01-v001: ✅ PASS (substitution, free)
+    transformer-r01-v002: ✅ PASS (substitution, free)
+    transformer-r01-v003: ✅ PASS (substitution, free)
+    transformer-r01-v004: ✅ PASS (substitution, free)
+    transformer-r01-v005: ✅ PASS (substitution, free)
+    transformer-r01-v006: ✅ PASS (substitution, free)
+    transformer-r01-v007: ✅ PASS (substitution, free)
+    transformer-r01-v008: ✅ PASS (substitution, free)
+    transformer-r01-v009: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: transformer
+  Passed: 10/10 (100% — all substitution!)
+  Failed: 0/10
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 3/5 for pattern 'transformer'
+************************************************************
+
+============================================================
+Pattern: transformer | Batch: 10 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 10 parameter substitutions...
+    transformer-r02-v000: ✅ PASS (substitution, free)
+    transformer-r02-v001: ✅ PASS (substitution, free)
+    transformer-r02-v002: ✅ PASS (substitution, free)
+    transformer-r02-v003: ✅ PASS (substitution, free)
+    transformer-r02-v004: ✅ PASS (substitution, free)
+    transformer-r02-v005: ✅ PASS (substitution, free)
+    transformer-r02-v006: ✅ PASS (substitution, free)
+    transformer-r02-v007: ✅ PASS (substitution, free)
+    transformer-r02-v008: ✅ PASS (substitution, free)
+    transformer-r02-v009: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: transformer
+  Passed: 10/10 (100% — all substitution!)
+  Failed: 0/10
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 4/5 for pattern 'transformer'
+************************************************************
+
+============================================================
+Pattern: transformer | Batch: 10 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 10 parameter substitutions...
+    transformer-r03-v000: ✅ PASS (substitution, free)
+    transformer-r03-v001: ✅ PASS (substitution, free)
+    transformer-r03-v002: ✅ PASS (substitution, free)
+    transformer-r03-v003: ✅ PASS (substitution, free)
+    transformer-r03-v004: ✅ PASS (substitution, free)
+    transformer-r03-v005: ✅ PASS (substitution, free)
+    transformer-r03-v006: ✅ PASS (substitution, free)
+    transformer-r03-v007: ✅ PASS (substitution, free)
+    transformer-r03-v008: ✅ PASS (substitution, free)
+    transformer-r03-v009: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: transformer
+  Passed: 10/10 (100% — all substitution!)
+  Failed: 0/10
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 5/5 for pattern 'transformer'
+************************************************************
+
+============================================================
+Pattern: transformer | Batch: 10 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 10 parameter substitutions...
+    transformer-r04-v000: ✅ PASS (substitution, free)
+    transformer-r04-v001: ✅ PASS (substitution, free)
+    transformer-r04-v002: ✅ PASS (substitution, free)
+    transformer-r04-v003: ✅ PASS (substitution, free)
+    transformer-r04-v004: ✅ PASS (substitution, free)
+    transformer-r04-v005: ✅ PASS (substitution, free)
+    transformer-r04-v006: ✅ PASS (substitution, free)
+    transformer-r04-v007: ✅ PASS (substitution, free)
+    transformer-r04-v008: ✅ PASS (substitution, free)
+    transformer-r04-v009: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: transformer
+  Passed: 10/10 (100% — all substitution!)
+  Failed: 0/10
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+############################################################
+FINAL: 50/50 variants passed (100%)
+Total tokens: 0
+Total model calls: 0
+Tokens per variant: 0
+Wiki: ON
+Rounds: 5 × 20 = 100 target variants
+############################################################

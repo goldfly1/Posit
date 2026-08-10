@@ -1,0 +1,209 @@
+
+************************************************************
+* ROUND 1/5 for pattern 'state-machine'
+************************************************************
+
+============================================================
+Pattern: state-machine | Batch: 20 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 20 parameter substitutions...
+    state-machine-v000: ✅ PASS (substitution, free)
+    state-machine-v001: ✅ PASS (substitution, free)
+    state-machine-v002: ✅ PASS (substitution, free)
+    state-machine-v003: ✅ PASS (substitution, free)
+    state-machine-v004: ✅ PASS (substitution, free)
+    state-machine-v005: ✅ PASS (substitution, free)
+    state-machine-v006: ✅ PASS (substitution, free)
+    state-machine-v007: ✅ PASS (substitution, free)
+    state-machine-v008: ✅ PASS (substitution, free)
+    state-machine-v009: ✅ PASS (substitution, free)
+    state-machine-v010: ✅ PASS (substitution, free)
+    state-machine-v011: ✅ PASS (substitution, free)
+    state-machine-v012: ✅ PASS (substitution, free)
+    state-machine-v013: ✅ PASS (substitution, free)
+    state-machine-v014: ✅ PASS (substitution, free)
+    state-machine-v015: ✅ PASS (substitution, free)
+    state-machine-v016: ✅ PASS (substitution, free)
+    state-machine-v017: ✅ PASS (substitution, free)
+    state-machine-v018: ✅ PASS (substitution, free)
+    state-machine-v019: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: state-machine
+  Passed: 20/20 (100% — all substitution!)
+  Failed: 0/20
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 2/5 for pattern 'state-machine'
+************************************************************
+
+============================================================
+Pattern: state-machine | Batch: 20 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 20 parameter substitutions...
+    state-machine-r01-v000: ✅ PASS (substitution, free)
+    state-machine-r01-v001: ✅ PASS (substitution, free)
+    state-machine-r01-v002: ✅ PASS (substitution, free)
+    state-machine-r01-v003: ✅ PASS (substitution, free)
+    state-machine-r01-v004: ✅ PASS (substitution, free)
+    state-machine-r01-v005: ✅ PASS (substitution, free)
+    state-machine-r01-v006: ✅ PASS (substitution, free)
+    state-machine-r01-v007: ✅ PASS (substitution, free)
+    state-machine-r01-v008: ✅ PASS (substitution, free)
+    state-machine-r01-v009: ✅ PASS (substitution, free)
+    state-machine-r01-v010: ✅ PASS (substitution, free)
+    state-machine-r01-v011: ✅ PASS (substitution, free)
+    state-machine-r01-v012: ✅ PASS (substitution, free)
+    state-machine-r01-v013: ✅ PASS (substitution, free)
+    state-machine-r01-v014: ✅ PASS (substitution, free)
+    state-machine-r01-v015: ✅ PASS (substitution, free)
+    state-machine-r01-v016: ✅ PASS (substitution, free)
+    state-machine-r01-v017: ✅ PASS (substitution, free)
+    state-machine-r01-v018: ✅ PASS (substitution, free)
+    state-machine-r01-v019: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: state-machine
+  Passed: 20/20 (100% — all substitution!)
+  Failed: 0/20
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 3/5 for pattern 'state-machine'
+************************************************************
+
+============================================================
+Pattern: state-machine | Batch: 20 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 20 parameter substitutions...
+    state-machine-r02-v000: ✅ PASS (substitution, free)
+    state-machine-r02-v001: ✅ PASS (substitution, free)
+    state-machine-r02-v002: ✅ PASS (substitution, free)
+    state-machine-r02-v003: ✅ PASS (substitution, free)
+    state-machine-r02-v004: ✅ PASS (substitution, free)
+    state-machine-r02-v005: ✅ PASS (substitution, free)
+    state-machine-r02-v006: ✅ PASS (substitution, free)
+    state-machine-r02-v007: ✅ PASS (substitution, free)
+    state-machine-r02-v008: ✅ PASS (substitution, free)
+    state-machine-r02-v009: ✅ PASS (substitution, free)
+    state-machine-r02-v010: ✅ PASS (substitution, free)
+    state-machine-r02-v011: ✅ PASS (substitution, free)
+    state-machine-r02-v012: ✅ PASS (substitution, free)
+    state-machine-r02-v013: ✅ PASS (substitution, free)
+    state-machine-r02-v014: ✅ PASS (substitution, free)
+    state-machine-r02-v015: ✅ PASS (substitution, free)
+    state-machine-r02-v016: ✅ PASS (substitution, free)
+    state-machine-r02-v017: ✅ PASS (substitution, free)
+    state-machine-r02-v018: ✅ PASS (substitution, free)
+    state-machine-r02-v019: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: state-machine
+  Passed: 20/20 (100% — all substitution!)
+  Failed: 0/20
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 4/5 for pattern 'state-machine'
+************************************************************
+
+============================================================
+Pattern: state-machine | Batch: 20 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 20 parameter substitutions...
+    state-machine-r03-v000: ✅ PASS (substitution, free)
+    state-machine-r03-v001: ✅ PASS (substitution, free)
+    state-machine-r03-v002: ✅ PASS (substitution, free)
+    state-machine-r03-v003: ✅ PASS (substitution, free)
+    state-machine-r03-v004: ✅ PASS (substitution, free)
+    state-machine-r03-v005: ✅ PASS (substitution, free)
+    state-machine-r03-v006: ✅ PASS (substitution, free)
+    state-machine-r03-v007: ✅ PASS (substitution, free)
+    state-machine-r03-v008: ✅ PASS (substitution, free)
+    state-machine-r03-v009: ✅ PASS (substitution, free)
+    state-machine-r03-v010: ✅ PASS (substitution, free)
+    state-machine-r03-v011: ✅ PASS (substitution, free)
+    state-machine-r03-v012: ✅ PASS (substitution, free)
+    state-machine-r03-v013: ✅ PASS (substitution, free)
+    state-machine-r03-v014: ✅ PASS (substitution, free)
+    state-machine-r03-v015: ✅ PASS (substitution, free)
+    state-machine-r03-v016: ✅ PASS (substitution, free)
+    state-machine-r03-v017: ✅ PASS (substitution, free)
+    state-machine-r03-v018: ✅ PASS (substitution, free)
+    state-machine-r03-v019: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: state-machine
+  Passed: 20/20 (100% — all substitution!)
+  Failed: 0/20
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+************************************************************
+* ROUND 5/5 for pattern 'state-machine'
+************************************************************
+
+============================================================
+Pattern: state-machine | Batch: 20 | Retries: 3
+Wiki reference: ON
+============================================================
+
+[1] Substitution sweep — trying 20 parameter substitutions...
+    state-machine-r04-v000: ✅ PASS (substitution, free)
+    state-machine-r04-v001: ✅ PASS (substitution, free)
+    state-machine-r04-v002: ✅ PASS (substitution, free)
+    state-machine-r04-v003: ✅ PASS (substitution, free)
+    state-machine-r04-v004: ✅ PASS (substitution, free)
+    state-machine-r04-v005: ✅ PASS (substitution, free)
+    state-machine-r04-v006: ✅ PASS (substitution, free)
+    state-machine-r04-v007: ✅ PASS (substitution, free)
+    state-machine-r04-v008: ✅ PASS (substitution, free)
+    state-machine-r04-v009: ✅ PASS (substitution, free)
+    state-machine-r04-v010: ✅ PASS (substitution, free)
+    state-machine-r04-v011: ✅ PASS (substitution, free)
+    state-machine-r04-v012: ✅ PASS (substitution, free)
+    state-machine-r04-v013: ✅ PASS (substitution, free)
+    state-machine-r04-v014: ✅ PASS (substitution, free)
+    state-machine-r04-v015: ✅ PASS (substitution, free)
+    state-machine-r04-v016: ✅ PASS (substitution, free)
+    state-machine-r04-v017: ✅ PASS (substitution, free)
+    state-machine-r04-v018: ✅ PASS (substitution, free)
+    state-machine-r04-v019: ✅ PASS (substitution, free)
+
+============================================================
+SUMMARY: state-machine
+  Passed: 20/20 (100% — all substitution!)
+  Failed: 0/20
+  Total tokens: 0
+  Model calls: 0
+============================================================
+
+
+############################################################
+FINAL: 100/100 variants passed (100%)
+Total tokens: 0
+Total model calls: 0
+Tokens per variant: 0
+Wiki: ON
+Rounds: 5 × 20 = 100 target variants
+############################################################

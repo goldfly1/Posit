@@ -11,5 +11,9 @@ obj/
 *.swp
 
 # Posit runtime artifacts
-.posit/staging/
+.posit/staging/skeleton-*
+.posit/staging/thinking/
+.posit/staging/*.dfy
+.posit/staging/*.cs
+.posit/staging/*.dtr
 .posit/output/

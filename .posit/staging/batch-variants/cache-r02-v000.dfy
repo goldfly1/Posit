@@ -1,0 +1,2 @@
+```dafny
+datatype Result<T> =
