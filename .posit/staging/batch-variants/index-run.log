@@ -397,3 +397,15 @@ Indexing 668 variant files from C:\Users\goldf\Posit\.posit\staging\batch-varian
   [393/668] iterator-v014        ✅ 📝 iterator variant (collectionType=seq<bool>, feature=filtered
   [394/668] iterator-v015        ✅ 📝 iterator variant (collectionType=seq<bool>, feature=bounded)
   [395/668] iterator-v016        ✅ 📝 iterator variant (collectionType=seq<(int, feature=forward)
+  [396/668] iterator-v017        ✅ 📝 iterator variant (collectionType=seq<(int, feature=reverse)
+  [397/668] iterator-v018        ✅ 📝 iterator variant (collectionType=seq<(int, feature=filtered)
+  [398/668] iterator-v019        ✅ 📝 iterator variant (collectionType=seq<(int, feature=bounded)
+  [399/668] parser-r01-v000      ✅ 📝 parser variant
+  [400/668] parser-r01-v001      ✅ 📝 parser variant
+  [401/668] parser-r01-v002      ✅ 📝 parser variant
+  [402/668] parser-r01-v003      ✅ 📝 parser variant
+  [403/668] parser-r01-v004      ❌ 📝 parser variant
+  [404/668] parser-r01-v005      ✅ 📝 parser variant
+  [405/668] parser-r01-v006      ✅ 📝 parser variant
+  [406/668] parser-r01-v007      ✅ 📝 parser variant
+  [407/668] parser-r01-v008      ✅ 📝 parser variant

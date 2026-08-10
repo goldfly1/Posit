@@ -78,16 +78,14 @@ method Handle(input: string, d: string, token: string, maxLen: int, es: seq<Enti
   decreases |es|
 {
   log := [];
-  if !CheckToken(token) { log := log + ["auth failed"]; r := Failure(AuthErr, "auth failed"); return; }
+  var tokOk := CheckToken(token);
+  if !tokOk { log := log + ["auth failed"]; r := Failure(AuthErr, "auth failed"); return; }
   log := log + ["auth ok"];
   var f := Parse(input, d);
-  log := log + ["parsed"];
   var v := Validate(f, maxLen);
   if v.Invalid? { log := log + ["validation failed"]; r := Failure(ValidationErr, v.msg); return; }
   log := log + ["validation ok"];
   var e := Transform(f, nextId);
-  log := log + ["transformed"];
-  var stored := Store(es, e);
-  log := log + ["stored"];
-  r := stored;
+  r := Store(es, e);
+  if r.Success? { log := log + ["store ok"]; } else { log := log + ["store failed"]; }
 }

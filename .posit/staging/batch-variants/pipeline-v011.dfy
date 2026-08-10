@@ -78,5 +78,6 @@ method Handle(input: string, d: string, maxLen: int, es: seq<Entity>, nextId: in
   var v := Validate(f, maxLen);
   if v.Invalid? { r := Failure(v.msg); return; }
   var e := Transform(f, nextId);
-  r := Respond(Store(es, e));
+  var s := Store(es, e);
+  r := Respond(s);
 }

@@ -79,10 +79,12 @@ method Handle(input: string, d: string, token: string, maxLen: int, es: seq<Enti
   ensures r.Success? ==> NoDup(r.value)
   decreases |es|
 {
-  if !Auth(token) { r := Failure("auth failed"); return; }
+  var authOk := Auth(token);
+  if !authOk { r := Failure("auth failed"); return; }
   var f := Parse(input, d);
   var v := Validate(f, maxLen);
   if v.Invalid? { r := Failure(v.msg); return; }
   var e := Transform(f, nextId);
-  r := Respond(Store(es, e));
+  var s := Store(es, e);
+  r := Respond(s);
 }
