@@ -53,6 +53,8 @@ public sealed class OllamaModelGateway : IModelGateway
                 new OllamaMessage { Role = "user", Content = user ?? string.Empty }
             ],
             Stream = false,
+            // Enable thinking for Architecture phase (to see reasoning), disable for QA (prevents 65K runaway)
+            Think = context.PhaseId.Value == "architecture",
             Options = new OllamaOptions
             {
                 Temperature = (float)route.Temperature,
@@ -82,6 +84,17 @@ public sealed class OllamaModelGateway : IModelGateway
         var text = body.Message?.Content ?? string.Empty;
         text = StripReasoningTags(text);
         text = ExtractJson(text);
+
+        // Save thinking trace to file (separate from the prompt/response)
+        var thinking = body.Message?.Thinking;
+        if (!string.IsNullOrWhiteSpace(thinking))
+        {
+            var thinkingDir = Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging", "thinking");
+            Directory.CreateDirectory(thinkingDir);
+            var thinkingFile = Path.Combine(thinkingDir, $"thinking-{context.PhaseId.Value}-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.txt");
+            File.WriteAllText(thinkingFile, thinking);
+            Console.Error.WriteLine($"[API] Thinking trace saved: {thinkingFile} ({thinking.Length} chars)");
+        }
 
         var inputTokens = body.PromptEvalCount ?? EstimateTokens(system + "\n" + user);
         var outputTokens = body.EvalCount ?? EstimateTokens(text);
@@ -253,7 +266,7 @@ public sealed class OllamaModelGateway : IModelGateway
         public OllamaOptions Options { get; set; } = new();
 
         [JsonPropertyName("think")]
-        public bool Think { get; set; } = false;
+        public bool Think { get; set; } = true;
     }
 
     private sealed class OllamaMessage
@@ -263,6 +276,9 @@ public sealed class OllamaModelGateway : IModelGateway
 
         [JsonPropertyName("content")]
         public required string Content { get; set; }
+
+        [JsonPropertyName("thinking")]
+        public string? Thinking { get; set; }
     }
 
     private sealed class OllamaOptions
