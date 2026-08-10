@@ -251,6 +251,9 @@ public sealed class OllamaModelGateway : IModelGateway
 
         [JsonPropertyName("options")]
         public OllamaOptions Options { get; set; } = new();
+
+        [JsonPropertyName("think")]
+        public bool Think { get; set; } = false;
     }
 
     private sealed class OllamaMessage

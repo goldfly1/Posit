@@ -79,6 +79,16 @@ public sealed class PatternRegistry
                 responsibility.Contains("http") || responsibility.Contains("network") || responsibility.Contains("api"))
                 if (HasCSharpStub("network-io"))
                     selected.Add(GetCSharpStub("network-io"));
+
+            // Generic fallback: if no specific stub matched, give it a console-program shell
+            // so the carapace enforcement doesn't abort. The architect can refine later.
+            if (selected.Count == 0)
+            {
+                if (HasCSharpStub("io-console-program"))
+                    selected.Add(GetCSharpStub("io-console-program"));
+                else if (HasCSharpStub("file-io"))
+                    selected.Add(GetCSharpStub("file-io"));
+            }
         }
 
         // Dafny components with {:extern} stubs need matching C# partial-class implementations.
