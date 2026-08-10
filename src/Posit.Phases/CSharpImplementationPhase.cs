@@ -116,6 +116,16 @@ public sealed class CSharpImplementationPhase : IPhase
 
         Console.Error.WriteLine($"[Posit] C# Implementation — {allFiles.Count} C# files produced");
 
+        // Carapace enforcement: check 200-line cap on generated C# files
+        foreach (var file in allFiles)
+        {
+            var lineCount = file.Content.Split('\n').Length;
+            if (lineCount > 200)
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — CARAPACE WARNING: {file.Path} exceeds 200-line cap ({lineCount} lines). May need decomposition.");
+            }
+        }
+
         var bundlePayload = new SourceCodeBundle
         {
             Files = [.. allFiles],
