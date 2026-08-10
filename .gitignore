@@ -16,4 +16,4 @@ obj/
 .posit/staging/*.dfy
 .posit/staging/*.cs
 .posit/staging/*.dtr
-.posit/output/
+.posit/output/.posit/backups/*.sql.gz
