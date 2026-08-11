@@ -411,6 +411,24 @@ public sealed class PositOrchestrator
                         break;
                     }
                 }
+
+                // Filename must be deterministic and traceable to the component.
+                // Accepted patterns:
+                //   {ComponentName}Extern.cs           — Dafny extern stub cap
+                //   {ComponentName}.{stubName}.cs     — io-shell stub (dot-separated)
+                // Rejected: {ComponentName}{stubName}.cs — mangled, no separator
+                if (ext == ".cs" && parts.Length == 2)
+                {
+                    var baseName = Path.GetFileNameWithoutExtension(lastPart);
+                    var isExtern = baseName.EndsWith("Extern", StringComparison.OrdinalIgnoreCase) &&
+                                   baseName.StartsWith(firstDir, StringComparison.OrdinalIgnoreCase);
+                    var isDotSeparated = baseName.StartsWith(firstDir + ".", StringComparison.OrdinalIgnoreCase);
+
+                    if (!isExtern && !isDotSeparated)
+                    {
+                        errors.Add($"carapace.mangled_filename: '{rel}' filename '{lastPart}' is not deterministic — expected '{firstDir}Extern.cs' or '{firstDir}.{{stubName}}.cs'");
+                    }
+                }
             }
 
             var presentRoots = new HashSet<string>(

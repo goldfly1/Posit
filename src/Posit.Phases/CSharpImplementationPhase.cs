@@ -266,7 +266,7 @@ public sealed class CSharpImplementationPhase : IPhase
             foreach (var stub in stubs)
             {
                 var rendered = PatternRegistry.RenderCSharpStub(stub, shell.Name);
-                var fileName = $"{shell.Name}{stub.Name.ToLowerInvariant().Replace("-", "")}.cs";
+                var fileName = $"{shell.Name}.{stub.Name}.cs";
                 files.Add(new SourceCodeFile($"{shell.Name}/{fileName}", rendered));
                 Console.Error.WriteLine($"[Posit] C# Implementation — io-shell '{shell.Name}' registry stub '{stub.Name}' -> {fileName}");
             }

@@ -129,13 +129,21 @@ def verify_trial(trial_dir: str):
         stub_count = 0
         for cs_file in stub_cs_dir.glob("*.cs"):
             content = cs_file.read_text()
-            # Fix: replace 'using _module;' with the correct per-module namespace
-            # Extract component name from filename (e.g., SchedulerCoreExtern.cs → SchedulerCore)
+            # Extract component name from filename.
+            # New format: {ComponentName}.{stubName}.cs  (dot-separated — take first segment)
+            # Old format: {ComponentName}{stubMangled}.cs (fallback — strip known suffixes)
+            # Extern format: {ComponentName}Extern.cs
             stem = cs_file.stem
-            comp_name = stem.replace("Extern", "").replace("fileio", "").replace("networkio", "")
-            comp_name = comp_name.replace("ioconsoleprogram", "").replace("scheduling", "")
-            comp_name = comp_name.replace("chat", "").replace("database", "").replace("ecommerce", "")
-            comp_name = comp_name.replace("healthcare", "")
+            if "." in stem:
+                comp_name = stem.split(".")[0]
+            elif stem.endswith("Extern"):
+                comp_name = stem[:-len("Extern")]
+            else:
+                # Old mangled format — strip known stub suffixes as fallback
+                comp_name = stem.replace("Extern", "").replace("fileio", "").replace("networkio", "")
+                comp_name = comp_name.replace("ioconsoleprogram", "").replace("scheduling", "")
+                comp_name = comp_name.replace("chat", "").replace("database", "").replace("ecommerce", "")
+                comp_name = comp_name.replace("healthcare", "")
             # Try to match to a translated module
             matched = False
             for mod_name in seen_modules:
