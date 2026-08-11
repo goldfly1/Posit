@@ -89,6 +89,7 @@ def verify_trial(trial_dir: str):
         result = subprocess.run(
             [DAFNY, "translate", "cs", str(dfy_file),
              "--no-verify", "--allow-external-contracts", "--allow-warnings",
+             "--include-runtime",
              f"--output:{cs_file}"],
             capture_output=True, text=True, timeout=120,
             cwd=str(work_dir)
@@ -98,26 +99,19 @@ def verify_trial(trial_dir: str):
             translated += 1
             content = cs_file.read_text()
             
+            # Rename _module to _module_{name} to avoid __default collisions
+            content = content.replace('namespace _module', f'namespace _module_{name}')
+            
             if i > 0:
-                # Strip Dafny runtime namespace (keep only in first file)
-                # Simple approach: remove everything before 'namespace _module'
-                dafny_ns_end = content.find('namespace _module')
-                if dafny_ns_end > 0:
-                    runtime_block = content[:dafny_ns_end]
-                    module_block = content[dafny_ns_end:]
-                    content = module_block
-                
-                # Rename _module to _module_{name} to avoid __default collisions
-                content = content.replace('namespace _module', f'namespace _module_{name}')
-                content = content.replace('using _module;', f'using _module_{name};')
-                
-                cs_file.write_text(content)
-                print(f"    {name:25s} ✅ translated + runtime stripped + namespace renamed ({cs_file.stat().st_size} bytes)")
-            else:
-                # First file: rename _module but keep Dafny runtime
-                content = content.replace('namespace _module', f'namespace _module_{name}')
-                cs_file.write_text(content)
-                print(f"    {name:25s} ✅ translated with runtime + namespace renamed ({cs_file.stat().st_size} bytes)")
+                # Strip ALL Dafny runtime from non-first files — keep only the _module namespace
+                module_start = content.find('namespace _module')
+                if module_start > 0:
+                    content = content[module_start:]
+                # Add using statements so they can reference the first file's runtime
+                content = "using Dafny;\nusing System.Numerics;\n" + content
+            
+            cs_file.write_text(content)
+            print(f"    {name:25s} ✅ translated + namespace renamed ({cs_file.stat().st_size} bytes)")
             cs_files.append(cs_file)
         else:
             failed += 1
@@ -126,15 +120,29 @@ def verify_trial(trial_dir: str):
 
     print(f"    Translated: {translated}, Failed: {failed}")
 
-    # 3. Copy domain stub C# files
+    # 3. Copy domain stub C# files and fix namespace references
     stub_cs_dir = trial_path / "csharp"
     if stub_cs_dir.exists():
         print(f"\n[3] Copying domain stub C# files...")
         stub_count = 0
         for cs_file in stub_cs_dir.glob("*.cs"):
-            shutil.copy(cs_file, cs_dir / cs_file.name)
+            content = cs_file.read_text()
+            # Fix: replace 'using _module;' with the correct per-module namespace
+            # Extract component name from filename (e.g., SchedulerCoreExtern.cs → SchedulerCore)
+            stem = cs_file.stem
+            comp_name = stem.replace("Extern", "").replace("fileio", "").replace("networkio", "")
+            comp_name = comp_name.replace("ioconsoleprogram", "").replace("scheduling", "")
+            comp_name = comp_name.replace("chat", "").replace("database", "")
+            # Try to match to a translated module
+            for mod_name in seen_modules:
+                if comp_name.startswith(mod_name) or mod_name.startswith(comp_name):
+                    content = content.replace("using _module;", f"using _module_{mod_name};")
+                    break
+            # If no match, just remove the using (stubs that don't reference Dafny types)
+            content = content.replace("using _module;", "")
+            (cs_dir / cs_file.name).write_text(content)
             stub_count += 1
-        print(f"    Copied {stub_count} stub files")
+        print(f"    Copied {stub_count} stub files (namespaces fixed)")
 
     # 4. Create .NET project
     print(f"\n[4] Creating .NET project...")
@@ -151,7 +159,6 @@ def verify_trial(trial_dir: str):
   </ItemGroup>
 </Project>"""
     # Fix the project reference path to be absolute
-    runtime_proj = POSIT_ROOT / "src" / "Posit.DafnyRuntime" / "Posit.DafnyRuntime.csproj"
     proj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -159,9 +166,6 @@ def verify_trial(trial_dir: str):
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="{runtime_proj}" />
-  </ItemGroup>
 </Project>"""
     proj_file.write_text(proj_content)
     print(f"    Project: {proj_file}")

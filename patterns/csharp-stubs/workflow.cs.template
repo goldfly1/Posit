@@ -2,7 +2,7 @@
 // Auto-bound when spec mentions: workflow, approval, task, state, transition, business process, BPM
 using System;
 using System.Collections.Generic;
-using _module;
+using _module_{{ComponentName}};
 
 namespace {{ComponentName}}
 {

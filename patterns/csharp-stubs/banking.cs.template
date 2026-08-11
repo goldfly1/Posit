@@ -2,7 +2,7 @@
 // Auto-bound when spec mentions: account, transaction, balance, transfer, deposit, withdraw, payment
 using System;
 using System.Collections.Generic;
-using _module;
+using _module_{{ComponentName}};
 
 namespace {{ComponentName}}
 {

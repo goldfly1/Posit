@@ -2,7 +2,7 @@
 // Auto-bound when spec mentions: schedule, appointment, calendar, booking, availability, slot
 using System;
 using System.Collections.Generic;
-using _module;
+using _module_{{ComponentName}};
 
 namespace {{ComponentName}}
 {

@@ -1,4 +1,4 @@
-// Dafny program result.dfy compiled into C#
+// Dafny program repository.dfy compiled into C#
 // To recompile, you will need the libraries
 //     System.Runtime.Numerics.dll System.Collections.Immutable.dll
 // but the 'dotnet' tool in .NET should pick those up automatically.
@@ -9,8 +9,94 @@ using System;
 using System.Numerics;
 using System.Collections;
 [assembly: DafnyAssembly.DafnySourceAttribute(@"// dafny 4.11.0.0
-// Command-line arguments: translate cs patterns/result.dfy --no-verify --allow-warnings --include-runtime
-// result.dfy
+// Command-line arguments: translate cs patterns/repository.dfy --no-verify --allow-warnings --include-runtime
+// repository.dfy
+
+predicate NoDuplicates(items: seq<Entity>)
+  decreases items
+{
+  forall i: int, j: int {:trigger items[j], items[i]} :: 
+    0 <= i < j < |items| ==>
+      items[i].id != items[j].id
+}
+
+method Add(items: seq<Entity>, entity: Entity) returns (result: Result<seq<Entity>>)
+  requires NoDuplicates(items)
+  ensures result.Success? ==> |result.value| == |items| + 1
+  ensures result.Failure? ==> result.error == ""duplicate id""
+  decreases |items|
+{
+  var i := 0;
+  var found := false;
+  while i < |items| && !found
+    invariant 0 <= i <= |items|
+    invariant NoDuplicates(items)
+    decreases |items| - i
+  {
+    if items[i].id == entity.id {
+      found := true;
+    }
+    i := i + 1;
+  }
+  if found {
+    result := Failure(""duplicate id"");
+  } else {
+    result := Success(items + [entity]);
+  }
+}
+
+method Find(items: seq<Entity>, id: int) returns (result: Result<Entity>)
+  ensures result.Success? ==> result.value.id == id
+  decreases |items|
+{
+  var i := 0;
+  while i < |items|
+    invariant 0 <= i <= |items|
+    decreases |items| - i
+  {
+    if items[i].id == id {
+      result := Success(items[i]);
+      return;
+    }
+    i := i + 1;
+  }
+  result := Failure(""not found"");
+}
+
+method Remove(items: seq<Entity>, id: int) returns (result: Result<seq<Entity>>)
+  requires NoDuplicates(items)
+  ensures result.Success? ==> |result.value| <= |items|
+  decreases |items|
+{
+  var i := 0;
+  var found := false;
+  while i < |items| && !found
+    invariant 0 <= i <= |items|
+    decreases |items| - i
+  {
+    if items[i].id == id {
+      found := true;
+    }
+    i := i + 1;
+  }
+  if found {
+    var newItems := [];
+    var j := 0;
+    while j < |items|
+      invariant 0 <= j <= |items|
+      invariant |newItems| <= j
+      decreases |items| - j
+    {
+      if items[j].id != id {
+        newItems := newItems + [items[j]];
+      }
+      j := j + 1;
+    }
+    result := Success(newItems);
+  } else {
+    result := Failure(""not found"");
+  }
+}
 
 predicate IsSuccess<T>(r: Result<T>)
   decreases r
@@ -46,6 +132,8 @@ function MapResult<T, U>(r: Result<T>, f: T -> U): Result<U>
   else
     Failure(r.error)
 }
+
+datatype Entity = Record(id: int, name: string, data: string)
 
 datatype Result<T> = Success(value: T) | Failure(error: string)
 ")]
@@ -5726,6 +5814,80 @@ internal static class FuncExtensions {
 namespace _module {
 
   public partial class __default {
+    public static bool NoDuplicates(Dafny.ISequence<_IEntity> items) {
+      return Dafny.Helpers.Id<Func<Dafny.ISequence<_IEntity>, bool>>((_0_items) => Dafny.Helpers.Quantifier<BigInteger>(Dafny.Helpers.IntegerRange(BigInteger.Zero, new BigInteger((_0_items).Count)), true, (((_forall_var_0) => {
+        BigInteger _1_i = (BigInteger)_forall_var_0;
+        return Dafny.Helpers.Quantifier<BigInteger>(Dafny.Helpers.IntegerRange((_1_i) + (BigInteger.One), new BigInteger((_0_items).Count)), true, (((_forall_var_1) => {
+          BigInteger _2_j = (BigInteger)_forall_var_1;
+          return !((((_1_i).Sign != -1) && ((_1_i) < (_2_j))) && ((_2_j) < (new BigInteger((_0_items).Count)))) || ((((_0_items).Select(_1_i)).dtor_id) != (((_0_items).Select(_2_j)).dtor_id));
+        })));
+      }))))(items);
+    }
+    public static _IResult<Dafny.ISequence<_IEntity>> Add(Dafny.ISequence<_IEntity> items, _IEntity entity)
+    {
+      _IResult<Dafny.ISequence<_IEntity>> result = Result<Dafny.ISequence<_IEntity>>.Default();
+      BigInteger _0_i;
+      _0_i = BigInteger.Zero;
+      bool _1_found;
+      _1_found = false;
+      while (((_0_i) < (new BigInteger((items).Count))) && (!(_1_found))) {
+        if ((((items).Select(_0_i)).dtor_id) == ((entity).dtor_id)) {
+          _1_found = true;
+        }
+        _0_i = (_0_i) + (BigInteger.One);
+      }
+      if (_1_found) {
+        result = _module.Result<Dafny.ISequence<_IEntity>>.create_Failure(Dafny.Sequence<Dafny.Rune>.UnicodeFromString("duplicate id"));
+      } else {
+        result = _module.Result<Dafny.ISequence<_IEntity>>.create_Success(Dafny.Sequence<_IEntity>.Concat(items, Dafny.Sequence<_IEntity>.FromElements(entity)));
+      }
+      return result;
+    }
+    public static _IResult<_IEntity> Find(Dafny.ISequence<_IEntity> items, BigInteger id)
+    {
+      _IResult<_IEntity> result = Result<_IEntity>.Default();
+      BigInteger _0_i;
+      _0_i = BigInteger.Zero;
+      while ((_0_i) < (new BigInteger((items).Count))) {
+        if ((((items).Select(_0_i)).dtor_id) == (id)) {
+          result = _module.Result<_IEntity>.create_Success((items).Select(_0_i));
+          return result;
+        }
+        _0_i = (_0_i) + (BigInteger.One);
+      }
+      result = _module.Result<_IEntity>.create_Failure(Dafny.Sequence<Dafny.Rune>.UnicodeFromString("not found"));
+      return result;
+    }
+    public static _IResult<Dafny.ISequence<_IEntity>> Remove(Dafny.ISequence<_IEntity> items, BigInteger id)
+    {
+      _IResult<Dafny.ISequence<_IEntity>> result = Result<Dafny.ISequence<_IEntity>>.Default();
+      BigInteger _0_i;
+      _0_i = BigInteger.Zero;
+      bool _1_found;
+      _1_found = false;
+      while (((_0_i) < (new BigInteger((items).Count))) && (!(_1_found))) {
+        if ((((items).Select(_0_i)).dtor_id) == (id)) {
+          _1_found = true;
+        }
+        _0_i = (_0_i) + (BigInteger.One);
+      }
+      if (_1_found) {
+        Dafny.ISequence<_IEntity> _2_newItems;
+        _2_newItems = Dafny.Sequence<_IEntity>.FromElements();
+        BigInteger _3_j;
+        _3_j = BigInteger.Zero;
+        while ((_3_j) < (new BigInteger((items).Count))) {
+          if ((((items).Select(_3_j)).dtor_id) != (id)) {
+            _2_newItems = Dafny.Sequence<_IEntity>.Concat(_2_newItems, Dafny.Sequence<_IEntity>.FromElements((items).Select(_3_j)));
+          }
+          _3_j = (_3_j) + (BigInteger.One);
+        }
+        result = _module.Result<Dafny.ISequence<_IEntity>>.create_Success(_2_newItems);
+      } else {
+        result = _module.Result<Dafny.ISequence<_IEntity>>.create_Failure(Dafny.Sequence<Dafny.Rune>.UnicodeFromString("not found"));
+      }
+      return result;
+    }
     public static bool IsSuccess<__T>(_IResult<__T> r) {
       return (r).is_Success;
     }
@@ -5746,6 +5908,81 @@ namespace _module {
         return _module.Result<__U>.create_Success(Dafny.Helpers.Id<Func<__T, __U>>(f)((r).dtor_value));
       } else {
         return _module.Result<__U>.create_Failure((r).dtor_error);
+      }
+    }
+  }
+
+  public interface _IEntity {
+    bool is_Record { get; }
+    BigInteger dtor_id { get; }
+    Dafny.ISequence<Dafny.Rune> dtor_name { get; }
+    Dafny.ISequence<Dafny.Rune> dtor_data { get; }
+    _IEntity DowncastClone();
+  }
+  public class Entity : _IEntity {
+    public readonly BigInteger _id;
+    public readonly Dafny.ISequence<Dafny.Rune> _name;
+    public readonly Dafny.ISequence<Dafny.Rune> _data;
+    public Entity(BigInteger id, Dafny.ISequence<Dafny.Rune> name, Dafny.ISequence<Dafny.Rune> data) {
+      this._id = id;
+      this._name = name;
+      this._data = data;
+    }
+    public _IEntity DowncastClone() {
+      if (this is _IEntity dt) { return dt; }
+      return new Entity(_id, _name, _data);
+    }
+    public override bool Equals(object other) {
+      var oth = other as Entity;
+      return oth != null && this._id == oth._id && object.Equals(this._name, oth._name) && object.Equals(this._data, oth._data);
+    }
+    public override int GetHashCode() {
+      ulong hash = 5381;
+      hash = ((hash << 5) + hash) + 0;
+      hash = ((hash << 5) + hash) + ((ulong)Dafny.Helpers.GetHashCode(this._id));
+      hash = ((hash << 5) + hash) + ((ulong)Dafny.Helpers.GetHashCode(this._name));
+      hash = ((hash << 5) + hash) + ((ulong)Dafny.Helpers.GetHashCode(this._data));
+      return (int) hash;
+    }
+    public override string ToString() {
+      string s = "Entity.Record";
+      s += "(";
+      s += Dafny.Helpers.ToString(this._id);
+      s += ", ";
+      s += this._name.ToVerbatimString(true);
+      s += ", ";
+      s += this._data.ToVerbatimString(true);
+      s += ")";
+      return s;
+    }
+    private static readonly _IEntity theDefault = create(BigInteger.Zero, Dafny.Sequence<Dafny.Rune>.Empty, Dafny.Sequence<Dafny.Rune>.Empty);
+    public static _IEntity Default() {
+      return theDefault;
+    }
+    private static readonly Dafny.TypeDescriptor<_IEntity> _TYPE = new Dafny.TypeDescriptor<_IEntity>(Entity.Default());
+    public static Dafny.TypeDescriptor<_IEntity> _TypeDescriptor() {
+      return _TYPE;
+    }
+    public static _IEntity create(BigInteger id, Dafny.ISequence<Dafny.Rune> name, Dafny.ISequence<Dafny.Rune> data) {
+      return new Entity(id, name, data);
+    }
+    public static _IEntity create_Record(BigInteger id, Dafny.ISequence<Dafny.Rune> name, Dafny.ISequence<Dafny.Rune> data) {
+      return create(id, name, data);
+    }
+    public bool is_Record { get { return true; } }
+    public BigInteger dtor_id {
+      get {
+        return this._id;
+      }
+    }
+    public Dafny.ISequence<Dafny.Rune> dtor_name {
+      get {
+        return this._name;
+      }
+    }
+    public Dafny.ISequence<Dafny.Rune> dtor_data {
+      get {
+        return this._data;
       }
     }
   }
