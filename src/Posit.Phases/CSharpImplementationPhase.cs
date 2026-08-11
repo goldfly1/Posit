@@ -171,42 +171,64 @@ public sealed class CSharpImplementationPhase : IPhase
     {
         var translated = new List<(string, string)>();
         var ioShells = new List<Component>();
+        var ioShellNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // First pass: collect io-shell component names from architecture contract
         foreach (var artifact in context.InputArtifacts)
         {
             try
             {
-                var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
-
-                if (artifact.Kind == ArtifactKind.DafnyVerification)
+                if (artifact.Kind == ArtifactKind.ArchitectureContract)
                 {
-                    var results = JsonSerializer.Deserialize<DafnyVerificationResult[]>(json, JsonOptions);
-                    if (results is not null)
-                    {
-                        foreach (var r in results)
-                        {
-                            if (r.IsVerified && !string.IsNullOrWhiteSpace(r.TranslatedCSharpPath)
-                                && File.Exists(r.TranslatedCSharpPath))
-                                translated.Add((r.ModuleName, r.TranslatedCSharpPath!));
-                        }
-                    }
-                }
-                else if (artifact.Kind == ArtifactKind.ArchitectureContract)
-                {
+                    var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
                     var archContract = JsonSerializer.Deserialize<ArchitectureContract>(json, JsonOptions);
                     if (archContract?.Components is not null)
                     {
                         foreach (var c in archContract.Components)
                         {
                             if (c.Classification == ModuleClassification.IoShell)
+                            {
                                 ioShells.Add(c);
+                                ioShellNames.Add(c.Name);
+                            }
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Posit] C# Implementation — failed to parse artifact: {ex.Message}");
+                Console.Error.WriteLine($"[Posit] C# Implementation — failed to parse architecture artifact: {ex.Message}");
+            }
+        }
+
+        // Second pass: collect translated Dafny modules, EXCLUDING io-shell components
+        // (io-shell components have Dafny skeletons now, but their C# stubs come from
+        // the io-shell path, not the Dafny extern path — avoids duplicate definitions)
+        foreach (var artifact in context.InputArtifacts)
+        {
+            try
+            {
+                if (artifact.Kind == ArtifactKind.DafnyVerification)
+                {
+                    var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
+                    var results = JsonSerializer.Deserialize<DafnyVerificationResult[]>(json, JsonOptions);
+                    if (results is not null)
+                    {
+                        foreach (var r in results)
+                        {
+                            if (r.IsVerified && !string.IsNullOrWhiteSpace(r.TranslatedCSharpPath)
+                                && File.Exists(r.TranslatedCSharpPath)
+                                && !ioShellNames.Contains(r.ModuleName))
+                            {
+                                translated.Add((r.ModuleName, r.TranslatedCSharpPath!));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Posit] C# Implementation — failed to parse Dafny verification artifact: {ex.Message}");
             }
         }
 
