@@ -365,6 +365,21 @@ public sealed class PositOrchestrator
         // Also allow a small shared utilities directory if explicitly declared.
         allowedRoots.Add("Shared");
 
+        // Build the set of known Dafny module names — these are the only valid
+        // targets for `using _module_X` references in C# stub files.
+        var knownDafnyModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (state.DesignContext?.DafnyContracts is { Length: > 0 })
+        {
+            foreach (var dc in state.DesignContext.DafnyContracts)
+                knownDafnyModules.Add(dc.ModuleName);
+        }
+        // Components classified as dafny or mixed also produce Dafny modules.
+        foreach (var c in state.DesignContext?.Components ?? [])
+        {
+            if (c.Classification == ModuleClassification.Dafny || c.Classification == ModuleClassification.Mixed)
+                knownDafnyModules.Add(c.Name);
+        }
+
         try
         {
             var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
@@ -427,6 +442,23 @@ public sealed class PositOrchestrator
                     if (!isExtern && !isDotSeparated)
                     {
                         errors.Add($"carapace.mangled_filename: '{rel}' filename '{lastPart}' is not deterministic — expected '{firstDir}Extern.cs' or '{firstDir}.{{stubName}}.cs'");
+                    }
+                }
+
+                // Validate that every `using _module_X` reference resolves to a known
+                // Dafny module from the skeleton. Stubs that reference non-existent
+                // modules are fabrications — the skeleton is the authority.
+                if (ext == ".cs" && !string.IsNullOrEmpty(file.Content))
+                {
+                    var moduleUsings = System.Text.RegularExpressions.Regex.Matches(
+                        file.Content, @"using\s+_module_(\w+)\s*;");
+                    foreach (System.Text.RegularExpressions.Match m in moduleUsings)
+                    {
+                        var moduleName = m.Groups[1].Value;
+                        if (!knownDafnyModules.Contains(moduleName))
+                        {
+                            errors.Add($"carapace.phantom_module_ref: '{rel}' references 'using _module_{moduleName};' but no Dafny module '{moduleName}' exists in the skeleton contract (known: {string.Join(", ", knownDafnyModules.OrderBy(n => n))})");
+                        }
                     }
                 }
             }

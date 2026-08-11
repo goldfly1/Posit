@@ -3,7 +3,6 @@
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
 
 using System;
-using _module_{{ComponentName}};
 
 namespace {{ComponentName}}
 {

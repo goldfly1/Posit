@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using _module_{{ComponentName}};
 
 namespace {{ComponentName}}
 {

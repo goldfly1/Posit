@@ -53,9 +53,10 @@ public sealed class PatternRegistry
         if (classification == ModuleClassification.IoShell || tech == "c#")
         {
             // Match by responsibility keywords
+            // Database I/O: use the extern portal cap (database-io.dfy declares {:extern} methods)
             if (responsibility.Contains("database") || responsibility.Contains("sql") || responsibility.Contains("repository") || responsibility.Contains("persist"))
-                if (HasCSharpStub("io-database-repository"))
-                    selected.Add(GetCSharpStub("io-database-repository"));
+                if (HasCSharpStub("extern-database-io"))
+                    selected.Add(GetCSharpStub("extern-database-io"));
 
             if (component.StubNames?.Any(s => s.Contains("console", StringComparison.OrdinalIgnoreCase)) == true ||
                 responsibility.Contains("console") || responsibility.Contains("cli") || responsibility.Contains("command-line") ||

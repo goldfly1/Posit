@@ -2,7 +2,6 @@
 // Auto-bound when spec mentions: monitor, metric, alert, health, dashboard, log, trace, observability
 using System;
 using System.Collections.Generic;
-using _module_{{ComponentName}};
 
 namespace {{ComponentName}}
 {
