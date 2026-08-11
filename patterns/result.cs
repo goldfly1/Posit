@@ -9,7 +9,7 @@ using System;
 using System.Numerics;
 using System.Collections;
 [assembly: DafnyAssembly.DafnySourceAttribute(@"// dafny 4.11.0.0
-// Command-line arguments: translate cs C:/Users/goldf/Posit/patterns/result.dfy --no-verify --allow-external-contracts --allow-warnings
+// Command-line arguments: translate cs patterns/result.dfy --no-verify --allow-warnings
 // result.dfy
 
 predicate IsSuccess<T>(r: Result<T>)
