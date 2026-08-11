@@ -1,0 +1,440 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use FHIR R4 as canonical data format",
+      "status": "accepted",
+      "context": "The system must support HL7 FHIR data format for interoperability.",
+      "decision": "All external interfaces use FHIR R4. Internal models are converted to FHIR at the boundary.",
+      "consequences": "Simplifies integration but requires conversion logic at boundaries."
+    },
+    {
+      "id": "dec-2",
+      "title": "Separate audit trail from business data",
+      "status": "accepted",
+      "context": "HIPAA requires access audit trails.",
+      "decision": "Audit trail is a separate module and data store, written on every access.",
+      "consequences": "Adds write overhead but ensures compliance."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "medium",
+      "mitigation": "Use proven FHIR validation libraries and comprehensive test cases.",
+      "description": "FHIR validation complexity may require extensive testing."
+    },
+    {
+      "id": "risk-2",
+      "severity": "medium",
+      "mitigation": "Use database transactions and optimistic locking.",
+      "description": "Concurrent appointment scheduling may cause race conditions."
+    }
+  ],
+  "components": [
+    {
+      "id": "comp-patient-registry",
+      "name": "PatientRegistry",
+      "tech": "",
+      "layer": 2,
+      "internals": "Uses the repository pattern to store patient entities with unique IDs. Validates required fields and uniqueness of patient identifiers.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-patient-registry-1",
+          "name": "Register valid patient",
+          "targetType": "PatientRegistry",
+          "description": "Register a patient with valid demographics and unique ID.",
+          "expectedBehavior": "Patient is stored and retrievable by ID."
+        },
+        {
+          "id": "tc-patient-registry-2",
+          "name": "Reject duplicate patient ID",
+          "targetType": "PatientRegistry",
+          "description": "Attempt to register a patient with an existing ID.",
+          "expectedBehavior": "Registration fails with a duplicate ID error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "FhirModels"
+      ],
+      "publicSurface": [
+        "RegisterPatient",
+        "UpdatePatient",
+        "GetPatient",
+        "DeletePatient",
+        "SearchPatients"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manages patient registration, demographics, and patient identity records. Provides CRUD operations for patient entities and enforces data validation rules.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-PatientRegistry.dfy"
+    },
+    {
+      "id": "comp-clinical-records",
+      "name": "ClinicalRecords",
+      "tech": "",
+      "layer": 3,
+      "internals": "Uses the repository pattern to store clinical records keyed by patient ID. Validates that clinical records reference existing patients.",
+      "stubNames": [
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-clinical-records-1",
+          "name": "Add medical history for existing patient",
+          "targetType": "ClinicalRecords",
+          "description": "Add a medical history entry for a registered patient.",
+          "expectedBehavior": "Medical history entry is stored and appears in the clinical summary."
+        },
+        {
+          "id": "tc-clinical-records-2",
+          "name": "Reject clinical record for unknown patient",
+          "targetType": "ClinicalRecords",
+          "description": "Attempt to add a clinical record for a non-existent patient ID.",
+          "expectedBehavior": "Operation fails with a patient not found error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "PatientRegistry",
+        "FhirModels"
+      ],
+      "publicSurface": [
+        "AddMedicalHistory",
+        "AddPrescription",
+        "AddLabResult",
+        "GetClinicalSummary",
+        "GetPrescriptions",
+        "GetLabResults"
+      ],
+      "classification": "dafny",
+      "responsibility": "Tracks patient medical history, prescriptions, and lab results. Maintains clinical data integrity and supports retrieval of patient clinical summaries.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-ClinicalRecords.dfy"
+    },
+    {
+      "id": "comp-scheduler",
+      "name": "AppointmentScheduler",
+      "tech": "",
+      "layer": 3,
+      "internals": "Uses the scheduler pattern to manage appointment slots with time-based conflict detection. Validates that appointments reference existing patients and providers.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-scheduler-1",
+          "name": "Schedule appointment for available slot",
+          "targetType": "AppointmentScheduler",
+          "description": "Schedule an appointment for a patient and provider at an available time.",
+          "expectedBehavior": "Appointment is created and retrievable."
+        },
+        {
+          "id": "tc-scheduler-2",
+          "name": "Reject double-booking",
+          "targetType": "AppointmentScheduler",
+          "description": "Attempt to schedule two appointments for the same patient at the same time.",
+          "expectedBehavior": "Second scheduling attempt fails with a conflict error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "scheduler",
+      "dependencies": [
+        "PatientRegistry",
+        "FhirModels"
+      ],
+      "publicSurface": [
+        "ScheduleAppointment",
+        "CancelAppointment",
+        "RescheduleAppointment",
+        "GetAppointments",
+        "CheckAvailability"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manages appointment scheduling, including creation, cancellation, and conflict detection. Ensures no double-booking for a patient or provider.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-AppointmentScheduler.dfy"
+    },
+    {
+      "id": "comp-billing",
+      "name": "BillingManager",
+      "tech": "",
+      "layer": 3,
+      "internals": "Uses the state-machine pattern to track invoice states (unpaid, paid, submitted, denied). Validates that claims reference valid clinical encounters.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-billing-1",
+          "name": "Create invoice with positive amount",
+          "targetType": "BillingManager",
+          "description": "Create an invoice for a clinical encounter with a positive amount.",
+          "expectedBehavior": "Invoice is created in Unpaid state."
+        },
+        {
+          "id": "tc-billing-2",
+          "name": "Reject negative invoice amount",
+          "targetType": "BillingManager",
+          "description": "Attempt to create an invoice with a negative amount.",
+          "expectedBehavior": "Creation fails with a validation error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "ClinicalRecords",
+        "FhirModels"
+      ],
+      "publicSurface": [
+        "CreateInvoice",
+        "RecordPayment",
+        "SubmitClaim",
+        "GetInvoice",
+        "GetOutstandingBalance"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manages billing records, invoice generation, payment tracking, and insurance claim submission. Ensures billing amounts are non-negative and claims reference valid encounters.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-BillingManager.dfy"
+    },
+    {
+      "id": "comp-fhir-models",
+      "name": "FhirModels",
+      "tech": "",
+      "layer": 1,
+      "internals": "Uses the transformer pattern to map internal records to FHIR resources and back. Validates FHIR resource structure.",
+      "stubNames": [
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-fhir-models-1",
+          "name": "Convert patient to FHIR JSON",
+          "targetType": "FhirModels",
+          "description": "Convert a valid internal patient record to FHIR JSON.",
+          "expectedBehavior": "Output is valid FHIR JSON with required fields."
+        },
+        {
+          "id": "tc-fhir-models-2",
+          "name": "Reject invalid FHIR resource",
+          "targetType": "FhirModels",
+          "description": "Attempt to parse a malformed FHIR JSON resource.",
+          "expectedBehavior": "Parsing fails with a validation error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "transformer",
+      "dependencies": [],
+      "publicSurface": [
+        "ToFhirJson",
+        "FromFhirJson",
+        "ValidateFhirResource"
+      ],
+      "classification": "dafny",
+      "responsibility": "Defines FHIR-compliant data models for patients, clinical records, appointments, billing, and claims. Provides conversion between internal models and FHIR JSON.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-FhirModels.dfy"
+    },
+    {
+      "id": "comp-audit-trail",
+      "name": "AuditTrail",
+      "tech": "",
+      "layer": 2,
+      "internals": "Uses the repository pattern to store immutable audit log entries. Each entry records user, action, timestamp, and patient ID.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-audit-trail-1",
+          "name": "Log patient access",
+          "targetType": "AuditTrail",
+          "description": "Log an access event for a patient record.",
+          "expectedBehavior": "Audit entry is stored and retrievable by patient ID."
+        },
+        {
+          "id": "tc-audit-trail-2",
+          "name": "Query audit log by patient",
+          "targetType": "AuditTrail",
+          "description": "Query all audit entries for a specific patient.",
+          "expectedBehavior": "Returns all entries associated with that patient."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "FhirModels"
+      ],
+      "publicSurface": [
+        "LogAccess",
+        "QueryAuditLog",
+        "GetAuditTrailForPatient"
+      ],
+      "classification": "dafny",
+      "responsibility": "Records access audit trails for all patient data access and modifications. Supports querying audit logs for compliance review.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-AuditTrail.dfy"
+    },
+    {
+      "id": "comp-integration-gateway",
+      "name": "IntegrationGateway",
+      "tech": "",
+      "layer": 4,
+      "internals": "Uses the adapter pattern to wrap external FHIR APIs. Depends on FhirModels for validation and conversion.",
+      "stubNames": [
+        "network-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-integration-gateway-1",
+          "name": "Receive valid FHIR patient message",
+          "targetType": "IntegrationGateway",
+          "description": "Receive a valid FHIR patient resource and route it to patient registration.",
+          "expectedBehavior": "Patient is registered and a success response is returned."
+        },
+        {
+          "id": "tc-integration-gateway-2",
+          "name": "Reject malformed FHIR payload",
+          "targetType": "IntegrationGateway",
+          "description": "Receive a malformed FHIR payload.",
+          "expectedBehavior": "Message is rejected with a validation error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "adapter",
+      "dependencies": [
+        "FhirModels",
+        "PatientRegistry",
+        "ClinicalRecords"
+      ],
+      "publicSurface": [
+        "ReceiveFhirMessage",
+        "SendFhirMessage",
+        "ValidateInboundPayload"
+      ],
+      "classification": "dafny",
+      "responsibility": "Handles inbound and outbound FHIR data exchange with external systems. Validates FHIR payloads and routes them to the appropriate internal module.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-IntegrationGateway.dfy"
+    },
+    {
+      "id": "comp-web-api",
+      "name": "WebApi",
+      "tech": "ASP.NET Core",
+      "layer": 5,
+      "internals": "ASP.NET Core Web API. Depends on all internal modules to expose their operations via HTTP.",
+      "stubNames": [
+        "network-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-web-api-1",
+          "name": "POST /patients creates patient",
+          "targetType": "WebApi",
+          "description": "Send a valid patient registration request.",
+          "expectedBehavior": "Returns 201 Created with patient ID."
+        },
+        {
+          "id": "tc-web-api-2",
+          "name": "GET /patients/{id} returns patient",
+          "targetType": "WebApi",
+          "description": "Request an existing patient by ID.",
+          "expectedBehavior": "Returns 200 OK with patient data."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "PatientRegistry",
+        "ClinicalRecords",
+        "AppointmentScheduler",
+        "BillingManager",
+        "AuditTrail",
+        "IntegrationGateway"
+      ],
+      "publicSurface": [
+        "Program"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Exposes RESTful endpoints for the system's modules. Handles HTTP requests, authentication, and routing to internal components.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-WebApi.dfy"
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "ds-patient-store",
+      "kind": "relational",
+      "name": "PatientStore",
+      "schema": "Patients(PatientId, FirstName, LastName, DateOfBirth, SSN, Address, Phone, Email)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-clinical-store",
+      "kind": "relational",
+      "name": "ClinicalStore",
+      "schema": "ClinicalRecords(RecordId, PatientId, RecordType, RecordDate, Data)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-appointment-store",
+      "kind": "relational",
+      "name": "AppointmentStore",
+      "schema": "Appointments(AppointmentId, PatientId, ProviderId, StartTime, EndTime, Status)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-billing-store",
+      "kind": "relational",
+      "name": "BillingStore",
+      "schema": "Invoices(InvoiceId, EncounterId, Amount, Status, PaidAmount)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-audit-store",
+      "kind": "relational",
+      "name": "AuditStore",
+      "schema": "AuditLog(EntryId, PatientId, UserId, Action, Timestamp, Details)",
+      "persistence": "persistent"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "int-rest-api",
+      "auth": {
+        "scheme": "OAuth2",
+        "details": "JWT bearer tokens with role-based access control"
+      },
+      "name": "REST API",
+      "protocol": "HTTPS",
+      "direction": "inbound",
+      "schemaRef": "FHIR R4"
+    },
+    {
+      "id": "int-fhir-exchange",
+      "auth": {
+        "scheme": "OAuth2",
+        "details": "Client credentials for system-to-system communication"
+      },
+      "name": "FHIR Exchange",
+      "protocol": "HTTPS",
+      "direction": "outbound",
+      "schemaRef": "FHIR R4"
+    }
+  ],
+  "systemContext": "A HIPAA-compliant patient records management system supporting patient registration, medical history tracking, appointment scheduling, prescription management, lab results processing, billing, and insurance claim submission. It handles HL7 FHIR data format, maintains access audit trails, and is organized into Patient, Clinical, Billing, Scheduling, and Integration modules.",
+  "qualityAttributes": [
+    {
+      "target": "HIPAA compliance",
+      "attribute": "Security",
+      "rationale": "Patient data must be protected per HIPAA regulations."
+    },
+    {
+      "target": "100% of access events logged",
+      "attribute": "Auditability",
+      "rationale": "Access audit trails are required for compliance."
+    },
+    {
+      "target": "99.9% uptime",
+      "attribute": "Reliability",
+      "rationale": "Clinical systems must be highly available."
+    },
+    {
+      "target": "FHIR R4 compliant",
+      "attribute": "Interoperability",
+      "rationale": "Must exchange data with external healthcare systems."
+    }
+  ],
+  "deploymentTopology": "Single ASP.NET Core Web API deployed to a HIPAA-compliant cloud environment. All data stores are encrypted at rest and in transit. Audit logs are append-only and tamper-evident."
+}

@@ -1,0 +1,54 @@
+{
+  "summary": "8 verified (compile only), 0 test files for unverified modules",
+  "testFiles": [],
+  "moduleResults": [
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "PatientRegistry"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "ClinicalRecords"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "AppointmentScheduler"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "BillingManager"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "FhirModels"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "AuditTrail"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "IntegrationGateway"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "WebApi"
+    }
+  ]
+}
