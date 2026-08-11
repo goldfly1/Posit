@@ -186,37 +186,38 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-12501796">Posit Architecture</a></li>
+<li class="page"><a href="#page-10720941">Posit Architecture</a></li>
 </ul>
 </li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-8538687">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-4398378">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-14566282">Desktop Port Plan</a></li>
+<li class="page"><a href="#page-5715050">Desktop Port Plan</a></li>
 <li class="folder">Evolution
 <ul>
-<li class="page"><a href="#page-9190992">Architecture Evolution Map</a></li>
+<li class="page"><a href="#page-9393856">Architecture Evolution Map</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-7019051">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-11305442">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-5170930">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-127299">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-12123652">Handoff 2026 08 11 Supplemental</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-4470557">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-11974467">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
 <li class="folder">Reference
 <ul>
-<li class="page"><a href="#page-10558359">Dafny Runtime Cs</a></li>
-<li class="page"><a href="#page-15138219">Dafny Runtime System Cs</a></li>
-<li class="page"><a href="#page-7332301">Dafny Stdlib</a></li>
+<li class="page"><a href="#page-887611">Dafny Runtime Cs</a></li>
+<li class="page"><a href="#page-16270091">Dafny Runtime System Cs</a></li>
+<li class="page"><a href="#page-12510754">Dafny Stdlib</a></li>
 </ul>
 </li>
 <li class="folder">Trials
 <ul>
-<li class="page"><a href="#page-1098468">Trial Specs</a></li>
+<li class="page"><a href="#page-8316767">Trial Specs</a></li>
 </ul>
 </li>
     </ul>
@@ -227,7 +228,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-14566282" data-title="Desktop Port Plan">
+        <div class="page" id="page-5715050" data-title="Desktop Port Plan">
             <h1>Desktop Port Plan</h1>
             <div class="page-path">desktop-port-plan.md</div>
             
@@ -635,7 +636,7 @@ body {
 </ul>
         </div>
 
-        <div class="page" id="page-7019051" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-5170930" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -1013,7 +1014,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-11305442" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-127299" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.2</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -1561,7 +1562,247 @@ posit verify &lt;session-id&gt;
 </ul>
         </div>
 
-        <div class="page" id="page-8887248" data-title="Posit Architecture">
+        <div class="page" id="page-12123652" data-title="Handoff 2026 08 11 Supplemental">
+            <h1>Handoff 2026 08 11 Supplemental</h1>
+            <div class="page-path">handoff-2026-08-11-supplemental.md</div>
+            
+            <h1 id="supplemental-handoff-aug-11-2026-session-2-">Supplemental Handoff — Aug 11, 2026 (Session 2)</h1>
+
+<h2 id="context">Context</h2>
+
+<p>This is a supplemental handoff for the second session on Aug 10-11. The primary handoff is at <code class="inline">wiki/handoff-2026-08-08.md</code>. This covers work done after that handoff was written.</p>
+
+<h2 id="what-was-done-this-session">What Was Done This Session</h2>
+
+<h3 id="trials-run-9-9-green-with-real-specs-">Trials Run (9/9 green with real specs)</h3>
+
+<table>
+<tr>
+<th>Trial</th>
+<th>Spec</th>
+<th>Components</th>
+<th>C# files</th>
+<th>Tokens</th>
+<th>Domain stubs</th>
+</tr>
+<tr>
+<td>T1</td>
+<td>CSV-to-JSON CLI</td>
+<td>2</td>
+<td>4</td>
+<td>21K</td>
+<td>—</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>Document processing</td>
+<td>3</td>
+<td>4</td>
+<td>35K</td>
+<td>—</td>
+</tr>
+<tr>
+<td>T7</td>
+<td>Marketplace</td>
+<td>6</td>
+<td>11</td>
+<td>49K</td>
+<td>—</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>CI/CD pipeline</td>
+<td>8</td>
+<td>18</td>
+<td>94K</td>
+<td>—</td>
+</tr>
+<tr>
+<td>T12</td>
+<td>Task scheduler</td>
+<td>8</td>
+<td>24</td>
+<td>78K</td>
+<td>scheduling, time-random</td>
+</tr>
+<tr>
+<td>T13</td>
+<td>E-commerce (Tier 1)</td>
+<td>13</td>
+<td>25</td>
+<td>109K</td>
+<td>ecommerce</td>
+</tr>
+<tr>
+<td>T14</td>
+<td>Healthcare (Tier 1)</td>
+<td>9</td>
+<td>30</td>
+<td>91K</td>
+<td>healthcare, time-random, ecommerce</td>
+</tr>
+<tr>
+<td>T15</td>
+<td>Chat/messaging</td>
+<td>7</td>
+<td>22</td>
+<td>52K</td>
+<td>chat, network-io</td>
+</tr>
+<tr>
+<td>T12 (rerun)</td>
+<td>Task scheduler</td>
+<td>8</td>
+<td>28</td>
+<td>83K</td>
+<td>scheduling, time-random</td>
+</tr>
+</table>
+
+<p>All green. All components named for their domain. Zero CSV bias since CLI spec fix.</p>
+
+<h3 id="fixes-applied">Fixes Applied</h3>
+
+<ul><li><strong>CLI spec fix</strong> — <code class="inline">args[0]</code> was <code class="inline">--spec</code> flag, not spec text. Root cause of CSV bias. Model was blind.</li>
+<li><strong><code class="inline">--allow-warnings</code> on translate cs</strong> — graph pattern quantifier warning was silently aborting C# translation.</li>
+<li><strong>Carapace prefix matching</strong> — <code class="inline">DagResolver</code> matches <code class="inline">DagResolverExtern.cs</code>.</li>
+<li><strong>Carapace at 3 points</strong> — indexer (200-line, 10-method, 5-class), Architecture phase (skeleton check), C# Implementation (generated file check).</li>
+<li><strong>Dedup in indexer</strong> — hash code (minus headers), skip identical variants. 726 make-weight filtered from 1379 files.</li>
+<li><strong>Parallel Z3</strong> — ThreadPoolExecutor with 6 workers (ProcessPoolExecutor fails on Windows).</li>
+<li><strong>Real string substitution</strong> — Mode 2 in generate-batch.py replaces actual code values (ToUpper→ToLower, delimiter, entityType, etc.).</li>
+<li><strong>Domain stubs built out</strong> — 17 templates (6 I/O + 11 domain). PatternRegistry matches spec keywords to domain stubs.</li>
+<li><strong>Semantic search wired</strong> — PatternRegistry.SearchVariants() embeds component description via Ollama, queries pgvector for closest match. Suggest() tries semantic first (&gt;0.7 similarity), falls back to keyword matching. Architecture phase logs the result.</li>
+<li><strong>Prompt updated</strong> — <code class="inline">patternName</code> is now OPTIONAL with &quot;LEAVE EMPTY (first option)&quot;. <code class="inline">componentDescription</code> field added. Flash still fills in patterns for specialists (cog trace confirmed this is deliberate judgment, not a bug).</li>
+<li><strong>Thinking ON/OFF</strong> — cog trace confirmed flash understands the prompt. Turned back OFF (65K output runaway risk).</li>
+<li><strong>Runtime collision</strong> — <code class="inline">--include-runtime</code> invalid flag removed. Dafny 4.11 includes minimal runtime by default. Single module compiles clean. Multi-module assembly is a packaging problem (see Harness Findings).</li>
+<li><strong>DB backup</strong> — schema (12KB) + registry CSV (54KB) + variant files in git. DafnyRuntime DLL project.</li>
+<li><strong>Trial artifacts gathered</strong> — 8 trials extracted from DB to <code class="inline">trials/</code> with INDEX.md.</li>
+
+</ul><h3 id="registry-state">Registry State</h3>
+
+<table>
+<tr>
+<th>Metric</th>
+<th>Count</th>
+</tr>
+<tr>
+<td>Files on disk</td>
+<td>1,447</td>
+</tr>
+<tr>
+<td>DB indexed</td>
+<td>794</td>
+</tr>
+<tr>
+<td>Z3-verified</td>
+<td>690/794 (87%)</td>
+</tr>
+<tr>
+<td>Unique (deduped)</td>
+<td>~653</td>
+</tr>
+<tr>
+<td>Patterns with model-generated variety</td>
+<td>8 (adapter 100, validator 100, observer 99, parser 99, repository 86, cache 60, scheduler 60, pipeline 93)</td>
+</tr>
+<tr>
+<td>Patterns with substitution only (1 unique)</td>
+<td>8 (aggregator, builder, filter, iterator, reducer, state-machine, strategy, transformer)</td>
+</tr>
+<tr>
+<td>Graph</td>
+<td>1 (model generation failed on quantifiers, substitution only)</td>
+</tr>
+<tr>
+<td>Domain stub templates</td>
+<td>17 (6 I/O + 11 domain)</td>
+</tr>
+<tr>
+<td>Pattern files</td>
+<td>20 (all Z3-verified, all carapace-checked)</td>
+</tr>
+</table>
+
+<h3 id="harness-findings-verify-trial-py-">Harness Findings (verify-trial.py)</h3>
+
+<p><strong>What works:</strong></p>
+<ul><li style="margin-left:0ch">Re-translates Dafny from trial artifacts to C#</li>
+<li style="margin-left:0ch">Single module compiles clean (0 errors, 79 warnings) with <code class="inline">--include-runtime</code></li>
+<li style="margin-left:0ch">Namespace renaming (<code class="inline">_module</code> → <code class="inline">_module_{name}</code>) prevents <code class="inline">__default</code> collisions</li>
+<li style="margin-left:0ch">Runtime stripping from non-first files reduces errors from 971 → 61</li>
+
+</ul><p><strong>What doesn&#x27;t work yet:</strong></p>
+<ul><li style="margin-left:0ch">Multi-module assembly — 61 errors remain. Each translated file references <code class="inline">_module.Result&lt;T&gt;</code> (from <code class="inline">result.dfy</code> include). Renaming the namespace breaks cross-references.</li>
+<li style="margin-left:0ch">Stub namespace mismatch — stub templates had <code class="inline">using _module;</code>, fixed to <code class="inline">using _module_{{ComponentName}};</code> in templates. Old trial artifacts still have the old reference.</li>
+<li style="margin-left:0ch">The DafnyRuntime DLL project is incomplete — missing <code class="inline">Rune</code> type and others. Single files with <code class="inline">--include-runtime</code> work; the shared DLL doesn&#x27;t.</li>
+
+</ul><p><strong>Root cause:</strong> Dafny&#x27;s C# translation is designed for one-file-at-a-time. Each file is self-contained with its own runtime + dependencies. Multi-module assembly requires either:</p>
+<ul><li style="margin-left:0ch">One DLL per module (Dafny <code class="inline">build</code> command), reference them</li>
+<li style="margin-left:0ch">Or a proper Dafny project file that compiles all modules together</li>
+<li style="margin-left:0ch">Or accepting single-module verification as the target</li>
+
+</ul><h2 id="moratorium-list-trial-runs-on-hold-until-these-are-done-">Moratorium List (trial runs on hold until these are done)</h2>
+
+<ul><li><strong>Verify Dafny contracts encode right invariants</strong> — Z3 proves consistency, not that we posited the right contract. Need to read actual contracts and confirm (e.g., RetryManager has retry invariant, not just a method named Retry). Can be done by hand for flavor, needs harness for scale.</li>
+
+<li><strong>Compile C# output into real project</strong> — Harness built (<code class="inline">scripts/verify-trial.py</code>). Single module compiles. Multi-module assembly needs proper Dafny project or one-DLL-per-module approach. 61 errors remaining (cross-module references).</li>
+
+<li><strong>xUnit tests</strong> — Tests are Dafny <code class="inline">{:axiom}</code> contract stubs, not executable C#. Need to generate xUnit test projects that call translated methods and assert results. <code class="inline">dotnet test</code> should pass.</li>
+
+<li><strong>Semantic search firing</strong> — ✅ Wired. Architect still fills in <code class="inline">patternName</code> for specialists (deliberate, confirmed by cog trace). Registry fires as fallback for generic components. Working as designed — hybrid approach.</li>
+
+<li><strong>Gather trial artifacts</strong> — ✅ Done. 8 trials in <code class="inline">trials/</code> with INDEX.md.</li>
+
+</ul><h2 id="approved-models-architecture-phase-">Approved Models (architecture phase)</h2>
+
+<table>
+<tr>
+<th>Model</th>
+<th>Status</th>
+</tr>
+<tr>
+<td>deepseek-v4-flash:cloud</td>
+<td>✅ Approved — primary, fast, cheap, good pattern selection</td>
+</tr>
+<tr>
+<td>glm-5.2:cloud</td>
+<td>✅ Approved — slower, more consistent on edge cases</td>
+</tr>
+<tr>
+<td>Others</td>
+<td>⚠️ Untested — try as we go, approve if green</td>
+</tr>
+</table>
+
+<h2 id="key-files-added-this-session">Key Files Added This Session</h2>
+
+<ul><li style="margin-left:0ch"><code class="inline">scripts/verify-trial.py</code> — verification harness (translate, strip, compile)</li>
+<li style="margin-left:0ch"><code class="inline">trials/</code> — 8 trial directories with artifacts + INDEX.md</li>
+<li style="margin-left:0ch"><code class="inline">trials/INDEX.md</code> — trial scorecard</li>
+<li style="margin-left:0ch"><code class="inline">patterns/csharp-stubs/</code> — 17 domain + I/O stub templates</li>
+<li style="margin-left:0ch"><code class="inline">src/Posit.DafnyRuntime/</code> — shared runtime project (incomplete, see harness findings)</li>
+<li style="margin-left:0ch"><code class="inline">.posit/backups/posit-db-schema.sql</code> — DB schema backup</li>
+<li style="margin-left:0ch"><code class="inline">.posit/backups/posit-registry-data.csv</code> — registry data backup (54KB, no embeddings)</li>
+
+</ul><h2 id="next-session-priorities">Next Session Priorities</h2>
+
+<ul><li>Fix multi-module C# assembly (harness #2) — try one-DLL-per-module or Dafny project file</li>
+<li>xUnit test generation (#3)</li>
+<li>Contract review by hand (#1) — read T12 contracts, confirm invariants</li>
+<li>Registry re-index with graph variants</li>
+<li>Test more <code class="inline">:cloud</code> models for approved list</li>
+<li>Then resume trials (T15-T16 Tier 1, then Tier 2-3)</li>
+
+</ul><h2 id="git-state">Git State</h2>
+
+<ul><li style="margin-left:0ch"><strong>Branch:</strong> main</li>
+<li style="margin-left:0ch"><strong>Latest commit:</strong> <code class="inline">9c21325</code> — Harness progress: strip runtime, 61 errors remaining</li>
+<li style="margin-left:0ch"><strong>Working tree:</strong> Clean</li>
+<li style="margin-left:0ch"><strong>GitHub:</strong> https://github.com/goldfly1/Posit — all pushed</li>
+<li style="margin-left:0ch"><strong>Commit count:</strong> ~100+</li></ul>
+        </div>
+
+        <div class="page" id="page-10438946" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2419,7 +2660,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-1642856" data-title="Dafny Contract Templates">
+        <div class="page" id="page-11961587" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2585,7 +2826,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-962316" data-title="Posit Architecture Evolution Map">
+        <div class="page" id="page-5595363" data-title="Posit Architecture Evolution Map">
             <h1>Posit Architecture Evolution Map</h1>
             <div class="page-path">evolution\architecture-evolution-map.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: design</span> · <span class='meta-item'><b>tags</b>: [architecture, evolution, registry, vector-db, vision]</span> · <span class='meta-item'><b>component</b>: posit</span> · <span class='meta-item'><b>version</b>: 0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -3123,7 +3364,7 @@ Each box = a locale (designed independently).
 
         </div>
 
-        <div class="page" id="page-4859553" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-12600216" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             
@@ -3413,7 +3654,7 @@ public class CsvFileReader
 <li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
         </div>
 
-        <div class="page" id="page-9939406" data-title="DafnyRuntime.cs — C# Runtime Reference">
+        <div class="page" id="page-4261262" data-title="DafnyRuntime.cs — C# Runtime Reference">
             <h1>DafnyRuntime.cs — C# Runtime Reference</h1>
             <div class="page-path">reference\dafny-runtime-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -5394,7 +5635,7 @@ namespace Dafny {
 
         </div>
 
-        <div class="page" id="page-10531415" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
+        <div class="page" id="page-5246995" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
             <h1>DafnyRuntimeSystemModule.cs — C# System Module Reference</h1>
             <div class="page-path">reference\dafny-runtime-system-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -9097,7 +9338,7 @@ namespace _System {
 
         </div>
 
-        <div class="page" id="page-15056203" data-title="Dafny Standard Library Reference">
+        <div class="page" id="page-6615697" data-title="Dafny Standard Library Reference">
             <h1>Dafny Standard Library Reference</h1>
             <div class="page-path">reference\dafny-stdlib.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [dafny, stdlib, reference, types, contracts]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -27895,7 +28136,7 @@ module Std.Wrappers {
 
         </div>
 
-        <div class="page" id="page-8784381" data-title="Trials\Trial Specs">
+        <div class="page" id="page-8930667" data-title="Trials\Trial Specs">
             <h1>Trials\Trial Specs</h1>
             <div class="page-path">trials\trial-specs.md</div>
             
