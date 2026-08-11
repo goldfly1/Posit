@@ -186,38 +186,40 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-10720941">Posit Architecture</a></li>
+<li class="page"><a href="#page-10822883">Posit Architecture</a></li>
 </ul>
 </li>
+<li class="page"><a href="#page-13010630">Carapace Doctrine</a></li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-4398378">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-14181885">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-5715050">Desktop Port Plan</a></li>
+<li class="page"><a href="#page-16235071">Desktop Port Plan</a></li>
 <li class="folder">Evolution
 <ul>
-<li class="page"><a href="#page-9393856">Architecture Evolution Map</a></li>
+<li class="page"><a href="#page-194888">Architecture Evolution Map</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-5170930">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-127299">Handoff 2026 08 08</a></li>
-<li class="page"><a href="#page-12123652">Handoff 2026 08 11 Supplemental</a></li>
+<li class="page"><a href="#page-4113680">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-6374484">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-16286464">Handoff 2026 08 11 Supplemental</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-11974467">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-11912688">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
+<li class="page"><a href="#page-13122602">Proof Methodology</a></li>
 <li class="folder">Reference
 <ul>
-<li class="page"><a href="#page-887611">Dafny Runtime Cs</a></li>
-<li class="page"><a href="#page-16270091">Dafny Runtime System Cs</a></li>
-<li class="page"><a href="#page-12510754">Dafny Stdlib</a></li>
+<li class="page"><a href="#page-8426584">Dafny Runtime Cs</a></li>
+<li class="page"><a href="#page-15081861">Dafny Runtime System Cs</a></li>
+<li class="page"><a href="#page-4693472">Dafny Stdlib</a></li>
 </ul>
 </li>
 <li class="folder">Trials
 <ul>
-<li class="page"><a href="#page-8316767">Trial Specs</a></li>
+<li class="page"><a href="#page-7085259">Trial Specs</a></li>
 </ul>
 </li>
     </ul>
@@ -228,7 +230,28 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-5715050" data-title="Desktop Port Plan">
+        <div class="page" id="page-13010630" data-title="Carapace Doctrine">
+            <h1>Carapace Doctrine</h1>
+            <div class="page-path">carapace-doctrine.md</div>
+            
+            <h1 id="the-carapace-doctrine">The Carapace Doctrine</h1>
+
+<blockquote><strong>&quot;Computers should know what I MEANT to say.&quot;</strong></blockquote>
+
+<p>The skeleton is the carapace — the source of truth for everything that is contractual. The orchestrator&#x27;s job is to be the enforcer that compels every component to comply with it. Nothing leaves the door unless it matches what the skeleton says.</p>
+
+<p>The orchestrator needs to know and hold every detail of the skeleton and use it as a contract checklist at every phase boundary. Not just &quot;does a directory exist with this component name&quot; but:</p>
+
+<ul><li style="margin-left:0ch">Does every filename trace back to a skeleton entry?</li>
+<li style="margin-left:0ch">Does every stub reference resolve to a real Dafny module?</li>
+<li style="margin-left:0ch">Does every <code class="inline">using _module_X</code> have a corresponding <code class="inline">_module_X</code> in the Dafny output?</li>
+<li style="margin-left:0ch">Does every component classified as <code class="inline">io-shell</code> have its stubs, and only its stubs?</li>
+<li style="margin-left:0ch">Does every component classified as <code class="inline">dafny</code> have its pattern, and only its pattern?</li>
+
+</ul><p>The skeleton says what should exist. The orchestrator enforces that what exists matches. If something exists that the skeleton doesn&#x27;t name, it&#x27;s rejected. If something the skeleton names is missing, it&#x27;s flagged. That&#x27;s the carapace principle applied fully — not just at the directory level, but at the filename, type reference, and stub-binding level.</p>
+        </div>
+
+        <div class="page" id="page-16235071" data-title="Desktop Port Plan">
             <h1>Desktop Port Plan</h1>
             <div class="page-path">desktop-port-plan.md</div>
             
@@ -636,7 +659,7 @@ body {
 </ul>
         </div>
 
-        <div class="page" id="page-5170930" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-4113680" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -1014,7 +1037,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-127299" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-6374484" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.2</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -1562,7 +1585,7 @@ posit verify &lt;session-id&gt;
 </ul>
         </div>
 
-        <div class="page" id="page-12123652" data-title="Handoff 2026 08 11 Supplemental">
+        <div class="page" id="page-16286464" data-title="Handoff 2026 08 11 Supplemental">
             <h1>Handoff 2026 08 11 Supplemental</h1>
             <div class="page-path">handoff-2026-08-11-supplemental.md</div>
             
@@ -1802,7 +1825,102 @@ posit verify &lt;session-id&gt;
 <li style="margin-left:0ch"><strong>Commit count:</strong> ~100+</li></ul>
         </div>
 
-        <div class="page" id="page-10438946" data-title="Posit Architecture">
+        <div class="page" id="page-13122602" data-title="Proof Methodology">
+            <h1>Proof Methodology</h1>
+            <div class="page-path">proof-methodology.md</div>
+            
+            <h1 id="the-proof-methodology-end-to-end-verification">The Proof Methodology — End-to-End Verification</h1>
+
+<blockquote><strong>&quot;We will prove the first 20 by eye. We will either just use those and add a few more as we find them, or we will take the things that work together out of the program and add to the registry.&quot;</strong></blockquote>
+
+<h2 id="the-flow">The Flow</h2>
+
+<pre><code class="language-">
+1. SEED          → Registry holds the 17 proven panels (the jigsaw puzzle pieces)
+2. ASSEMBLE      → The team (architect + pipeline) puts the pieces together into a program
+3. TEST          → Push data through the CLI, push every button in the GUI, capture the output
+4. PROVE         → When the bot or human shows it does what we said it would → IT WORKS
+5. CARVE         → Pull out any piece that worked well, add it to the registry (proven because we just proved it)
+</code></pre>
+
+<p>The registry grows from verified end products. Each new piece is carved from a program that was proven to work in step 4. The next assembly has more pieces to choose from.</p>
+
+<h2 id="the-foundation">The Foundation</h2>
+
+<p>The 17 base patterns are Z3-proven. They&#x27;re the seed. The architect picks from the menu, sets parameters, the pipeline composes the skeleton. That works — 8/8 trials green.</p>
+
+<p>The patterns are named by the function they perform: <code class="inline">parser</code> parses, <code class="inline">repository</code> stores, <code class="inline">scheduler</code> queues, <code class="inline">pipeline</code> processes through stages. The name IS the spec. The function IS the proof.</p>
+
+<p>We don&#x27;t re-verify the 17 panels for every trial. They&#x27;re proven once. Compositions of proven parts are verified by Z3 (consistency) and the harness (compilation). The remaining question is whether the program does what the user asked for.</p>
+
+<h2 id="the-hard-part-11-does-it-answer-the-prompt-">The Hard Part — #11: Does It Answer the Prompt?</h2>
+
+<p>This is the cotton candy check. Everything before it (contracts, compilation, stubs) is necessary but not sufficient. #11 is the one that says &quot;this is a real program that does what I asked for, and I can prove it because I just used it.&quot;</p>
+
+<h3 id="how-it-works">How It Works</h3>
+
+<p>Every panel has a CLI built in (the <code class="inline">io-console-program</code> stub cap). The CLI is always there. The GUI sits on top of the CLI — same commands, same entry points. Every field, button, and data entry point in the GUI is reachable by hotkey.</p>
+
+<p><strong>The test procedure:</strong></p>
+
+<ul><li><strong>Somebody makes a list of what the program does</strong> — from the user prompt, through the architect, through the design review. The actual user-facing objectives: what buttons exist, what happens when they get pushed, what the user can do with the software. Not contracts. Not patterns. The thing the user asked for.</li>
+
+<li><strong>These requirements are the objectives for the program</strong> — what do you want the software and your user to be able to do? Down to what buttons are there and what happens when they get pushed.</li>
+
+<li><strong>Generate test data</strong> — 1,000 or 10,000 or 100,000 faux records. Push them through the always-built-in CLI. The commands are deterministic.</li>
+
+<li><strong>Map the GUI</strong> — every field, every button, every data entry point is reachable by hotkey. Map the layout. Capture the data. Push the buttons. See that the right command gets fired.</li>
+
+<li><strong>Compare output to expected result</strong> — the expected result comes from the spec (step 1). Not from the model. Not from the test. From what the user asked for. If output matches expected → golden. If not → cotton candy.</li>
+
+</ul><h3 id="why-this-works">Why This Works</h3>
+
+<ul><li style="margin-left:0ch">The CLI is deterministic — same input, same output, every time</li>
+<li style="margin-left:0ch">The GUI is a face on the CLI — same commands, same entry points</li>
+<li style="margin-left:0ch">The data is generatable — faux records at any scale</li>
+<li style="margin-left:0ch">The expected results come from the spec — not circular, not model-generated</li>
+<li style="margin-left:0ch">The check is: does the program do what its name says it does</li>
+
+</ul><h3 id="what-this-proves">What This Proves</h3>
+
+<ul><li style="margin-left:0ch">The 17 base panels are proven by Z3 (contracts consistent) + stub certification (plumbing compiles)</li>
+<li style="margin-left:0ch">Each composed program is proven by Z3 (composition consistent) + harness (C# compiles) + <strong>runtime verification</strong> (program does what the spec asked)</li>
+<li style="margin-left:0ch">Pieces carved from proven programs are trusted — they were just proven in context</li>
+
+</ul><h2 id="the-registry-as-a-jigsaw-puzzle">The Registry as a Jigsaw Puzzle</h2>
+
+<p>The registry holds whatever we seed it with (the 17 proven panels). The team assembles programs from those pieces. When a program is proven to work (step 4), interesting combinations can be carved out and added to the registry (step 5). The registry grows. Each new piece is proven because we just proved the program it came from.</p>
+
+<p>Next time the architect needs that shape, it&#x27;s already in the registry — already proven, already trusted. The puzzle gets bigger. The assemblies get richer. The verification accumulates.</p>
+
+<h2 id="the-missing-artifact">The Missing Artifact</h2>
+
+<p>Nobody in the pipeline currently writes down &quot;here are the things this program does, here are the buttons, here&#x27;s what happens when you push them.&quot; The architect writes contract-level test cases. The design review reviews the architecture. But the user-facing requirements list — what the program does for the user — is the gap between contract review (#1) and the cotton candy check (#11).</p>
+
+<p>That list is the bridge. It&#x27;s produced from the spec, checked against the running program. It&#x27;s the Testmaster&#x27;s checklist.</p>
+
+<h2 id="where-the-pieces-are">Where the Pieces Are</h2>
+
+<ul><li style="margin-left:0ch">CLI: built into every panel (<code class="inline">io-console-program</code> stub cap)</li>
+<li style="margin-left:0ch">GUI: sits on top of CLI (same commands, same entry points)</li>
+<li style="margin-left:0ch">GUI controls: every field, button, entry point reachable by hotkey</li>
+<li style="margin-left:0ch">Test data: generatable at any scale (1K, 10K, 100K faux records)</li>
+<li style="margin-left:0ch">Expected results: from the spec (the user-facing requirements list)</li>
+<li style="margin-left:0ch">The Testmaster (Blazor desktop): where the test is launched and results are displayed</li>
+<li style="margin-left:0ch">The harness: pushes data, captures output, compares to expected</li>
+
+</ul><h2 id="status">Status</h2>
+
+<ul><li style="margin-left:0ch">Items 6, 7, 8, 9: DONE (phantom imports, fabricated template, carapace checks, stub certification)</li>
+<li style="margin-left:0ch">Option B: DONE (io-shell components get Dafny skeletons — every component has a contract)</li>
+<li style="margin-left:0ch">Item 3 (xUnit tests): answered by runtime verification — the program doing what the spec asked IS the test</li>
+<li style="margin-left:0ch">Item 1 (contract review): the user-facing requirements list bridges this</li>
+<li style="margin-left:0ch">Item 11 (cotton candy): the hard part — but the handle is: CLI + GUI + data + expected results</li>
+<li style="margin-left:0ch">Item 12 (Testmaster): the Blazor desktop where the test is launched and results are shown</li>
+<li style="margin-left:0ch">Item 13 (harness → JSON): the harness pushes data and captures output as structured proof</li></ul>
+        </div>
+
+        <div class="page" id="page-407737" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2660,7 +2778,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-11961587" data-title="Dafny Contract Templates">
+        <div class="page" id="page-13573856" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -2826,7 +2944,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-5595363" data-title="Posit Architecture Evolution Map">
+        <div class="page" id="page-12881444" data-title="Posit Architecture Evolution Map">
             <h1>Posit Architecture Evolution Map</h1>
             <div class="page-path">evolution\architecture-evolution-map.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: design</span> · <span class='meta-item'><b>tags</b>: [architecture, evolution, registry, vector-db, vision]</span> · <span class='meta-item'><b>component</b>: posit</span> · <span class='meta-item'><b>version</b>: 0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -3364,7 +3482,7 @@ Each box = a locale (designed independently).
 
         </div>
 
-        <div class="page" id="page-12600216" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-1842895" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             
@@ -3654,7 +3772,7 @@ public class CsvFileReader
 <li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
         </div>
 
-        <div class="page" id="page-4261262" data-title="DafnyRuntime.cs — C# Runtime Reference">
+        <div class="page" id="page-9334764" data-title="DafnyRuntime.cs — C# Runtime Reference">
             <h1>DafnyRuntime.cs — C# Runtime Reference</h1>
             <div class="page-path">reference\dafny-runtime-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -5635,7 +5753,7 @@ namespace Dafny {
 
         </div>
 
-        <div class="page" id="page-5246995" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
+        <div class="page" id="page-6657313" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
             <h1>DafnyRuntimeSystemModule.cs — C# System Module Reference</h1>
             <div class="page-path">reference\dafny-runtime-system-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -9338,7 +9456,7 @@ namespace _System {
 
         </div>
 
-        <div class="page" id="page-6615697" data-title="Dafny Standard Library Reference">
+        <div class="page" id="page-9761920" data-title="Dafny Standard Library Reference">
             <h1>Dafny Standard Library Reference</h1>
             <div class="page-path">reference\dafny-stdlib.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [dafny, stdlib, reference, types, contracts]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -28136,7 +28254,7 @@ module Std.Wrappers {
 
         </div>
 
-        <div class="page" id="page-8930667" data-title="Trials\Trial Specs">
+        <div class="page" id="page-2757384" data-title="Trials\Trial Specs">
             <h1>Trials\Trial Specs</h1>
             <div class="page-path">trials\trial-specs.md</div>
             
