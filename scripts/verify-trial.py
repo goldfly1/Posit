@@ -164,6 +164,15 @@ def verify_trial(trial_dir: str):
     proj_file = work_dir / "Posit.Verified.csproj"
     runtime_proj = POSIT_ROOT / "src" / "Posit.DafnyRuntime" / "Posit.DafnyRuntime.csproj"
     has_runtime = runtime_proj.exists()
+
+    # Detect if any stub files need SqlClient
+    needs_sql = False
+    if stub_cs_dir and stub_cs_dir.exists():
+        for sf in stub_cs_dir.glob("*.cs"):
+            if "SqlClient" in sf.read_text() or "SqlConnection" in sf.read_text():
+                needs_sql = True
+                break
+
     proj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -175,6 +184,11 @@ def verify_trial(trial_dir: str):
         proj_content += f"""
   <ItemGroup>
     <ProjectReference Include="{runtime_proj.resolve()}" />
+  </ItemGroup>"""
+    if needs_sql:
+        proj_content += """
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
   </ItemGroup>"""
     proj_content += """
 </Project>"""

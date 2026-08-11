@@ -1,0 +1,41 @@
+// AdminCLI — Console I/O portal caps
+// Auto-bound to Dafny stub: console-io
+// DO NOT invent new structure. This file only inlays function behind pre-cut portals.
+
+using System;
+
+namespace AdminCLI
+{
+    public static partial class ConsoleIO
+    {
+        // Portal: PrintLine(message)
+        public static void PrintLine(string message)
+        {
+            Console.WriteLine(message);
+        }
+
+        // Portal: Print(message)
+        public static void Print(string message)
+        {
+            Console.Write(message);
+        }
+
+        // Portal: ReadLine() returns (line: string)
+        public static string ReadLine()
+        {
+            return Console.ReadLine() ?? "";
+        }
+
+        // Portal: ClearScreen()
+        public static void ClearScreen()
+        {
+            Console.Clear();
+        }
+
+        // Portal: ReadKey() returns (key: string)
+        public static string ReadKey()
+        {
+            return Console.ReadKey(true).KeyChar.ToString();
+        }
+    }
+}
