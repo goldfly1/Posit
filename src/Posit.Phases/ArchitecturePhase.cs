@@ -133,19 +133,38 @@ public sealed class ArchitecturePhase : IPhase
         {
             if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
             {
-                var suggestion = PatternRegistry.Suggest(comp);
-                var patternName = !string.IsNullOrWhiteSpace(comp.PatternName)
-                    ? comp.PatternName
-                    : suggestion.PatternName;
+                // Pattern selection: if architect specified patternName, use it (override).
+                // If patternName is empty, use semantic search on component description.
+                // If semantic search fails (<0.7 similarity), fall back to keyword matching.
+                string patternName;
+                string[] stubNames;
 
-                var stubNames = comp.StubNames?.Length > 0
-                    ? comp.StubNames
-                    : suggestion.StubNames;
-
-                // Log semantic search result if used
-                if (suggestion.SimilarityScore > 0.7f && suggestion.BestVariantDescription != null)
+                if (!string.IsNullOrWhiteSpace(comp.PatternName))
                 {
-                    Console.Error.WriteLine($"[Posit] Architecture — semantic match for {comp.Name}: {suggestion.BestVariantDescription} (similarity={suggestion.SimilarityScore:F2})");
+                    // Architect specified a pattern — use it directly
+                    patternName = comp.PatternName;
+                    stubNames = comp.StubNames?.Length > 0
+                        ? comp.StubNames
+                        : PatternRegistry.Suggest(comp).StubNames;
+                    Console.Error.WriteLine($"[Posit] Architecture — architect selected pattern '{patternName}' for {comp.Name}");
+                }
+                else
+                {
+                    // Architect left patternName empty — let the registry decide via semantic search
+                    var suggestion = PatternRegistry.Suggest(comp);
+                    patternName = suggestion.PatternName;
+                    stubNames = comp.StubNames?.Length > 0
+                        ? comp.StubNames
+                        : suggestion.StubNames;
+
+                    if (suggestion.SimilarityScore > 0.7f && suggestion.BestVariantDescription != null)
+                    {
+                        Console.Error.WriteLine($"[Posit] Architecture — semantic match for {comp.Name}: pattern={suggestion.PatternName} variant={suggestion.BestVariantDescription} (similarity={suggestion.SimilarityScore:F2})");
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine($"[Posit] Architecture — keyword fallback for {comp.Name}: pattern={patternName} (semantic similarity={suggestion.SimilarityScore:F2})");
+                    }
                 }
 
                 if (!_registry.HasPattern(patternName))
