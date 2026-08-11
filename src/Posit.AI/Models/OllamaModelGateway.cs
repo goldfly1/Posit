@@ -54,7 +54,8 @@ public sealed class OllamaModelGateway : IModelGateway
             ],
             Stream = false,
             // Thinking OFF — causes 65K+ output runaway. Traces saved to .posit/staging/thinking/ when enabled.
-            Think = context.PhaseId.Value == "architecture",
+            // Thinking OFF by default — causes 65K+ output runaway. Traces saved to .posit/staging/thinking/ when enabled.
+            Think = false,
             Options = new OllamaOptions
             {
                 Temperature = (float)route.Temperature,
