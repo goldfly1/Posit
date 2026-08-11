@@ -256,6 +256,78 @@ public sealed class PatternRegistry
     }
 
     /// <summary>
+    /// Compose a skeleton for an io-shell component from stub files only — no pattern body.
+    /// The stubs are wrapped in a module declaration so Z3 can verify the extern contracts.
+    /// This gives every component a carapace (skeleton = source of truth), even io-shell.
+    /// </summary>
+    public string ComposeIoShellSkeleton(string componentName, IEnumerable<string> stubNames)
+    {
+        var stubs = stubNames.Where(HasStub).Select(GetStub).ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"// Auto-composed io-shell skeleton for {componentName}");
+        sb.AppendLine($"// Stubs: {(stubs.Count > 0 ? string.Join(", ", stubs.Select(s => s.Name)) : "none")}");
+        sb.AppendLine();
+
+        // Collect all dependencies
+        var allDeps = new HashSet<string>();
+        foreach (var stub in stubs)
+            foreach (var dep in stub.Dependencies)
+                allDeps.Add(dep);
+
+        // Include dependencies (e.g., result.dfy)
+        foreach (var dep in allDeps.OrderBy(d => d))
+            sb.AppendLine($"include \"{dep}.dfy\"");
+
+        if (allDeps.Count > 0)
+            sb.AppendLine();
+
+        // Wrap stubs in a module so Z3 can verify the contracts
+        sb.AppendLine($"module {componentName} {{");
+        foreach (var stub in stubs)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"  // ---- {stub.Name} portals ----");
+            // Indent the stub source by 2 spaces to fit inside the module
+            foreach (var line in stub.Source.Split('\n'))
+                sb.AppendLine(string.IsNullOrWhiteSpace(line) ? line : "  " + line);
+        }
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Copy dependency .dfy files for an io-shell skeleton (stubs only, no pattern).
+    /// </summary>
+    public void MaterializeIoShellDependencies(IEnumerable<string> stubNames, string targetDirectory)
+    {
+        var stubs = stubNames.Where(HasStub).Select(GetStub).ToList();
+        Directory.CreateDirectory(targetDirectory);
+
+        var files = new List<(string sourcePath, string name)>();
+
+        foreach (var stub in stubs)
+        {
+            files.Add((stub.FilePath, $"{stub.Name}.dfy"));
+            foreach (var dep in stub.Dependencies)
+            {
+                if (_patterns.TryGetValue(dep, out var depPattern))
+                    files.Add((depPattern.FilePath, $"{depPattern.Name}.dfy"));
+                if (_stubs.TryGetValue(dep, out var depStub))
+                    files.Add((depStub.FilePath, $"{depStub.Name}.dfy"));
+            }
+        }
+
+        foreach (var (sourcePath, name) in files.Distinct())
+        {
+            var target = Path.Combine(targetDirectory, name);
+            if (!File.Exists(target))
+                File.Copy(sourcePath, target);
+        }
+    }
+
+    /// <summary>
     /// Copy all dependency .dfy files required by the composed skeleton into the
     /// target directory. Call this after writing the composed skeleton to disk.
     /// </summary>

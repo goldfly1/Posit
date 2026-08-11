@@ -112,7 +112,7 @@ public sealed class DafnyContractsPhase : IPhase
     /// <summary>
     /// Extracts (moduleName, dafnySource) pairs from the architecture artifact
     /// in the input artifacts. Only modules classified as Dafny or Mixed have
-    /// .dfy skeletons — io-shell modules are skipped.
+    /// .dfy skeletons — including io-shell modules (extern portals wrapped in a module).
     /// </summary>
     private static List<(string ModuleName, string DafnyPath)> ExtractContractSources(PhaseContext context)
     {
@@ -123,8 +123,7 @@ public sealed class DafnyContractsPhase : IPhase
         {
             foreach (var comp in components)
             {
-                if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed
-                    && !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
+                if (!string.IsNullOrWhiteSpace(comp.DafnyContractPath)
                     && File.Exists(comp.DafnyContractPath))
                 {
                     sources.Add((comp.Name, comp.DafnyContractPath!));
@@ -147,8 +146,7 @@ public sealed class DafnyContractsPhase : IPhase
 
                 foreach (var comp in archContract.Components)
                 {
-                    if (comp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed
-                        && !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
+                    if (!string.IsNullOrWhiteSpace(comp.DafnyContractPath)
                         && File.Exists(comp.DafnyContractPath))
                     {
                         sources.Add((comp.Name, comp.DafnyContractPath!));

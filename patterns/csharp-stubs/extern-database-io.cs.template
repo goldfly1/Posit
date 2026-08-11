@@ -6,7 +6,7 @@ using System;
 using System.Data;
 using Microsoft.Data.SqlClient;
 
-namespace _module
+namespace _module_{{ComponentName}}
 {
     public partial class {{ComponentName}}
     {

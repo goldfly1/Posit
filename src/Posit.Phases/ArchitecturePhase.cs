@@ -197,6 +197,26 @@ public sealed class ArchitecturePhase : IPhase
                 });
                 Console.Error.WriteLine($"[Posit] Architecture — composed skeleton for {comp.Name}: {patternName} + [{string.Join(",", stubNames)}] => {dafnyPath}");
             }
+            else if (comp.Classification == ModuleClassification.IoShell)
+            {
+                // io-shell components get a skeleton too — stubs wrapped in a module.
+                // The carapace doctrine: every component has a contract, even I/O portals.
+                var stubNames = comp.StubNames?.Length > 0
+                    ? comp.StubNames
+                    : PatternRegistry.Suggest(comp).StubNames;
+
+                var dafnyPath = Z3Runner.GetDafnyStagingPath($"skeleton-{comp.Name}");
+                var skeleton = _registry.ComposeIoShellSkeleton(comp.Name, stubNames);
+                await File.WriteAllTextAsync(dafnyPath, skeleton, ct);
+
+                _registry.MaterializeIoShellDependencies(stubNames, Path.GetDirectoryName(dafnyPath)!);
+                componentsWithPath.Add(comp with
+                {
+                    StubNames = stubNames,
+                    DafnyContractPath = dafnyPath
+                });
+                Console.Error.WriteLine($"[Posit] Architecture — composed io-shell skeleton for {comp.Name}: stubs=[{string.Join(",", stubNames)}] => {dafnyPath}");
+            }
             else
             {
                 componentsWithPath.Add(comp);
