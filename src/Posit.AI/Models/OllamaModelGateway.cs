@@ -54,8 +54,7 @@ public sealed class OllamaModelGateway : IModelGateway
             ],
             Stream = false,
             // Thinking OFF — causes 65K+ output runaway. Traces saved to .posit/staging/thinking/ when enabled.
-            // To re-enable: Think = context.PhaseId.Value == "architecture"
-            Think = false,
+            Think = context.PhaseId.Value == "architecture",
             Options = new OllamaOptions
             {
                 Temperature = (float)route.Temperature,
