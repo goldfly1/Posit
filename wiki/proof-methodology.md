@@ -46,9 +46,11 @@ Every panel has a CLI built in (the `io-console-program` stub cap). The CLI is a
 
 - The CLI is deterministic — same input, same output, every time
 - The GUI is a face on the CLI — same commands, same entry points
+- Every GUI control is keyboard-reachable — fully automatable, no human in the loop
 - The data is generatable — faux records at any scale
 - The expected results come from the spec — not circular, not model-generated
 - The check is: does the program do what its name says it does
+- The "bot" is a script, not an LLM — push button, get output, compare to expected. Deterministic, repeatable, no bleary-eyed humans.
 
 ### What This Proves
 
