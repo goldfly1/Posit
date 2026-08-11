@@ -1,0 +1,198 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use pipeline pattern for document processing",
+      "status": "accepted",
+      "context": "The system processes documents through a sequence of stages: extraction, classification, field extraction, validation.",
+      "decision": "Adopt the pipeline pattern as the foundation for the DocumentPipeline module.",
+      "consequences": "Provides a structured flow and allows easy addition of new stages in the future."
+    },
+    {
+      "id": "dec-2",
+      "title": "Separate I/O from logic",
+      "status": "accepted",
+      "context": "File reading and index storage are external concerns that should not be mixed with pure business logic.",
+      "decision": "Implement FileReader and IndexStore as io-shell components, with DocumentPipeline using extern portals.",
+      "consequences": "Keeps Dafny code pure and verifiable, while I/O is handled in C#."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "medium",
+      "mitigation": "Design TextExtractor to be extensible and add format-specific adapters as needed.",
+      "description": "Support for various file formats (PDF, DOCX, etc.) may require additional parsing logic."
+    },
+    {
+      "id": "risk-2",
+      "severity": "low",
+      "mitigation": "Keep validation rules in a separate configuration or use a rule engine.",
+      "description": "Business rules may change frequently, requiring updates to validation logic."
+    }
+  ],
+  "components": [
+    {
+      "id": "file-reader",
+      "name": "FileReader",
+      "tech": "C#",
+      "layer": 0,
+      "internals": "Implements file I/O using C# System.IO. Provides a method to read a file's content as a string.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "fr-1",
+          "name": "Read existing file",
+          "targetType": "FileReader",
+          "description": "Read a file that exists on disk",
+          "expectedBehavior": "Returns non-empty string content of the file"
+        },
+        {
+          "id": "fr-2",
+          "name": "Read missing file",
+          "targetType": "FileReader",
+          "description": "Attempt to read a file that does not exist",
+          "expectedBehavior": "Throws an exception or returns an error indicator"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [],
+      "publicSurface": [
+        "FileReader"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Reads files from disk and returns raw content."
+    },
+    {
+      "id": "document-pipeline",
+      "name": "DocumentPipeline",
+      "tech": "",
+      "layer": 1,
+      "internals": "Uses the pipeline pattern with stages for text extraction, classification, field extraction, and validation. I/O operations are declared as extern portals and implemented by FileReader and IndexStore.",
+      "stubNames": [
+        "file-io",
+        "database-io"
+      ],
+      "testCases": [
+        {
+          "id": "dp-1",
+          "name": "Process valid document",
+          "targetType": "DocumentPipeline",
+          "description": "Process a document with known type and valid fields",
+          "expectedBehavior": "Returns a result with classification, extracted fields, and validation status 'valid'"
+        },
+        {
+          "id": "dp-2",
+          "name": "Process invalid document",
+          "targetType": "DocumentPipeline",
+          "description": "Process a document that fails business rule validation",
+          "expectedBehavior": "Returns a result with validation status 'invalid' and error details"
+        },
+        {
+          "id": "dp-3",
+          "name": "Classify document type",
+          "targetType": "DocumentPipeline",
+          "description": "Process a document and verify classification is correct",
+          "expectedBehavior": "Returns the expected document type based on content"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "FileReader",
+        "IndexStore"
+      ],
+      "publicSurface": [
+        "ProcessDocument"
+      ],
+      "classification": "dafny",
+      "responsibility": "Processes documents: extracts text, classifies document type, extracts key fields, validates data against business rules.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-DocumentPipeline.dfy"
+    },
+    {
+      "id": "index-store",
+      "name": "IndexStore",
+      "tech": "C#",
+      "layer": 0,
+      "internals": "Implements a searchable index using C# and a document database or search engine. Provides methods to store and query documents.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "is-1",
+          "name": "Store and retrieve document",
+          "targetType": "IndexStore",
+          "description": "Store a processed document result and search for it by a key",
+          "expectedBehavior": "Search returns the stored document"
+        },
+        {
+          "id": "is-2",
+          "name": "Search non-existent document",
+          "targetType": "IndexStore",
+          "description": "Search for a document that has not been stored",
+          "expectedBehavior": "Returns no results"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [],
+      "publicSurface": [
+        "IndexStore"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Stores processed document results in a searchable index."
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "search-index",
+      "kind": "document",
+      "name": "SearchIndex",
+      "schema": "Document with fields: id, type, extractedFields, validationStatus",
+      "persistence": "persistent"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "file-input",
+      "auth": {
+        "scheme": "None",
+        "details": "Assumes local file access"
+      },
+      "name": "FileInput",
+      "protocol": "FileSystem",
+      "direction": "inbound",
+      "schemaRef": "Raw file content"
+    },
+    {
+      "id": "index-api",
+      "auth": {
+        "scheme": "APIKey",
+        "details": "Requires API key for write and query operations"
+      },
+      "name": "IndexAPI",
+      "protocol": "HTTP",
+      "direction": "outbound",
+      "schemaRef": "SearchIndex"
+    }
+  ],
+  "systemContext": "A document processing pipeline that reads files, extracts text, classifies documents by type, extracts key fields, validates data against business rules, and stores results in a searchable index.",
+  "qualityAttributes": [
+    {
+      "target": "Process a document in under 2 seconds",
+      "attribute": "Performance",
+      "rationale": "Pipeline should handle high throughput of documents"
+    },
+    {
+      "target": "99.9% uptime for index availability",
+      "attribute": "Reliability",
+      "rationale": "Search index must be consistently available"
+    },
+    {
+      "target": "Modular design with clear separation of I/O and logic",
+      "attribute": "Maintainability",
+      "rationale": "Ease of updating business rules or adding new document types"
+    }
+  ],
+  "deploymentTopology": "Single server with file system access and a persistent search index."
+}

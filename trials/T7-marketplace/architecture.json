@@ -1,0 +1,296 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use Dafny for core logic",
+      "status": "accepted",
+      "context": "Core business logic (budget, registry, payment, failure) must be verified for correctness.",
+      "decision": "Implement core logic in Dafny with Z3-verified contracts.",
+      "consequences": "Higher upfront cost but reduced runtime errors."
+    },
+    {
+      "id": "dec-2",
+      "title": "ASP.NET Core for API layer",
+      "status": "accepted",
+      "context": "Need a robust web framework for REST endpoints.",
+      "decision": "Use ASP.NET Core for the API shell, delegating to Dafny modules.",
+      "consequences": "Standard .NET ecosystem integration."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "high",
+      "mitigation": "Implement strict configuration validation and separate test environments.",
+      "description": "Failure injection might accidentally affect production traffic if misconfigured."
+    },
+    {
+      "id": "risk-2",
+      "severity": "medium",
+      "mitigation": "Use proven registry patterns and incremental verification.",
+      "description": "Dafny verification may increase development time for complex state machines."
+    }
+  ],
+  "components": [
+    {
+      "id": "contracts",
+      "name": "Contracts",
+      "tech": "Dafny",
+      "layer": 0,
+      "internals": "Contains Dafny datatypes for budget, service registry entries, payment requests/results, failure injection configs, and common error types. No dependencies.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "contracts-1",
+          "name": "Budget datatype validation",
+          "targetType": "Budget",
+          "description": "Verify Budget datatype fields are accessible and correctly typed.",
+          "expectedBehavior": "Budget has amount (int) and currency (string) fields."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [],
+      "publicSurface": [
+        "Budget",
+        "ServiceInfo",
+        "PaymentRequest",
+        "PaymentResult",
+        "FailureConfig",
+        "MarketplaceError"
+      ],
+      "classification": "dafny",
+      "responsibility": "Defines shared types, interfaces, and constants for the marketplace platform.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Contracts.dfy"
+    },
+    {
+      "id": "budget-enforcer",
+      "name": "BudgetEnforcer",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Implements budget enforcement logic: checks if a transaction exceeds the budget, reserves funds, releases funds on cancellation, and tracks budget status. Uses state-machine pattern for budget lifecycle.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "budget-1",
+          "name": "Budget check within limit",
+          "targetType": "BudgetEnforcer",
+          "description": "Verify CheckBudget returns true when amount is less than or equal to remaining budget.",
+          "expectedBehavior": "CheckBudget returns true for amount within budget."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "CheckBudget",
+        "ReserveFunds",
+        "ReleaseFunds",
+        "GetBudgetStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Enforces budget limits for marketplace transactions.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-BudgetEnforcer.dfy"
+    },
+    {
+      "id": "service-registry",
+      "name": "ServiceRegistry",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Implements service registration, lookup, and health monitoring. Uses repository pattern for storing service entities.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "registry-1",
+          "name": "Register service",
+          "targetType": "ServiceRegistry",
+          "description": "Verify RegisterService adds a service to the registry.",
+          "expectedBehavior": "Service is added and can be retrieved by ID."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "RegisterService",
+        "DeregisterService",
+        "GetService",
+        "ListServices",
+        "UpdateHealth"
+      ],
+      "classification": "dafny",
+      "responsibility": "Maintains a registry of available services and their health status.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-ServiceRegistry.dfy"
+    },
+    {
+      "id": "payment-processor",
+      "name": "PaymentProcessor",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Implements payment simulation: processes payments, refunds, and tracks payment status. Uses state-machine pattern for payment lifecycle.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "payment-1",
+          "name": "Process payment",
+          "targetType": "PaymentProcessor",
+          "description": "Verify ProcessPayment returns success for a valid payment request.",
+          "expectedBehavior": "Payment is processed and status is completed."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "ProcessPayment",
+        "RefundPayment",
+        "GetPaymentStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Simulates payment processing for marketplace transactions.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-PaymentProcessor.dfy"
+    },
+    {
+      "id": "failure-injector",
+      "name": "FailureInjector",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Implements failure injection: configures failures (e.g., latency, errors) for services. Uses scheduler pattern to manage failure schedules.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "failure-1",
+          "name": "Inject failure",
+          "targetType": "FailureInjector",
+          "description": "Verify InjectFailure adds a failure configuration.",
+          "expectedBehavior": "Failure is active and can be retrieved."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "scheduler",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "InjectFailure",
+        "ClearFailure",
+        "GetActiveFailures"
+      ],
+      "classification": "dafny",
+      "responsibility": "Injects failures into the system for resilience testing.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-FailureInjector.dfy"
+    },
+    {
+      "id": "marketplace-api",
+      "name": "MarketplaceApi",
+      "tech": "ASP.NET Core",
+      "layer": 2,
+      "internals": "ASP.NET Core Web API that orchestrates calls to BudgetEnforcer, ServiceRegistry, PaymentProcessor, and FailureInjector. Handles HTTP I/O and delegates to Dafny logic.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "api-1",
+          "name": "Health check endpoint",
+          "targetType": "MarketplaceApi",
+          "description": "Verify GET /health returns 200 OK.",
+          "expectedBehavior": "Returns 200 OK with status message."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "Contracts",
+        "BudgetEnforcer",
+        "ServiceRegistry",
+        "PaymentProcessor",
+        "FailureInjector"
+      ],
+      "publicSurface": [
+        "Program",
+        "Startup",
+        "Controllers"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Exposes REST endpoints for the marketplace platform."
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "budget-store",
+      "kind": "relational",
+      "name": "BudgetStore",
+      "schema": "Budget(Id, Amount, Currency, ReservedAmount, Status)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "service-registry-store",
+      "kind": "document",
+      "name": "ServiceRegistryStore",
+      "schema": "ServiceInfo(Id, Name, Url, HealthStatus, LastHeartbeat)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "payment-store",
+      "kind": "relational",
+      "name": "PaymentStore",
+      "schema": "Payment(Id, RequestId, Amount, Currency, Status, Timestamp)",
+      "persistence": "persistent"
+    },
+    {
+      "id": "failure-config-store",
+      "kind": "document",
+      "name": "FailureConfigStore",
+      "schema": "FailureConfig(Id, ServiceId, FailureType, Parameters, Active)",
+      "persistence": "persistent"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "rest-api",
+      "auth": {
+        "scheme": "Bearer",
+        "details": "JWT tokens for authentication"
+      },
+      "name": "Marketplace REST API",
+      "protocol": "HTTPS",
+      "direction": "inbound",
+      "schemaRef": "OpenAPI 3.0"
+    },
+    {
+      "id": "payment-gateway",
+      "auth": {
+        "scheme": "API Key",
+        "details": "Simulated gateway key"
+      },
+      "name": "Payment Gateway Simulator",
+      "protocol": "HTTPS",
+      "direction": "outbound",
+      "schemaRef": "PaymentRequest/PaymentResult"
+    }
+  ],
+  "systemContext": "A multi-repo .NET marketplace platform that enforces budgets, maintains a service registry, simulates payment processing, and supports failure injection for resilience testing.",
+  "qualityAttributes": [
+    {
+      "target": "System remains available during injected failures",
+      "attribute": "Resilience",
+      "rationale": "Failure injection is used to test and improve resilience."
+    },
+    {
+      "target": "Budget enforcement is correct within 0.01% error",
+      "attribute": "Budget Accuracy",
+      "rationale": "Financial transactions require precise budget tracking."
+    },
+    {
+      "target": "API response time under 200ms for 95% of requests",
+      "attribute": "Performance",
+      "rationale": "Marketplace needs fast response times for user experience."
+    }
+  ],
+  "deploymentTopology": "Multiple .NET services deployed as containers in a Kubernetes cluster, with a shared database per service."
+}

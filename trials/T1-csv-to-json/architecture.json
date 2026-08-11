@@ -1,0 +1,105 @@
+{
+  "decisions": [
+    {
+      "id": "DEC1",
+      "title": "Use Dafny for parsing logic",
+      "status": "accepted",
+      "context": "Need verified CSV parsing and JSON generation.",
+      "decision": "Implement CsvParser as a Dafny module with contracts, using parser pattern.",
+      "consequences": "Adds Dafny compilation step but ensures correctness."
+    },
+    {
+      "id": "DEC2",
+      "title": "CLI as io-shell",
+      "status": "accepted",
+      "context": "File I/O and console output are unverified side effects.",
+      "decision": "Implement Cli as C# io-shell that calls Dafny parser.",
+      "consequences": "Keeps I/O separate from verified logic."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "RISK1",
+      "severity": "medium",
+      "mitigation": "Add comprehensive test cases and refine parser parameters.",
+      "description": "CSV edge cases (quoted fields, newlines) may not be fully handled."
+    }
+  ],
+  "components": [
+    {
+      "id": "comp-csv-parser",
+      "name": "CsvParser",
+      "tech": "Dafny",
+      "layer": 0,
+      "internals": "Uses parser pattern with delimiter and header configuration. Pure logic, no I/O.",
+      "stubNames": [
+        "file-io"
+      ],
+      "testCases": [
+        {
+          "id": "TC1",
+          "name": "Parse simple CSV",
+          "targetType": "CsvParser",
+          "description": "Given CSV string with header and two rows, returns JSON array.",
+          "expectedBehavior": "ParseCsv returns a JSON string with two objects."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "parser",
+      "dependencies": [],
+      "publicSurface": [
+        "ParseCsv",
+        "ToJson"
+      ],
+      "classification": "dafny",
+      "responsibility": "Parses CSV content into structured records and converts to JSON string.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-CsvParser.dfy"
+    },
+    {
+      "id": "comp-cli",
+      "name": "Cli",
+      "tech": "C#",
+      "layer": 1,
+      "internals": "Entry point reads file path from args, reads file content, calls CsvParser, writes result to console.",
+      "stubNames": [
+        "file-io",
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "TC2",
+          "name": "Read file and output JSON",
+          "targetType": "Cli",
+          "description": "Given a CSV file path, outputs JSON to stdout.",
+          "expectedBehavior": "Program reads file, calls parser, writes JSON."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "CsvParser"
+      ],
+      "publicSurface": [
+        "Program"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Reads CSV file from command line argument, invokes CsvParser, writes JSON to stdout."
+    }
+  ],
+  "dataStores": [],
+  "interfaces": [],
+  "systemContext": "A .NET CLI tool that reads a CSV file and outputs JSON representation.",
+  "qualityAttributes": [
+    {
+      "target": "CSV parsing and JSON generation must be verified by Dafny contracts.",
+      "attribute": "Correctness",
+      "rationale": "Ensure accurate transformation of input data."
+    },
+    {
+      "target": "Single-file CLI with minimal dependencies.",
+      "attribute": "Simplicity",
+      "rationale": "User requested a 1-file tool; keep design lean."
+    }
+  ],
+  "deploymentTopology": "Single executable .NET CLI, run from command line."
+}

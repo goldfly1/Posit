@@ -1,0 +1,46 @@
+// WorkerPool — Monitoring/observability domain stub
+// Auto-bound when spec mentions: monitor, metric, alert, health, dashboard, log, trace, observability
+using System;
+using System.Collections.Generic;
+using _module;
+
+namespace WorkerPool
+{
+    public static partial class MonitoringIO
+    {
+        // Portal: RecordMetric(name, value, tags) returns (recorded: bool)
+        public static bool RecordMetric(string name, double value, string tags)
+        {
+            // TODO: Send metric to monitoring system (Prometheus, Datadog, etc.)
+            return true;
+        }
+
+        // Portal: QueryMetrics(name, timeRange) returns (values: seq<string>)
+        public static string[] QueryMetrics(string name, string timeRange)
+        {
+            // TODO: Query metric history
+            return Array.Empty<string>();
+        }
+
+        // Portal: CheckHealth(serviceName) returns (healthy: bool, details: string)
+        public static (bool Healthy, string Details) CheckHealth(string serviceName)
+        {
+            // TODO: Check service health endpoint
+            return (true, "OK");
+        }
+
+        // Portal: SendAlert(severity, message, recipients) returns (sent: bool)
+        public static bool SendAlert(string severity, string message, string[] recipients)
+        {
+            // TODO: Send alert via notification channel (Slack, PagerDuty, email)
+            return true;
+        }
+
+        // Portal: LogEvent(level, message, context) returns (logged: bool)
+        public static bool LogEvent(string level, string message, string context)
+        {
+            // TODO: Write structured log event
+            return true;
+        }
+    }
+}

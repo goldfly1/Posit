@@ -1,0 +1,491 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use Dafny for core logic",
+      "status": "accepted",
+      "context": "Core scheduling logic must be provably correct.",
+      "decision": "Implement core modules in Dafny with Z3 verification.",
+      "consequences": "Higher upfront cost but strong correctness guarantees."
+    },
+    {
+      "id": "dec-2",
+      "title": "HTTP API as io-shell",
+      "status": "accepted",
+      "context": "Need to expose scheduler to external clients.",
+      "decision": "Use ASP.NET Core for HTTP API shell.",
+      "consequences": "Unverified I/O layer but thin and delegates to verified core."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "medium",
+      "mitigation": "Limit DAG size and use efficient algorithms.",
+      "description": "Dafny verification may be slow for large DAGs."
+    },
+    {
+      "id": "risk-2",
+      "severity": "high",
+      "mitigation": "Use idempotent job assignments and status updates.",
+      "description": "Distributed consistency between orchestrator and workers."
+    }
+  ],
+  "components": [
+    {
+      "id": "comp-schedule-contracts",
+      "name": "ScheduleContracts",
+      "tech": "Dafny",
+      "layer": 0,
+      "internals": "Pure Dafny datatypes and predicates. No I/O. Used by all other modules.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-schedule-contracts-1",
+          "name": "JobId equality",
+          "targetType": "JobId",
+          "description": "Two JobIds with same value are equal.",
+          "expectedBehavior": "JobId(1) == JobId(1)"
+        },
+        {
+          "id": "tc-schedule-contracts-2",
+          "name": "CronExpression valid",
+          "targetType": "CronExpression",
+          "description": "A cron expression with 5 fields is valid.",
+          "expectedBehavior": "Valid() returns true"
+        },
+        {
+          "id": "tc-schedule-contracts-3",
+          "name": "DagNode dependencies",
+          "targetType": "DagNode",
+          "description": "A DAG node with a dependency on another node is valid.",
+          "expectedBehavior": "Valid() returns true"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [],
+      "publicSurface": [
+        "Job",
+        "JobId",
+        "CronExpression",
+        "DagNode",
+        "WorkerStatus",
+        "RetryPolicy",
+        "JobStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Defines core datatypes and contracts for jobs, cron expressions, DAG nodes, worker status, and retry policy.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-ScheduleContracts.dfy"
+    },
+    {
+      "id": "comp-cron-parser",
+      "name": "CronParser",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Pure Dafny parsing and validation. Uses ScheduleContracts datatypes.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-cron-parser-1",
+          "name": "Parse valid cron",
+          "targetType": "CronParser",
+          "description": "Parse '0 0 * * *' returns five fields.",
+          "expectedBehavior": "ParseCron returns CronFields with five fields and Valid() true"
+        },
+        {
+          "id": "tc-cron-parser-2",
+          "name": "Reject invalid cron",
+          "targetType": "CronParser",
+          "description": "Parse '0 0 * *' returns failure.",
+          "expectedBehavior": "ParseCron returns failure due to insufficient fields"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "parser",
+      "dependencies": [
+        "ScheduleContracts"
+      ],
+      "publicSurface": [
+        "ParseCron",
+        "CronFields",
+        "ValidateCron"
+      ],
+      "classification": "dafny",
+      "responsibility": "Parses cron expressions into structured fields and validates them.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-CronParser.dfy"
+    },
+    {
+      "id": "comp-dag-engine",
+      "name": "DagEngine",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Pure Dafny graph algorithms. Uses ScheduleContracts DagNode.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-dag-engine-1",
+          "name": "Valid DAG",
+          "targetType": "DagEngine",
+          "description": "A DAG with no cycles is valid.",
+          "expectedBehavior": "ValidateDag returns true"
+        },
+        {
+          "id": "tc-dag-engine-2",
+          "name": "Cycle detection",
+          "targetType": "DagEngine",
+          "description": "A DAG with a cycle is invalid.",
+          "expectedBehavior": "ValidateDag returns false and HasCycle returns true"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "graph",
+      "dependencies": [
+        "ScheduleContracts"
+      ],
+      "publicSurface": [
+        "ValidateDag",
+        "TopologicalOrder",
+        "HasCycle"
+      ],
+      "classification": "dafny",
+      "responsibility": "Validates DAG structure, detects cycles, and computes topological order for job dependencies.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-DagEngine.dfy"
+    },
+    {
+      "id": "comp-scheduler-core",
+      "name": "SchedulerCore",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Pure Dafny state machine over job queue and status. Uses ScheduleContracts and DagEngine.",
+      "stubNames": [
+        "file-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-scheduler-core-1",
+          "name": "Enqueue job",
+          "targetType": "SchedulerCore",
+          "description": "Enqueue a job with no dependencies makes it Ready.",
+          "expectedBehavior": "Job status becomes Ready"
+        },
+        {
+          "id": "tc-scheduler-core-2",
+          "name": "Dequeue ready job",
+          "targetType": "SchedulerCore",
+          "description": "DequeueReadyJob returns a Ready job and marks it Running.",
+          "expectedBehavior": "Returns job and status becomes Running"
+        },
+        {
+          "id": "tc-scheduler-core-3",
+          "name": "Dependency blocks job",
+          "targetType": "SchedulerCore",
+          "description": "A job with an unfinished dependency is not Ready.",
+          "expectedBehavior": "IsReady returns false"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "ScheduleContracts",
+        "DagEngine"
+      ],
+      "publicSurface": [
+        "EnqueueJob",
+        "DequeueReadyJob",
+        "UpdateJobStatus",
+        "GetJobStatus",
+        "IsReady"
+      ],
+      "classification": "dafny",
+      "responsibility": "Maintains job queue, schedules jobs based on cron and DAG readiness, and tracks job status.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-SchedulerCore.dfy"
+    },
+    {
+      "id": "comp-retry-policy",
+      "name": "RetryPolicy",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Pure Dafny arithmetic and policy logic. Uses ScheduleContracts RetryPolicy.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-retry-policy-1",
+          "name": "Backoff doubles",
+          "targetType": "RetryPolicy",
+          "description": "ComputeBackoff(2) returns 4x base delay.",
+          "expectedBehavior": "ComputeBackoff(2) == 4000"
+        },
+        {
+          "id": "tc-retry-policy-2",
+          "name": "Max retries",
+          "targetType": "RetryPolicy",
+          "description": "ShouldRetry(5) returns false.",
+          "expectedBehavior": "ShouldRetry(5) == false"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "strategy",
+      "dependencies": [
+        "ScheduleContracts"
+      ],
+      "publicSurface": [
+        "ComputeBackoff",
+        "ShouldRetry",
+        "MaxRetries"
+      ],
+      "classification": "dafny",
+      "responsibility": "Computes retry delays with exponential backoff and determines when a job moves to the dead letter queue.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-RetryPolicy.dfy"
+    },
+    {
+      "id": "comp-worker-pool",
+      "name": "WorkerPool",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Pure Dafny worker pool state. Uses ScheduleContracts WorkerStatus.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-worker-pool-1",
+          "name": "Register worker",
+          "targetType": "WorkerPool",
+          "description": "Register a worker makes it available.",
+          "expectedBehavior": "GetAvailableWorkers contains the worker"
+        },
+        {
+          "id": "tc-worker-pool-2",
+          "name": "Assign job",
+          "targetType": "WorkerPool",
+          "description": "Assigning a job to an available worker marks it busy.",
+          "expectedBehavior": "Worker no longer available"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "ScheduleContracts"
+      ],
+      "publicSurface": [
+        "RegisterWorker",
+        "UnregisterWorker",
+        "AssignJob",
+        "GetAvailableWorkers"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manages worker registration, availability, and assignment of jobs to workers.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-WorkerPool.dfy"
+    },
+    {
+      "id": "comp-dead-letter-queue",
+      "name": "DeadLetterQueue",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Pure Dafny queue of failed jobs. Uses ScheduleContracts Job.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-dead-letter-queue-1",
+          "name": "Add job",
+          "targetType": "DeadLetterQueue",
+          "description": "Adding a job makes it retrievable.",
+          "expectedBehavior": "GetDeadLetterJobs contains the job"
+        },
+        {
+          "id": "tc-dead-letter-queue-2",
+          "name": "Remove job",
+          "targetType": "DeadLetterQueue",
+          "description": "Removing a job removes it from retrieval.",
+          "expectedBehavior": "GetDeadLetterJobs no longer contains the job"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "ScheduleContracts"
+      ],
+      "publicSurface": [
+        "AddToDeadLetter",
+        "GetDeadLetterJobs",
+        "RemoveFromDeadLetter"
+      ],
+      "classification": "dafny",
+      "responsibility": "Stores jobs that have exhausted retries and provides retrieval for inspection.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-DeadLetterQueue.dfy"
+    },
+    {
+      "id": "comp-status-tracker",
+      "name": "StatusTracker",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Pure Dafny status history store. Uses ScheduleContracts JobStatus.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-status-tracker-1",
+          "name": "Record transition",
+          "targetType": "StatusTracker",
+          "description": "Recording a transition updates current status.",
+          "expectedBehavior": "GetCurrentStatus returns the new status"
+        },
+        {
+          "id": "tc-status-tracker-2",
+          "name": "History order",
+          "targetType": "StatusTracker",
+          "description": "History preserves insertion order.",
+          "expectedBehavior": "GetHistory returns transitions in order"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "ScheduleContracts"
+      ],
+      "publicSurface": [
+        "RecordTransition",
+        "GetHistory",
+        "GetCurrentStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Records job status transitions and provides queryable history.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-StatusTracker.dfy"
+    },
+    {
+      "id": "comp-scheduler-orchestrator",
+      "name": "SchedulerOrchestrator",
+      "tech": "Dafny",
+      "layer": 3,
+      "internals": "Pure Dafny orchestration logic. Uses all core modules.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-scheduler-orchestrator-1",
+          "name": "Submit job",
+          "targetType": "SchedulerOrchestrator",
+          "description": "Submitting a valid job schedules it.",
+          "expectedBehavior": "Job is queued and status is Pending"
+        },
+        {
+          "id": "tc-scheduler-orchestrator-2",
+          "name": "Run scheduler",
+          "targetType": "SchedulerOrchestrator",
+          "description": "Running the scheduler assigns ready jobs to workers.",
+          "expectedBehavior": "Ready jobs are assigned to available workers"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "ScheduleContracts",
+        "CronParser",
+        "DagEngine",
+        "SchedulerCore",
+        "RetryPolicy",
+        "WorkerPool",
+        "DeadLetterQueue",
+        "StatusTracker"
+      ],
+      "publicSurface": [
+        "SubmitJob",
+        "RunScheduler",
+        "GetStatus",
+        "Shutdown"
+      ],
+      "classification": "dafny",
+      "responsibility": "Coordinates scheduler core, worker pool, retry policy, dead letter queue, and status tracker to execute jobs.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-SchedulerOrchestrator.dfy"
+    },
+    {
+      "id": "comp-scheduler-api",
+      "name": "SchedulerApi",
+      "tech": "C# ASP.NET Core",
+      "layer": 4,
+      "internals": "ASP.NET Core web API shell. Delegates to SchedulerOrchestrator.",
+      "stubNames": [
+        "network-io",
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-scheduler-api-1",
+          "name": "Submit job endpoint",
+          "targetType": "SchedulerApi",
+          "description": "POST /jobs returns 202 Accepted.",
+          "expectedBehavior": "HTTP 202 with job id"
+        },
+        {
+          "id": "tc-scheduler-api-2",
+          "name": "Get status endpoint",
+          "targetType": "SchedulerApi",
+          "description": "GET /jobs/{id} returns current status.",
+          "expectedBehavior": "HTTP 200 with status JSON"
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "SchedulerOrchestrator"
+      ],
+      "publicSurface": [
+        "Program"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Exposes HTTP endpoints for submitting jobs, querying status, and managing workers."
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "ds-job-store",
+      "kind": "document",
+      "name": "JobStore",
+      "schema": "JobId, CronExpression, Dependencies, Status, RetryCount, CreatedAt",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-dead-letter",
+      "kind": "queue",
+      "name": "DeadLetterStore",
+      "schema": "JobId, FailureReason, FailedAt",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-status-history",
+      "kind": "document",
+      "name": "StatusHistoryStore",
+      "schema": "JobId, Status, Timestamp",
+      "persistence": "persistent"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "int-http-api",
+      "auth": {
+        "scheme": "API Key",
+        "details": "X-Api-Key header required"
+      },
+      "name": "SchedulerHttpApi",
+      "protocol": "HTTP/REST",
+      "direction": "inbound",
+      "schemaRef": "Job submission and status query JSON"
+    }
+  ],
+  "systemContext": "A distributed task scheduler that accepts cron expressions and DAG-based job dependencies, manages a pool of workers, retries failed jobs with exponential backoff, routes permanently failed jobs to a dead letter queue, and tracks job status throughout the lifecycle.",
+  "qualityAttributes": [
+    {
+      "target": "99.9% uptime",
+      "attribute": "Reliability",
+      "rationale": "Distributed scheduler must be available for critical jobs."
+    },
+    {
+      "target": "Support 100 workers",
+      "attribute": "Scalability",
+      "rationale": "Worker pool must scale horizontally."
+    },
+    {
+      "target": "No job lost",
+      "attribute": "Correctness",
+      "rationale": "Jobs must be tracked through all states."
+    }
+  ],
+  "deploymentTopology": "Single orchestrator node with multiple worker nodes. Orchestrator exposes HTTP API and manages queues. Workers poll for assignments."
+}

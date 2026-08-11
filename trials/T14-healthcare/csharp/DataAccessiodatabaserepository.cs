@@ -1,0 +1,81 @@
+// DataAccess — SQL implementation of IWorkflowRepository
+// Auto-bound to Dafny contract module: DataRepository
+// DO NOT invent new structure. This file only inlays function inside pre-cut stubs.
+
+using System;
+using System.Data;
+using Microsoft.Data.SqlClient;
+using _module;
+
+namespace DataAccess
+{
+    public class SqlWorkflowRepository : IWorkflowRepository
+    {
+        private readonly string _connectionString;
+
+        public SqlWorkflowRepository(string connectionString)
+        {
+            _connectionString = connectionString ?? GetDefaultConnectionString();
+        }
+
+        public Result<WorkflowInstance> LoadWorkflow(string workflowId)
+        {
+            try
+            {
+                using var conn = new SqlConnection(_connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand(
+                    "SELECT workflow_id, current_phase, handoff_data FROM WorkflowInstances WHERE workflow_id = @id", conn);
+                cmd.Parameters.AddWithValue("@id", workflowId);
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read())
+                    return Result<WorkflowInstance>.Failure("workflow not found");
+
+                var instance = new WorkflowInstance(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? "" : reader.GetString(2));
+                return Result<WorkflowInstance>.Success(instance);
+            }
+            catch (Exception ex)
+            {
+                return Result<WorkflowInstance>.Failure(ex.Message);
+            }
+        }
+
+        public Result<bool> SaveWorkflow(WorkflowInstance instance)
+        {
+            try
+            {
+                using var conn = new SqlConnection(_connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand(
+                    @"MERGE WorkflowInstances AS target
+                      USING (SELECT @id AS workflow_id) AS source
+                      ON target.workflow_id = source.workflow_id
+                      WHEN MATCHED THEN
+                        UPDATE SET current_phase = @phase, handoff_data = @data
+                      WHEN NOT MATCHED THEN
+                        INSERT (workflow_id, current_phase, handoff_data)
+                        VALUES (@id, @phase, @data);", conn);
+                cmd.Parameters.AddWithValue("@id", instance.WorkflowId);
+                cmd.Parameters.AddWithValue("@phase", instance.CurrentPhase);
+                cmd.Parameters.AddWithValue("@data", instance.HandoffData ?? (object)DBNull.Value);
+                cmd.ExecuteNonQuery();
+                return Result<bool>.Success(true);
+            }
+            catch (Exception ex)
+            {
+                return Result<bool>.Failure(ex.Message);
+            }
+        }
+
+        private static string GetDefaultConnectionString()
+        {
+            var cs = Environment.GetEnvironmentVariable("WorkflowDb__ConnectionString");
+            return string.IsNullOrWhiteSpace(cs)
+                ? "Server=localhost;Database=WorkflowDb;Trusted_Connection=True;TrustServerCertificate=True"
+                : cs;
+        }
+    }
+}

@@ -1,0 +1,474 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use Dafny for core domain logic",
+      "status": "accepted",
+      "context": "Need high assurance for medical data correctness.",
+      "decision": "Core domain components are implemented in Dafny with verified contracts.",
+      "consequences": "Higher upfront cost but stronger correctness guarantees."
+    },
+    {
+      "id": "dec-2",
+      "title": "Use ASP.NET Core for web layer",
+      "status": "accepted",
+      "context": "Need a standard web framework.",
+      "decision": "Web API is an io-shell in C# ASP.NET Core.",
+      "consequences": "Simplifies integration with existing infrastructure."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "medium",
+      "mitigation": "Keep conversion logic simple and split into smaller verified modules.",
+      "description": "FHIR conversion complexity may exceed Dafny verification limits."
+    },
+    {
+      "id": "risk-2",
+      "severity": "low",
+      "mitigation": "Isolate I/O in io-shell and verify contracts at the boundary.",
+      "description": "Database I/O is unverified."
+    }
+  ],
+  "components": [
+    {
+      "id": "comp-patient-registry",
+      "name": "PatientRegistry",
+      "tech": "Dafny",
+      "layer": 0,
+      "internals": "Uses pipeline pattern for patient record ingestion and validation. Stores patient entities in a repository.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-patient-register-valid",
+          "name": "Register valid patient",
+          "targetType": "PatientRegistry",
+          "description": "Register a patient with valid demographics.",
+          "expectedBehavior": "Patient is registered and can be retrieved by ID."
+        },
+        {
+          "id": "tc-patient-register-invalid",
+          "name": "Reject invalid patient",
+          "targetType": "PatientRegistry",
+          "description": "Attempt to register a patient with missing required fields.",
+          "expectedBehavior": "Registration fails with a validation error."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [],
+      "publicSurface": [
+        "Patient",
+        "PatientRegistry",
+        "RegisterPatient",
+        "GetPatient",
+        "UpdatePatient",
+        "SearchPatients"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage patient demographic records, registration, and unique patient identifiers.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-PatientRegistry.dfy"
+    },
+    {
+      "id": "comp-clinical-records",
+      "name": "ClinicalRecords",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses pipeline pattern for clinical data ingestion and validation. Maintains per-patient record lists.",
+      "stubNames": [
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-clinical-add-record",
+          "name": "Add medical record",
+          "targetType": "ClinicalRecords",
+          "description": "Add a medical record for an existing patient.",
+          "expectedBehavior": "Record is stored and appears in the patient's medical history."
+        },
+        {
+          "id": "tc-clinical-add-prescription",
+          "name": "Add prescription",
+          "targetType": "ClinicalRecords",
+          "description": "Add a prescription for an existing patient.",
+          "expectedBehavior": "Prescription is stored and retrievable."
+        },
+        {
+          "id": "tc-clinical-add-lab-result",
+          "name": "Add lab result",
+          "targetType": "ClinicalRecords",
+          "description": "Add a lab result for an existing patient.",
+          "expectedBehavior": "Lab result is stored and retrievable."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "PatientRegistry"
+      ],
+      "publicSurface": [
+        "MedicalRecord",
+        "Prescription",
+        "LabResult",
+        "ClinicalRecords",
+        "AddMedicalRecord",
+        "GetMedicalHistory",
+        "AddPrescription",
+        "AddLabResult",
+        "GetLabResults"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage medical history, prescriptions, and lab results for patients.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-ClinicalRecords.dfy"
+    },
+    {
+      "id": "comp-scheduling",
+      "name": "AppointmentScheduler",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses state-machine pattern to manage appointment lifecycle (scheduled, confirmed, cancelled, completed).",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-scheduling-schedule",
+          "name": "Schedule appointment",
+          "targetType": "AppointmentScheduler",
+          "description": "Schedule an appointment for an existing patient.",
+          "expectedBehavior": "Appointment is created in scheduled state."
+        },
+        {
+          "id": "tc-scheduling-cancel",
+          "name": "Cancel appointment",
+          "targetType": "AppointmentScheduler",
+          "description": "Cancel a scheduled appointment.",
+          "expectedBehavior": "Appointment transitions to cancelled state."
+        },
+        {
+          "id": "tc-scheduling-reschedule",
+          "name": "Reschedule appointment",
+          "targetType": "AppointmentScheduler",
+          "description": "Reschedule a confirmed appointment.",
+          "expectedBehavior": "Appointment time is updated and state remains confirmed."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "PatientRegistry"
+      ],
+      "publicSurface": [
+        "Appointment",
+        "AppointmentScheduler",
+        "ScheduleAppointment",
+        "CancelAppointment",
+        "RescheduleAppointment",
+        "GetAppointments"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage appointment scheduling, rescheduling, and cancellation for patients.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-AppointmentScheduler.dfy"
+    },
+    {
+      "id": "comp-billing",
+      "name": "Billing",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses pipeline pattern for invoice creation and payment processing. Tracks balances per patient.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-billing-create-invoice",
+          "name": "Create invoice",
+          "targetType": "Billing",
+          "description": "Create an invoice for a patient.",
+          "expectedBehavior": "Invoice is created with correct amount."
+        },
+        {
+          "id": "tc-billing-record-payment",
+          "name": "Record payment",
+          "targetType": "Billing",
+          "description": "Record a payment against an invoice.",
+          "expectedBehavior": "Outstanding balance decreases by payment amount."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "PatientRegistry",
+        "ClinicalRecords"
+      ],
+      "publicSurface": [
+        "Invoice",
+        "Billing",
+        "CreateInvoice",
+        "GetInvoice",
+        "RecordPayment",
+        "GetOutstandingBalance"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage billing records, invoice generation, and payment tracking.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Billing.dfy"
+    },
+    {
+      "id": "comp-insurance-claims",
+      "name": "InsuranceClaims",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses state-machine pattern for claim lifecycle (draft, submitted, approved, denied).",
+      "stubNames": [
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-claims-create",
+          "name": "Create claim",
+          "targetType": "InsuranceClaims",
+          "description": "Create a claim from an invoice.",
+          "expectedBehavior": "Claim is created in draft state."
+        },
+        {
+          "id": "tc-claims-submit",
+          "name": "Submit claim",
+          "targetType": "InsuranceClaims",
+          "description": "Submit a draft claim.",
+          "expectedBehavior": "Claim transitions to submitted state."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "Billing",
+        "ClinicalRecords"
+      ],
+      "publicSurface": [
+        "Claim",
+        "InsuranceClaims",
+        "CreateClaim",
+        "SubmitClaim",
+        "GetClaimStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Prepare and submit insurance claims based on billing and clinical data.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-InsuranceClaims.dfy"
+    },
+    {
+      "id": "comp-fhir-integration",
+      "name": "FHIRIntegration",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses adapter pattern to wrap FHIR conversion logic.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-fhir-to-fhir",
+          "name": "Convert patient to FHIR",
+          "targetType": "FHIRIntegration",
+          "description": "Convert a patient record to FHIR Patient resource.",
+          "expectedBehavior": "FHIR resource contains matching patient demographics."
+        },
+        {
+          "id": "tc-fhir-from-fhir",
+          "name": "Convert from FHIR",
+          "targetType": "FHIRIntegration",
+          "description": "Convert a FHIR Patient resource to internal patient record.",
+          "expectedBehavior": "Internal record matches FHIR resource data."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "adapter",
+      "dependencies": [
+        "PatientRegistry",
+        "ClinicalRecords"
+      ],
+      "publicSurface": [
+        "FHIRResource",
+        "FHIRIntegration",
+        "ToFHIR",
+        "FromFHIR"
+      ],
+      "classification": "dafny",
+      "responsibility": "Convert between internal records and HL7 FHIR format for interoperability.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-FHIRIntegration.dfy"
+    },
+    {
+      "id": "comp-audit-trail",
+      "name": "AuditTrail",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses pipeline pattern to ingest and store audit entries.",
+      "stubNames": [
+        "time-random"
+      ],
+      "testCases": [
+        {
+          "id": "tc-audit-log-access",
+          "name": "Log access",
+          "targetType": "AuditTrail",
+          "description": "Log an access event for a patient record.",
+          "expectedBehavior": "Audit entry is stored with timestamp."
+        },
+        {
+          "id": "tc-audit-get-log",
+          "name": "Retrieve audit log",
+          "targetType": "AuditTrail",
+          "description": "Retrieve audit entries for a patient.",
+          "expectedBehavior": "All logged entries are returned."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "PatientRegistry"
+      ],
+      "publicSurface": [
+        "AuditEntry",
+        "AuditTrail",
+        "LogAccess",
+        "GetAuditLog"
+      ],
+      "classification": "dafny",
+      "responsibility": "Record access audit trails for HIPAA compliance.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-AuditTrail.dfy"
+    },
+    {
+      "id": "comp-data-access",
+      "name": "DataAccess",
+      "tech": "C#",
+      "layer": 3,
+      "internals": "Uses repository pattern for generic entity storage.",
+      "stubNames": [
+        "database-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-data-save-load",
+          "name": "Save and load entity",
+          "targetType": "DataAccess",
+          "description": "Save an entity and load it back.",
+          "expectedBehavior": "Loaded entity matches saved entity."
+        },
+        {
+          "id": "tc-data-delete",
+          "name": "Delete entity",
+          "targetType": "DataAccess",
+          "description": "Delete an entity.",
+          "expectedBehavior": "Entity is no longer retrievable."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "PatientRegistry",
+        "ClinicalRecords",
+        "AppointmentScheduler",
+        "Billing",
+        "InsuranceClaims",
+        "AuditTrail"
+      ],
+      "publicSurface": [
+        "DataAccess",
+        "SaveEntity",
+        "LoadEntity",
+        "DeleteEntity"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Provide persistence and retrieval for all domain entities."
+    },
+    {
+      "id": "comp-web-api",
+      "name": "WebApi",
+      "tech": "C# ASP.NET Core",
+      "layer": 4,
+      "internals": "ASP.NET Core API layer that delegates to domain components.",
+      "stubNames": [
+        "network-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-web-register-patient",
+          "name": "Register patient via API",
+          "targetType": "WebApi",
+          "description": "POST /patients with valid data.",
+          "expectedBehavior": "Returns 201 with patient ID."
+        },
+        {
+          "id": "tc-web-get-patient",
+          "name": "Get patient via API",
+          "targetType": "WebApi",
+          "description": "GET /patients/{id}.",
+          "expectedBehavior": "Returns 200 with patient data."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "PatientRegistry",
+        "ClinicalRecords",
+        "AppointmentScheduler",
+        "Billing",
+        "InsuranceClaims",
+        "FHIRIntegration",
+        "AuditTrail",
+        "DataAccess"
+      ],
+      "publicSurface": [
+        "Program"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Expose REST endpoints for all system operations."
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "ds-main",
+      "kind": "relational",
+      "name": "MainDatabase",
+      "schema": "Patients, MedicalRecords, Prescriptions, LabResults, Appointments, Invoices, Claims, AuditLogs",
+      "persistence": "persistent"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "int-fhir",
+      "auth": {
+        "scheme": "OAuth2",
+        "details": "Bearer tokens with scopes"
+      },
+      "name": "FHIR REST API",
+      "protocol": "HTTPS",
+      "direction": "inbound",
+      "schemaRef": "HL7 FHIR R4"
+    },
+    {
+      "id": "int-web",
+      "auth": {
+        "scheme": "OAuth2",
+        "details": "Bearer tokens with role-based access"
+      },
+      "name": "Web API",
+      "protocol": "HTTPS",
+      "direction": "inbound",
+      "schemaRef": "OpenAPI"
+    }
+  ],
+  "systemContext": "A HIPAA-compliant patient records management system supporting patient registration, medical history tracking, appointment scheduling, prescription management, lab results processing, billing, and insurance claim submission. It handles HL7 FHIR data format, maintains access audit trails, and is organized into Patient, Clinical, Billing, Scheduling, and Integration modules.",
+  "qualityAttributes": [
+    {
+      "target": "HIPAA compliance",
+      "attribute": "Security",
+      "rationale": "Must protect patient data."
+    },
+    {
+      "target": "All access logged",
+      "attribute": "Auditability",
+      "rationale": "HIPAA requires audit trails."
+    },
+    {
+      "target": "FHIR R4 support",
+      "attribute": "Interoperability",
+      "rationale": "Must exchange data with external systems."
+    }
+  ],
+  "deploymentTopology": "Single ASP.NET Core application deployed to a HIPAA-compliant cloud environment, backed by a relational database."
+}

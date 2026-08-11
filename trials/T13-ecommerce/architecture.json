@@ -1,0 +1,776 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use Dafny for all business logic",
+      "status": "accepted",
+      "context": "Need high confidence in correctness of financial and inventory operations.",
+      "decision": "All business logic modules are written in Dafny and verified with Z3.",
+      "consequences": "Higher upfront cost but fewer runtime bugs."
+    },
+    {
+      "id": "dec-2",
+      "title": "Monolithic deployment",
+      "status": "accepted",
+      "context": "Small team, need simplicity.",
+      "decision": "Deploy as a single ASP.NET Core application.",
+      "consequences": "Simpler ops but less scalability."
+    },
+    {
+      "id": "dec-3",
+      "title": "Use relational databases for transactional data",
+      "status": "accepted",
+      "context": "Orders, payments, inventory need ACID transactions.",
+      "decision": "Use relational databases for transactional data.",
+      "consequences": "Strong consistency but more schema management."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "high",
+      "mitigation": "Implement retry and circuit breaker.",
+      "description": "External payment gateway may be unavailable."
+    },
+    {
+      "id": "risk-2",
+      "severity": "medium",
+      "mitigation": "Keep modules small and use proven patterns.",
+      "description": "Dafny verification may be complex for large modules."
+    },
+    {
+      "id": "risk-3",
+      "severity": "medium",
+      "mitigation": "Use indexing and caching.",
+      "description": "Search performance may degrade with large catalog."
+    }
+  ],
+  "components": [
+    {
+      "id": "comp-catalog",
+      "name": "Catalog",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses pipeline pattern for search/filter/recommendation processing. Product and category data are stored via repository pattern.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-catalog-1",
+          "name": "SearchProductsReturnsMatchingProducts",
+          "targetType": "SearchService",
+          "description": "Given a search query, the service returns products whose name or description contains the query.",
+          "expectedBehavior": "SearchService.Search(query) returns a sequence of Product with matching name or description."
+        },
+        {
+          "id": "tc-catalog-2",
+          "name": "FilterByCategoryReturnsOnlyCategoryProducts",
+          "targetType": "SearchService",
+          "description": "Filtering by a category returns only products in that category.",
+          "expectedBehavior": "Filter(category) returns only products with that category."
+        },
+        {
+          "id": "tc-catalog-3",
+          "name": "RecommendationsBasedOnPurchaseHistory",
+          "targetType": "RecommendationService",
+          "description": "Given a customer's purchase history, recommendations are generated from related products.",
+          "expectedBehavior": "Recommend(customerId) returns a sequence of Product that are not already purchased and are related."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "Contracts",
+        "AuditLog"
+      ],
+      "publicSurface": [
+        "Product",
+        "Category",
+        "SearchService",
+        "RecommendationService"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage product catalog: product definitions, categories, search, filtering, recommendations.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Catalog.dfy"
+    },
+    {
+      "id": "comp-cart",
+      "name": "Cart",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses state-machine pattern for cart lifecycle (active, checked-out). Cart items stored in memory via repository pattern.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-cart-1",
+          "name": "AddItemIncreasesCartSize",
+          "targetType": "CartService",
+          "description": "Adding an item to a cart increases the number of items.",
+          "expectedBehavior": "AddItem(cart, product, qty) results in cart containing the product with the given quantity."
+        },
+        {
+          "id": "tc-cart-2",
+          "name": "RemoveItemDecreasesCartSize",
+          "targetType": "CartService",
+          "description": "Removing an item from a cart decreases the number of items.",
+          "expectedBehavior": "RemoveItem(cart, product) results in cart not containing the product."
+        },
+        {
+          "id": "tc-cart-3",
+          "name": "CheckoutTransitionsToCheckedOut",
+          "targetType": "CartService",
+          "description": "Checking out a cart transitions it from active to checkedOut.",
+          "expectedBehavior": "Checkout(cart) results in cart state being checkedOut."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "Contracts",
+        "Catalog"
+      ],
+      "publicSurface": [
+        "Cart",
+        "CartItem",
+        "CartService"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage shopping cart: add/remove items, update quantities, calculate subtotal.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Cart.dfy"
+    },
+    {
+      "id": "comp-orders",
+      "name": "Orders",
+      "tech": "Dafny",
+      "layer": 3,
+      "internals": "Uses state-machine pattern for order lifecycle (pending, paid, shipped, delivered, cancelled). Orchestrates payment, inventory, shipping, tax.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-orders-1",
+          "name": "CreateOrderFromCart",
+          "targetType": "OrderService",
+          "description": "Creating an order from a cart copies items and calculates totals.",
+          "expectedBehavior": "CreateOrder(cart) returns an Order with items matching cart and status pending."
+        },
+        {
+          "id": "tc-orders-2",
+          "name": "OrderTransitionsToPaidAfterPayment",
+          "targetType": "OrderService",
+          "description": "After successful payment, order status becomes paid.",
+          "expectedBehavior": "ProcessPayment(order) results in order status paid."
+        },
+        {
+          "id": "tc-orders-3",
+          "name": "OrderTransitionsToShippedAfterShipping",
+          "targetType": "OrderService",
+          "description": "After shipping, order status becomes shipped.",
+          "expectedBehavior": "ShipOrder(order) results in order status shipped."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "Contracts",
+        "Cart",
+        "Payment",
+        "Inventory",
+        "Shipping",
+        "Tax"
+      ],
+      "publicSurface": [
+        "Order",
+        "OrderService",
+        "OrderStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Process orders: create order from cart, manage order lifecycle, apply shipping and tax, integrate with payment and inventory.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Orders.dfy"
+    },
+    {
+      "id": "comp-payment",
+      "name": "Payment",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses adapter pattern to wrap external payment gateway. Payment state machine (authorized, captured, refunded).",
+      "stubNames": [
+        "network-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-payment-1",
+          "name": "AuthorizePaymentReturnsSuccess",
+          "targetType": "PaymentService",
+          "description": "Authorizing a valid payment returns success.",
+          "expectedBehavior": "Authorize(amount, token) returns PaymentResult with status authorized."
+        },
+        {
+          "id": "tc-payment-2",
+          "name": "CapturePaymentReturnsSuccess",
+          "targetType": "PaymentService",
+          "description": "Capturing an authorized payment returns success.",
+          "expectedBehavior": "Capture(paymentId) returns PaymentResult with status captured."
+        },
+        {
+          "id": "tc-payment-3",
+          "name": "RefundPaymentReturnsSuccess",
+          "targetType": "PaymentService",
+          "description": "Refunding a captured payment returns success.",
+          "expectedBehavior": "Refund(paymentId) returns PaymentResult with status refunded."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "PaymentService",
+        "PaymentResult",
+        "PaymentStatus"
+      ],
+      "classification": "dafny",
+      "responsibility": "Handle payment processing: authorize, capture, refund. Integrate with external payment gateway.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Payment.dfy"
+    },
+    {
+      "id": "comp-inventory",
+      "name": "Inventory",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses repository pattern for stock items. State machine for reservation (available, reserved, outOfStock).",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-inventory-1",
+          "name": "ReserveItemDecrementsStock",
+          "targetType": "InventoryService",
+          "description": "Reserving an item reduces available stock.",
+          "expectedBehavior": "Reserve(productId, qty) results in stock reduced by qty."
+        },
+        {
+          "id": "tc-inventory-2",
+          "name": "RestockIncrementsStock",
+          "targetType": "InventoryService",
+          "description": "Restocking an item increases available stock.",
+          "expectedBehavior": "Restock(productId, qty) results in stock increased by qty."
+        },
+        {
+          "id": "tc-inventory-3",
+          "name": "ReserveFailsWhenInsufficientStock",
+          "targetType": "InventoryService",
+          "description": "Reserving more than available stock fails.",
+          "expectedBehavior": "Reserve(productId, qty) returns failure when qty > stock."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "InventoryService",
+        "StockItem"
+      ],
+      "classification": "dafny",
+      "responsibility": "Manage inventory levels: track stock, reserve items, decrement on order, restock.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Inventory.dfy"
+    },
+    {
+      "id": "comp-shipping",
+      "name": "Shipping",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses strategy pattern for different shipping methods (standard, express, overnight).",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-shipping-1",
+          "name": "StandardShippingCostIsPositive",
+          "targetType": "ShippingService",
+          "description": "Standard shipping cost is positive for valid weight and destination.",
+          "expectedBehavior": "CalculateQuote(weight, destination, standard) returns quote with cost > 0."
+        },
+        {
+          "id": "tc-shipping-2",
+          "name": "ExpressShippingCostGreaterThanStandard",
+          "targetType": "ShippingService",
+          "description": "Express shipping cost is greater than standard for same weight and destination.",
+          "expectedBehavior": "CalculateQuote(weight, destination, express) > CalculateQuote(weight, destination, standard)."
+        },
+        {
+          "id": "tc-shipping-3",
+          "name": "OvernightShippingCostGreaterThanExpress",
+          "targetType": "ShippingService",
+          "description": "Overnight shipping cost is greater than express for same weight and destination.",
+          "expectedBehavior": "CalculateQuote(weight, destination, overnight) > CalculateQuote(weight, destination, express)."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "strategy",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "ShippingService",
+        "ShippingMethod",
+        "ShippingQuote"
+      ],
+      "classification": "dafny",
+      "responsibility": "Calculate shipping costs based on weight, destination, and method.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Shipping.dfy"
+    },
+    {
+      "id": "comp-tax",
+      "name": "Tax",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses strategy pattern for different tax jurisdictions (US, EU, other).",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-tax-1",
+          "name": "TaxCalculationIsNonNegative",
+          "targetType": "TaxService",
+          "description": "Tax calculation returns non-negative amount for valid inputs.",
+          "expectedBehavior": "CalculateTax(amount, jurisdiction) returns tax >= 0."
+        },
+        {
+          "id": "tc-tax-2",
+          "name": "TaxRateForUSIsPositive",
+          "targetType": "TaxService",
+          "description": "US tax rate is positive for taxable products.",
+          "expectedBehavior": "GetTaxRate(jurisdiction, category) returns rate > 0 for US."
+        },
+        {
+          "id": "tc-tax-3",
+          "name": "TaxForZeroAmountIsZero",
+          "targetType": "TaxService",
+          "description": "Tax on zero amount is zero.",
+          "expectedBehavior": "CalculateTax(0, jurisdiction) returns 0."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "strategy",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "TaxService",
+        "TaxRate",
+        "TaxCalculation"
+      ],
+      "classification": "dafny",
+      "responsibility": "Calculate tax based on jurisdiction, product category, and order amount.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Tax.dfy"
+    },
+    {
+      "id": "comp-notifications",
+      "name": "Notifications",
+      "tech": "Dafny",
+      "layer": 3,
+      "internals": "Uses observer pattern to publish events (order placed, shipped, delivered). Adapter pattern for external email/SMS providers.",
+      "stubNames": [
+        "network-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-notifications-1",
+          "name": "SendEmailNotification",
+          "targetType": "NotificationService",
+          "description": "Sending an email notification returns success.",
+          "expectedBehavior": "Send(channel=email, recipient, template) returns success."
+        },
+        {
+          "id": "tc-notifications-2",
+          "name": "SendSmsNotification",
+          "targetType": "NotificationService",
+          "description": "Sending an SMS notification returns success.",
+          "expectedBehavior": "Send(channel=sms, recipient, template) returns success."
+        },
+        {
+          "id": "tc-notifications-3",
+          "name": "NotifyOnOrderPlaced",
+          "targetType": "NotificationService",
+          "description": "When an order is placed, a notification is sent to the customer.",
+          "expectedBehavior": "OnOrderPlaced(order) triggers a notification to the customer's preferred channel."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "observer",
+      "dependencies": [
+        "Contracts",
+        "Orders"
+      ],
+      "publicSurface": [
+        "NotificationService",
+        "NotificationChannel",
+        "NotificationTemplate"
+      ],
+      "classification": "dafny",
+      "responsibility": "Send customer notifications via email, SMS, or push. Manage notification templates and preferences.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Notifications.dfy"
+    },
+    {
+      "id": "comp-admin",
+      "name": "AdminDashboard",
+      "tech": "Dafny",
+      "layer": 3,
+      "internals": "Uses aggregator pattern to compute dashboard statistics (total sales, order count, low stock).",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-admin-1",
+          "name": "DashboardShowsTotalSales",
+          "targetType": "AdminService",
+          "description": "Dashboard data includes total sales amount.",
+          "expectedBehavior": "GetDashboardData() returns DashboardData with totalSales >= 0."
+        },
+        {
+          "id": "tc-admin-2",
+          "name": "DashboardShowsOrderCount",
+          "targetType": "AdminService",
+          "description": "Dashboard data includes number of orders.",
+          "expectedBehavior": "GetDashboardData() returns DashboardData with orderCount >= 0."
+        },
+        {
+          "id": "tc-admin-3",
+          "name": "DashboardShowsLowStockItems",
+          "targetType": "AdminService",
+          "description": "Dashboard data includes list of low stock items.",
+          "expectedBehavior": "GetDashboardData() returns DashboardData with lowStockItems containing items with stock below threshold."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "aggregator",
+      "dependencies": [
+        "Contracts",
+        "Orders",
+        "Inventory",
+        "Catalog"
+      ],
+      "publicSurface": [
+        "AdminService",
+        "DashboardData"
+      ],
+      "classification": "dafny",
+      "responsibility": "Provide admin dashboard: view sales, orders, inventory, and manage products.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-AdminDashboard.dfy"
+    },
+    {
+      "id": "comp-audit",
+      "name": "AuditLog",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses repository pattern to store audit events. Events are immutable.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-audit-1",
+          "name": "LogEventStoresEvent",
+          "targetType": "AuditService",
+          "description": "Logging an event stores it in the audit log.",
+          "expectedBehavior": "Log(event) results in the event being retrievable."
+        },
+        {
+          "id": "tc-audit-2",
+          "name": "GetEventsReturnsLoggedEvents",
+          "targetType": "AuditService",
+          "description": "Retrieving events returns all logged events.",
+          "expectedBehavior": "GetEvents() returns a sequence containing all logged events."
+        },
+        {
+          "id": "tc-audit-3",
+          "name": "AuditEventHasTimestamp",
+          "targetType": "AuditEvent",
+          "description": "Every audit event has a timestamp.",
+          "expectedBehavior": "AuditEvent.timestamp is non-empty."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "AuditService",
+        "AuditEvent"
+      ],
+      "classification": "dafny",
+      "responsibility": "Record audit events for security and compliance: who did what, when.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-AuditLog.dfy"
+    },
+    {
+      "id": "comp-rbac",
+      "name": "RBAC",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses repository pattern for users and roles. State machine for session (active, expired).",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-rbac-1",
+          "name": "AdminHasAllPermissions",
+          "targetType": "AccessControlService",
+          "description": "Admin role has all permissions.",
+          "expectedBehavior": "HasPermission(admin, anyPermission) returns true."
+        },
+        {
+          "id": "tc-rbac-2",
+          "name": "CustomerHasLimitedPermissions",
+          "targetType": "AccessControlService",
+          "description": "Customer role has only customer permissions.",
+          "expectedBehavior": "HasPermission(customer, adminPermission) returns false."
+        },
+        {
+          "id": "tc-rbac-3",
+          "name": "UserWithoutRoleHasNoPermissions",
+          "targetType": "AccessControlService",
+          "description": "User with no role has no permissions.",
+          "expectedBehavior": "HasPermission(userWithNoRole, anyPermission) returns false."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "Contracts"
+      ],
+      "publicSurface": [
+        "User",
+        "Role",
+        "Permission",
+        "AccessControlService"
+      ],
+      "classification": "dafny",
+      "responsibility": "Role-based access control: manage users, roles, permissions, and enforce authorization.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-RBAC.dfy"
+    },
+    {
+      "id": "comp-contracts",
+      "name": "Contracts",
+      "tech": "Dafny",
+      "layer": 0,
+      "internals": "Defines datatypes and interfaces only. No logic.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-contracts-1",
+          "name": "ProductHasRequiredFields",
+          "targetType": "Product",
+          "description": "Product datatype has id, name, price, category.",
+          "expectedBehavior": "Product has fields id, name, price, category."
+        },
+        {
+          "id": "tc-contracts-2",
+          "name": "OrderHasStatus",
+          "targetType": "Order",
+          "description": "Order datatype has status field.",
+          "expectedBehavior": "Order has field status of type OrderStatus."
+        },
+        {
+          "id": "tc-contracts-3",
+          "name": "UserHasRole",
+          "targetType": "User",
+          "description": "User datatype has role field.",
+          "expectedBehavior": "User has field role of type Role."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [],
+      "publicSurface": [
+        "Product",
+        "Cart",
+        "Order",
+        "PaymentResult",
+        "StockItem",
+        "ShippingQuote",
+        "TaxCalculation",
+        "Notification",
+        "AuditEvent",
+        "User",
+        "Role",
+        "Permission"
+      ],
+      "classification": "dafny",
+      "responsibility": "Shared data types and contracts used across all modules.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-Contracts.dfy"
+    },
+    {
+      "id": "comp-web",
+      "name": "WebApi",
+      "tech": "C# / ASP.NET Core",
+      "layer": 4,
+      "internals": "ASP.NET Core Web API. Controllers call into Dafny modules.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-web-1",
+          "name": "GetProductsEndpointReturnsProducts",
+          "targetType": "Program",
+          "description": "GET /api/products returns a list of products.",
+          "expectedBehavior": "HTTP 200 with JSON array of products."
+        },
+        {
+          "id": "tc-web-2",
+          "name": "CreateOrderEndpointReturnsOrder",
+          "targetType": "Program",
+          "description": "POST /api/orders creates an order and returns it.",
+          "expectedBehavior": "HTTP 201 with order JSON."
+        },
+        {
+          "id": "tc-web-3",
+          "name": "AdminDashboardEndpointRequiresAdmin",
+          "targetType": "Program",
+          "description": "GET /api/admin/dashboard requires admin role.",
+          "expectedBehavior": "HTTP 403 for non-admin users."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "Catalog",
+        "Cart",
+        "Orders",
+        "Payment",
+        "Inventory",
+        "Shipping",
+        "Tax",
+        "Notifications",
+        "AdminDashboard",
+        "AuditLog",
+        "RBAC"
+      ],
+      "publicSurface": [
+        "Program"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Expose REST API endpoints for all e-commerce operations."
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "ds-catalog",
+      "kind": "relational",
+      "name": "CatalogDb",
+      "schema": "Products, Categories, ProductCategories",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-cart",
+      "kind": "cache",
+      "name": "CartStore",
+      "schema": "Carts, CartItems",
+      "persistence": "ephemeral"
+    },
+    {
+      "id": "ds-orders",
+      "kind": "relational",
+      "name": "OrderDb",
+      "schema": "Orders, OrderItems, OrderStatusHistory",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-payment",
+      "kind": "relational",
+      "name": "PaymentDb",
+      "schema": "Payments, Refunds",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-inventory",
+      "kind": "relational",
+      "name": "InventoryDb",
+      "schema": "StockItems, Reservations",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-audit",
+      "kind": "document",
+      "name": "AuditLogDb",
+      "schema": "AuditEvents",
+      "persistence": "persistent"
+    },
+    {
+      "id": "ds-rbac",
+      "kind": "relational",
+      "name": "RbacDb",
+      "schema": "Users, Roles, Permissions, UserRoles, RolePermissions",
+      "persistence": "persistent"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "int-web",
+      "auth": {
+        "scheme": "Bearer JWT",
+        "details": "JWT tokens issued by RBAC module"
+      },
+      "name": "REST API",
+      "protocol": "HTTPS/REST",
+      "direction": "inbound",
+      "schemaRef": "OpenAPI"
+    },
+    {
+      "id": "int-payment-gateway",
+      "auth": {
+        "scheme": "API Key",
+        "details": "Merchant API key"
+      },
+      "name": "Payment Gateway",
+      "protocol": "HTTPS/REST",
+      "direction": "outbound",
+      "schemaRef": "PaymentGateway API"
+    },
+    {
+      "id": "int-email",
+      "auth": {
+        "scheme": "API Key",
+        "details": "Provider API key"
+      },
+      "name": "Email Provider",
+      "protocol": "SMTP/HTTPS",
+      "direction": "outbound",
+      "schemaRef": "EmailProvider API"
+    },
+    {
+      "id": "int-sms",
+      "auth": {
+        "scheme": "API Key",
+        "details": "Provider API key"
+      },
+      "name": "SMS Provider",
+      "protocol": "HTTPS",
+      "direction": "outbound",
+      "schemaRef": "SmsProvider API"
+    }
+  ],
+  "systemContext": "A multi-project e-commerce platform providing product catalog management, shopping cart, order processing, payment integration, inventory management, shipping calculation, tax calculation, customer notifications, admin dashboard, product search/filtering/recommendations, audit logging, and role-based access control.",
+  "qualityAttributes": [
+    {
+      "target": "All business logic verified by Dafny",
+      "attribute": "Correctness",
+      "rationale": "E-commerce transactions must be correct to avoid financial loss."
+    },
+    {
+      "target": "Role-based access control enforced on all admin endpoints",
+      "attribute": "Security",
+      "rationale": "Protect sensitive data and operations."
+    },
+    {
+      "target": "All critical actions logged",
+      "attribute": "Auditability",
+      "rationale": "Compliance and forensic analysis."
+    },
+    {
+      "target": "Search and recommendations respond within 200ms",
+      "attribute": "Performance",
+      "rationale": "User experience and conversion."
+    },
+    {
+      "target": "99.9% uptime",
+      "attribute": "Availability",
+      "rationale": "E-commerce must be available for revenue."
+    }
+  ],
+  "deploymentTopology": "Monolithic ASP.NET Core application deployed to a cloud VM or container. All modules run in-process. Databases are separate managed services."
+}

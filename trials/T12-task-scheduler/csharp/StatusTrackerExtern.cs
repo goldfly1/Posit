@@ -1,0 +1,46 @@
+// StatusTracker — Scheduling/domain stub
+// Auto-bound when spec mentions: schedule, appointment, calendar, booking, availability, slot
+using System;
+using System.Collections.Generic;
+using _module;
+
+namespace StatusTracker
+{
+    public static partial class SchedulingIO
+    {
+        // Portal: CreateAppointment(entityId, startTime, endTime, provider) returns (appointmentId: string)
+        public static string CreateAppointment(string entityId, DateTime startTime, DateTime endTime, string provider)
+        {
+            // TODO: Book appointment in scheduling system
+            return Guid.NewGuid().ToString();
+        }
+
+        // Portal: GetAppointments(entityId, dateRange) returns (appointments: seq<string>)
+        public static string[] GetAppointments(string entityId, string dateRange)
+        {
+            // TODO: Query appointments for entity within date range
+            return Array.Empty<string>();
+        }
+
+        // Portal: CancelAppointment(appointmentId) returns (cancelled: bool)
+        public static bool CancelAppointment(string appointmentId)
+        {
+            // TODO: Cancel appointment, free slot
+            return true;
+        }
+
+        // Portal: CheckAvailability(provider, startTime, endTime) returns (available: bool)
+        public static bool CheckAvailability(string provider, DateTime startTime, DateTime endTime)
+        {
+            // TODO: Check provider calendar for conflicts
+            return true;
+        }
+
+        // Portal: GetAvailableSlots(provider, date) returns (slots: seq<string>)
+        public static string[] GetAvailableSlots(string provider, DateTime date)
+        {
+            // TODO: Return available time slots for provider on date
+            return Array.Empty<string>();
+        }
+    }
+}

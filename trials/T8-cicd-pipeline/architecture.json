@@ -1,0 +1,419 @@
+{
+  "decisions": [
+    {
+      "id": "dec-1",
+      "title": "Use Dafny for core engine",
+      "status": "accepted",
+      "context": "The pipeline engine has complex scheduling and state transitions that benefit from formal verification.",
+      "decision": "All core modules (DAG resolver, scheduler, executor, evaluator, artifact manager, notification) are implemented in Dafny with verified contracts.",
+      "consequences": "Higher confidence in correctness, but requires Dafny toolchain and may have a learning curve."
+    },
+    {
+      "id": "dec-2",
+      "title": "In-memory artifact storage",
+      "status": "accepted",
+      "context": "The initial version does not require persistent artifact storage across runs.",
+      "decision": "Artifacts are stored in memory for the duration of the pipeline run.",
+      "consequences": "Simpler implementation, but artifacts are lost after the process exits."
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "risk-1",
+      "severity": "medium",
+      "mitigation": "Limit pipeline size and use modular verification.",
+      "description": "Dafny verification may be slow for large pipeline definitions."
+    },
+    {
+      "id": "risk-2",
+      "severity": "high",
+      "mitigation": "Use Dafny contracts to prove mutual exclusion and proper synchronization.",
+      "description": "Parallel execution may introduce race conditions if not carefully modeled."
+    }
+  ],
+  "components": [
+    {
+      "id": "comp-pipeline-contracts",
+      "name": "PipelineContracts",
+      "tech": "Dafny",
+      "layer": 0,
+      "internals": "Pure datatypes and enums. No logic beyond type definitions. Used by all other modules.",
+      "stubNames": [
+        "stream-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-pipeline-contracts-1",
+          "name": "PipelineDefinition has at least one job",
+          "targetType": "PipelineDefinition",
+          "description": "A valid PipelineDefinition must contain at least one JobDefinition.",
+          "expectedBehavior": "Validation rejects empty job lists."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [],
+      "publicSurface": [
+        "PipelineDefinition",
+        "JobDefinition",
+        "StepDefinition",
+        "JobStatus",
+        "StepStatus",
+        "RetryPolicy",
+        "ExpressionResult"
+      ],
+      "classification": "dafny",
+      "responsibility": "Defines core datatypes for pipeline definitions, job status, step status, retry policies, and expression evaluation results.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-PipelineContracts.dfy"
+    },
+    {
+      "id": "comp-dag-resolver",
+      "name": "DagResolver",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses graph traversal pattern. Builds adjacency from job dependencies. Detects cycles via DFS. Returns topological order for scheduling.",
+      "stubNames": [
+        "console-io",
+        "stream-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-dag-resolver-1",
+          "name": "Resolve linear pipeline",
+          "targetType": "DagResolver",
+          "description": "Given jobs A->B->C, Resolve returns a DAG with topological order [A,B,C].",
+          "expectedBehavior": "Topological order is [A,B,C] and HasCycle is false."
+        },
+        {
+          "id": "tc-dag-resolver-2",
+          "name": "Detect cycle",
+          "targetType": "DagResolver",
+          "description": "Given jobs A->B, B->A, Resolve reports a cycle.",
+          "expectedBehavior": "HasCycle returns true and topological order is empty."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "graph",
+      "dependencies": [
+        "PipelineContracts"
+      ],
+      "publicSurface": [
+        "Resolve",
+        "GetTopologicalOrder",
+        "HasCycle"
+      ],
+      "classification": "dafny",
+      "responsibility": "Resolves a pipeline definition into a directed acyclic graph (DAG) of jobs, detecting cycles and computing topological order.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-DagResolver.dfy"
+    },
+    {
+      "id": "comp-job-scheduler",
+      "name": "JobScheduler",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses scheduler pattern. Maintains a queue of ready jobs. Tracks completion counts per dependency. Supports parallel dispatch of independent jobs.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-job-scheduler-1",
+          "name": "Schedule parallel jobs",
+          "targetType": "JobScheduler",
+          "description": "Given two independent jobs, Schedule returns both as ready.",
+          "expectedBehavior": "GetReadyJobs returns both jobs."
+        },
+        {
+          "id": "tc-job-scheduler-2",
+          "name": "Respect dependencies",
+          "targetType": "JobScheduler",
+          "description": "Given A->B, B is not ready until A completes.",
+          "expectedBehavior": "GetReadyJobs initially returns only A; after MarkCompleted(A), returns B."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "scheduler",
+      "dependencies": [
+        "PipelineContracts",
+        "DagResolver"
+      ],
+      "publicSurface": [
+        "Schedule",
+        "GetReadyJobs",
+        "MarkCompleted"
+      ],
+      "classification": "dafny",
+      "responsibility": "Schedules jobs from the resolved DAG, respecting dependencies and enabling parallel execution of independent jobs.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-JobScheduler.dfy"
+    },
+    {
+      "id": "comp-step-executor",
+      "name": "StepExecutor",
+      "tech": "Dafny",
+      "layer": 2,
+      "internals": "Uses state-machine pattern for step lifecycle (pending, running, succeeded, failed, skipped). Evaluates conditions via ExpressionEvaluator. Applies retry policy on failure.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-step-executor-1",
+          "name": "Conditional step skipped",
+          "targetType": "StepExecutor",
+          "description": "A step with condition 'false' is skipped.",
+          "expectedBehavior": "ShouldRun returns false and step status becomes skipped."
+        },
+        {
+          "id": "tc-step-executor-2",
+          "name": "Retry on failure",
+          "targetType": "StepExecutor",
+          "description": "A step that fails once succeeds on retry with retry policy maxRetries=2.",
+          "expectedBehavior": "ExecuteStep returns succeeded after one retry."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "state-machine",
+      "dependencies": [
+        "PipelineContracts",
+        "ExpressionEvaluator"
+      ],
+      "publicSurface": [
+        "ExecuteStep",
+        "ShouldRun",
+        "ApplyRetry"
+      ],
+      "classification": "dafny",
+      "responsibility": "Executes individual steps within a job, handling conditional execution, retry policies, and step status transitions.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-StepExecutor.dfy"
+    },
+    {
+      "id": "comp-expression-evaluator",
+      "name": "ExpressionEvaluator",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses parser pattern to tokenize and evaluate simple boolean and arithmetic expressions. Supports variables from pipeline context.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-expression-evaluator-1",
+          "name": "Evaluate boolean expression",
+          "targetType": "ExpressionEvaluator",
+          "description": "Evaluate('true && false') returns false.",
+          "expectedBehavior": "EvaluateBoolean returns false."
+        },
+        {
+          "id": "tc-expression-evaluator-2",
+          "name": "Evaluate arithmetic expression",
+          "targetType": "ExpressionEvaluator",
+          "description": "Evaluate('1 + 2') returns 3.",
+          "expectedBehavior": "Evaluate returns 3."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "parser",
+      "dependencies": [
+        "PipelineContracts"
+      ],
+      "publicSurface": [
+        "Evaluate",
+        "EvaluateBoolean"
+      ],
+      "classification": "dafny",
+      "responsibility": "Evaluates expressions used in conditional steps and retry policies, returning a boolean or value result.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-ExpressionEvaluator.dfy"
+    },
+    {
+      "id": "comp-artifact-manager",
+      "name": "ArtifactManager",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses repository pattern. Maintains a map of artifact ID to artifact data. Supports CRUD operations.",
+      "stubNames": [],
+      "testCases": [
+        {
+          "id": "tc-artifact-manager-1",
+          "name": "Store and retrieve artifact",
+          "targetType": "ArtifactManager",
+          "description": "StoreArtifact('a1', 'data') then GetArtifact('a1') returns 'data'.",
+          "expectedBehavior": "GetArtifact returns the stored data."
+        },
+        {
+          "id": "tc-artifact-manager-2",
+          "name": "List artifacts",
+          "targetType": "ArtifactManager",
+          "description": "After storing two artifacts, ListArtifacts returns both IDs.",
+          "expectedBehavior": "ListArtifacts returns a set containing both IDs."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "repository",
+      "dependencies": [
+        "PipelineContracts"
+      ],
+      "publicSurface": [
+        "StoreArtifact",
+        "GetArtifact",
+        "ListArtifacts"
+      ],
+      "classification": "dafny",
+      "responsibility": "Stores and retrieves build artifacts produced by steps, with unique identifiers and metadata.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-ArtifactManager.dfy"
+    },
+    {
+      "id": "comp-notification-system",
+      "name": "NotificationSystem",
+      "tech": "Dafny",
+      "layer": 1,
+      "internals": "Uses observer pattern. Maintains a list of subscribers. Notify dispatches events to all subscribers.",
+      "stubNames": [
+        "stream-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-notification-system-1",
+          "name": "Notify subscribers",
+          "targetType": "NotificationSystem",
+          "description": "After subscribing a handler, Notify('job failed') invokes the handler.",
+          "expectedBehavior": "The handler receives the notification message."
+        },
+        {
+          "id": "tc-notification-system-2",
+          "name": "Unsubscribe stops notifications",
+          "targetType": "NotificationSystem",
+          "description": "After unsubscribing, Notify does not invoke the handler.",
+          "expectedBehavior": "The handler is not called."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "observer",
+      "dependencies": [
+        "PipelineContracts"
+      ],
+      "publicSurface": [
+        "Notify",
+        "Subscribe",
+        "Unsubscribe"
+      ],
+      "classification": "dafny",
+      "responsibility": "Sends notifications about pipeline events (success, failure, retry) to configured channels.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-NotificationSystem.dfy"
+    },
+    {
+      "id": "comp-pipeline-engine",
+      "name": "PipelineEngine",
+      "tech": "Dafny",
+      "layer": 3,
+      "internals": "Uses pipeline pattern. Coordinates DagResolver, JobScheduler, StepExecutor, ArtifactManager, and NotificationSystem. Exposes a single entry point for running a pipeline.",
+      "stubNames": [
+        "stream-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-pipeline-engine-1",
+          "name": "Run simple pipeline",
+          "targetType": "PipelineEngine",
+          "description": "Given a pipeline with one job and one step, RunPipeline completes successfully.",
+          "expectedBehavior": "RunPipeline returns success and notification is sent."
+        },
+        {
+          "id": "tc-pipeline-engine-2",
+          "name": "Run pipeline with failure",
+          "targetType": "PipelineEngine",
+          "description": "Given a pipeline where a step fails after retries, RunPipeline returns failure.",
+          "expectedBehavior": "RunPipeline returns failure and failure notification is sent."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "pipeline",
+      "dependencies": [
+        "PipelineContracts",
+        "DagResolver",
+        "JobScheduler",
+        "StepExecutor",
+        "ArtifactManager",
+        "NotificationSystem"
+      ],
+      "publicSurface": [
+        "RunPipeline"
+      ],
+      "classification": "dafny",
+      "responsibility": "Orchestrates the entire pipeline: resolve DAG, schedule jobs, execute steps, manage artifacts, and send notifications.",
+      "dafnyContractPath": "C:\\Users\\goldf\\Posit\\.posit\\staging\\skeleton-PipelineEngine.dfy"
+    },
+    {
+      "id": "comp-cli",
+      "name": "Cli",
+      "tech": "C#",
+      "layer": 4,
+      "internals": "Reads pipeline definition from file, invokes PipelineEngine, prints results to console.",
+      "stubNames": [
+        "file-io",
+        "console-io"
+      ],
+      "testCases": [
+        {
+          "id": "tc-cli-1",
+          "name": "CLI runs pipeline from file",
+          "targetType": "Program",
+          "description": "Given a valid pipeline definition file, the CLI runs the pipeline and prints success.",
+          "expectedBehavior": "Exit code 0 and success message printed."
+        },
+        {
+          "id": "tc-cli-2",
+          "name": "CLI reports invalid file",
+          "targetType": "Program",
+          "description": "Given a missing file, the CLI prints an error and exits non-zero.",
+          "expectedBehavior": "Exit code non-zero and error message printed."
+        }
+      ],
+      "isVerified": false,
+      "patternName": "",
+      "dependencies": [
+        "PipelineEngine",
+        "PipelineContracts"
+      ],
+      "publicSurface": [
+        "Program"
+      ],
+      "classification": "io-shell",
+      "responsibility": "Provides a command-line interface to trigger pipeline runs and display results."
+    }
+  ],
+  "dataStores": [
+    {
+      "id": "ds-artifacts",
+      "kind": "object",
+      "name": "ArtifactStore",
+      "schema": "ArtifactId: string, Data: string, Metadata: map<string,string>",
+      "persistence": "ephemeral"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "intf-cli",
+      "auth": {
+        "scheme": "None",
+        "details": "Local CLI, no authentication"
+      },
+      "name": "CliInterface",
+      "protocol": "Command Line",
+      "direction": "inbound",
+      "schemaRef": "PipelineDefinition"
+    }
+  ],
+  "systemContext": "A CI/CD pipeline engine that resolves pipeline definitions into a DAG, schedules and executes jobs and steps with support for parallel execution, conditional steps, and retry policies, evaluates expressions, manages artifacts, and sends notifications.",
+  "qualityAttributes": [
+    {
+      "target": "All pipeline execution logic verified by Dafny",
+      "attribute": "Correctness",
+      "rationale": "CI/CD pipelines must not have race conditions or incorrect dependency handling."
+    },
+    {
+      "target": "Parallel execution of independent jobs",
+      "attribute": "Performance",
+      "rationale": "Reduce pipeline execution time by running independent jobs concurrently."
+    },
+    {
+      "target": "Retry policies for transient failures",
+      "attribute": "Reliability",
+      "rationale": "Transient failures should not fail the entire pipeline."
+    }
+  ],
+  "deploymentTopology": "Single process running the CLI, with in-memory artifact storage."
+}

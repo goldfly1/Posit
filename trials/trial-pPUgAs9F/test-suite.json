@@ -1,0 +1,81 @@
+{
+  "summary": "9 verified (compile only), 2 test files for unverified modules",
+  "testFiles": [
+    {
+      "path": "SchedulerApi.Tests/SchedulerApiProgramTests.cs",
+      "content": "using System;\nusing System.IO;\nusing Xunit;\n\nnamespace SchedulerApi.Tests\n{\n    public class SchedulerApiProgramTests\n    {\n        [Fact]\n        public void Main_NoArgs_ReturnsOneAndPrintsUsage()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(Array.Empty<string>());\n                Assert.Equal(1, result);\n                Assert.Contains(\"Usage:\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_StartCommand_ReturnsZeroAndPrintsStarted()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"start\" });\n                Assert.Equal(0, result);\n                Assert.Contains(\"Started workflow\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_StartCommandWithId_ReturnsZeroAndPrintsStartedWithId()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"start\", \"wf-123\" });\n                Assert.Equal(0, result);\n                Assert.Contains(\"Started workflow wf-123\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_AdvanceCommand_ReturnsZeroAndPrintsAdvanced()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"advance\", \"wf-123\" });\n                Assert.Equal(0, result);\n                Assert.Contains(\"Advanced workflow wf-123\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_StatusCommand_ReturnsZeroAndPrintsStatus()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"status\", \"wf-123\" });\n                Assert.Equal(0, result);\n                Assert.Contains(\"Workflow wf-123 status\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_UnknownCommand_ReturnsOneAndPrintsUnknown()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"bogus\" });\n                Assert.Equal(1, result);\n                Assert.Contains(\"Unknown command: bogus\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_CommandCaseInsensitive_ReturnsZero()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"START\" });\n                Assert.Equal(0, result);\n                Assert.Contains(\"Started workflow\", sw.ToString());\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n\n        [Fact]\n        public void Main_StartCommandWithoutId_GeneratesGuid()\n        {\n            var originalOut = Console.Out;\n            using var sw = new StringWriter();\n            Console.SetOut(sw);\n            try\n            {\n                var result = SchedulerApi.Program.Main(new[] { \"start\" });\n                Assert.Equal(0, result);\n                var output = sw.ToString();\n                Assert.Contains(\"Started workflow \", output);\n                var id = output.Replace(\"Started workflow \", \"\").Trim();\n                Assert.True(Guid.TryParseExact(id, \"N\", out _), $\"Expected GUID in N format, got '{id}'\");\n            }\n            finally\n            {\n                Console.SetOut(originalOut);\n            }\n        }\n    }\n}"
+    },
+    {
+      "path": "SchedulerApi.Tests/SchedulerApiNetworkIOTests.cs",
+      "content": "using System;\nusing System.Net;\nusing System.Net.Http;\nusing System.Threading;\nusing System.Threading.Tasks;\nusing Xunit;\n\nnamespace SchedulerApi.Tests\n{\n    public class SchedulerApiNetworkIOTests\n    {\n        [Fact]\n        public void HttpGet_ValidUrl_ReturnsResponseBody()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                Assert.Equal(HttpMethod.Get, request.Method);\n                return new HttpResponseMessage(HttpStatusCode.OK)\n                {\n                    Content = new StringContent(\"{\\\"status\\\":\\\"ok\\\"}\")\n                };\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                var result = SchedulerApi.NetworkIO.HttpGet(\"http://example.com/jobs\");\n                Assert.Equal(\"{\\\"status\\\":\\\"ok\\\"}\", result);\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        [Fact]\n        public void HttpGet_ServerError_ThrowsHttpRequestException()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                return new HttpResponseMessage(HttpStatusCode.InternalServerError);\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                Assert.Throws<HttpRequestException>(() => SchedulerApi.NetworkIO.HttpGet(\"http://example.com/jobs\"));\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        [Fact]\n        public void HttpPost_ValidUrlAndBody_ReturnsResponseBody()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                Assert.Equal(HttpMethod.Post, request.Method);\n                Assert.Equal(\"application/json\", request.Content.Headers.ContentType.MediaType);\n                var body = request.Content.ReadAsStringAsync().GetAwaiter().GetResult();\n                Assert.Equal(\"{\\\"name\\\":\\\"job1\\\"}\", body);\n                return new HttpResponseMessage(HttpStatusCode.Accepted)\n                {\n                    Content = new StringContent(\"{\\\"id\\\":\\\"123\\\"}\")\n                };\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                var result = SchedulerApi.NetworkIO.HttpPost(\"http://example.com/jobs\", \"{\\\"name\\\":\\\"job1\\\"}\");\n                Assert.Equal(\"{\\\"id\\\":\\\"123\\\"}\", result);\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        [Fact]\n        public void HttpPost_ServerError_ReturnsErrorBody()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                return new HttpResponseMessage(HttpStatusCode.BadRequest)\n                {\n                    Content = new StringContent(\"{\\\"error\\\":\\\"invalid\\\"}\")\n                };\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                var result = SchedulerApi.NetworkIO.HttpPost(\"http://example.com/jobs\", \"{\\\"name\\\":\\\"job1\\\"}\");\n                Assert.Equal(\"{\\\"error\\\":\\\"invalid\\\"}\", result);\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        [Fact]\n        public void HttpPut_ValidUrlAndBody_ReturnsResponseBody()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                Assert.Equal(HttpMethod.Put, request.Method);\n                Assert.Equal(\"application/json\", request.Content.Headers.ContentType.MediaType);\n                var body = request.Content.ReadAsStringAsync().GetAwaiter().GetResult();\n                Assert.Equal(\"{\\\"status\\\":\\\"running\\\"}\", body);\n                return new HttpResponseMessage(HttpStatusCode.OK)\n                {\n                    Content = new StringContent(\"{\\\"status\\\":\\\"running\\\"}\")\n                };\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                var result = SchedulerApi.NetworkIO.HttpPut(\"http://example.com/jobs/123\", \"{\\\"status\\\":\\\"running\\\"}\");\n                Assert.Equal(\"{\\\"status\\\":\\\"running\\\"}\", result);\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        [Fact]\n        public void HttpDelete_ValidUrl_ReturnsResponseBody()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                Assert.Equal(HttpMethod.Delete, request.Method);\n                return new HttpResponseMessage(HttpStatusCode.OK)\n                {\n                    Content = new StringContent(\"{\\\"deleted\\\":true}\")\n                };\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                var result = SchedulerApi.NetworkIO.HttpDelete(\"http://example.com/jobs/123\");\n                Assert.Equal(\"{\\\"deleted\\\":true}\", result);\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        [Fact]\n        public void HttpDelete_ServerError_ReturnsErrorBody()\n        {\n            using var handler = new MockHttpMessageHandler((request) =>\n            {\n                return new HttpResponseMessage(HttpStatusCode.NotFound)\n                {\n                    Content = new StringContent(\"{\\\"error\\\":\\\"not found\\\"}\")\n                };\n            });\n            using var client = new HttpClient(handler);\n            var originalClient = GetPrivateClient();\n            SetPrivateClient(client);\n            try\n            {\n                var result = SchedulerApi.NetworkIO.HttpDelete(\"http://example.com/jobs/123\");\n                Assert.Equal(\"{\\\"error\\\":\\\"not found\\\"}\", result);\n            }\n            finally\n            {\n                SetPrivateClient(originalClient);\n            }\n        }\n\n        private static HttpClient GetPrivateClient()\n        {\n            var field = typeof(SchedulerApi.NetworkIO).GetField(\"_client\", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);\n            return (HttpClient)field.GetValue(null);\n        }\n\n        private static void SetPrivateClient(HttpClient client)\n        {\n            var field = typeof(SchedulerApi.NetworkIO).GetField(\"_client\", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);\n            field.SetValue(null, client);\n        }\n    }\n\n    public class MockHttpMessageHandler : HttpMessageHandler\n    {\n        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;\n\n        public MockHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)\n        {\n            _responder = responder;\n        }\n\n        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)\n        {\n            return Task.FromResult(_responder(request));\n        }\n    }\n}"
+    }
+  ],
+  "moduleResults": [
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "ScheduleContracts"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "CronParser"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "DagEngine"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "SchedulerCore"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "RetryPolicy"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "WorkerPool"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "DeadLetterQueue"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "StatusTracker"
+    },
+    {
+      "notes": "Verified by Z3 \u2014 no tests generated (proof IS the test)",
+      "testCount": 0,
+      "isVerified": true,
+      "moduleName": "SchedulerOrchestrator"
+    },
+    {
+      "notes": "Test suite generated",
+      "testCount": 0,
+      "isVerified": false,
+      "moduleName": "SchedulerApiioconsoleprogram"
+    },
+    {
+      "notes": "Test suite generated",
+      "testCount": 1,
+      "isVerified": false,
+      "moduleName": "SchedulerApinetworkio"
+    }
+  ]
+}
