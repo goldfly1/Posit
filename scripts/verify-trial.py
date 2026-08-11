@@ -101,7 +101,9 @@ def verify_trial(trial_dir: str):
             
             # Rename _module to _module_{name} to avoid __default collisions
             content = content.replace('namespace _module', f'namespace _module_{name}')
-            
+            # Fix: also rename internal type references (_module.Result<T> → _module_{name}.Result<T>)
+            content = content.replace('_module.', f'_module_{name}.')
+
             if i > 0:
                 # Strip ALL Dafny runtime from non-first files — keep only the _module namespace
                 module_start = content.find('namespace _module')
@@ -132,14 +134,19 @@ def verify_trial(trial_dir: str):
             stem = cs_file.stem
             comp_name = stem.replace("Extern", "").replace("fileio", "").replace("networkio", "")
             comp_name = comp_name.replace("ioconsoleprogram", "").replace("scheduling", "")
-            comp_name = comp_name.replace("chat", "").replace("database", "")
+            comp_name = comp_name.replace("chat", "").replace("database", "").replace("ecommerce", "")
+            comp_name = comp_name.replace("healthcare", "")
             # Try to match to a translated module
+            matched = False
             for mod_name in seen_modules:
                 if comp_name.startswith(mod_name) or mod_name.startswith(comp_name):
                     content = content.replace("using _module;", f"using _module_{mod_name};")
+                    content = content.replace("_module.", f"_module_{mod_name}.")
+                    matched = True
                     break
             # If no match, just remove the using (stubs that don't reference Dafny types)
-            content = content.replace("using _module;", "")
+            if not matched:
+                content = content.replace("using _module;", "")
             (cs_dir / cs_file.name).write_text(content)
             stub_count += 1
         print(f"    Copied {stub_count} stub files (namespaces fixed)")
@@ -147,28 +154,28 @@ def verify_trial(trial_dir: str):
     # 4. Create .NET project
     print(f"\n[4] Creating .NET project...")
     proj_file = work_dir / "Posit.Verified.csproj"
-    proj_content = """<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <OutputType>Library</OutputType>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\\..\\src\\Posit.DafnyRuntime\\Posit.DafnyRuntime.csproj" />
-  </ItemGroup>
-</Project>"""
-    # Fix the project reference path to be absolute
+    runtime_proj = POSIT_ROOT / "src" / "Posit.DafnyRuntime" / "Posit.DafnyRuntime.csproj"
+    has_runtime = runtime_proj.exists()
     proj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+  </PropertyGroup>"""
+    if has_runtime:
+        proj_content += f"""
+  <ItemGroup>
+    <ProjectReference Include="{runtime_proj.resolve()}" />
+  </ItemGroup>"""
+    proj_content += """
 </Project>"""
     proj_file.write_text(proj_content)
     print(f"    Project: {proj_file}")
+    if has_runtime:
+        print(f"    Runtime: {runtime_proj.resolve()}")
+    else:
+        print(f"    Runtime: not found (using --include-runtime inline)")
 
     # 5. Build
     print(f"\n[5] Building .NET project...")
