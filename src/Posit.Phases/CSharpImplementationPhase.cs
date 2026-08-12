@@ -931,6 +931,9 @@ public sealed class CSharpImplementationPhase : IPhase
             // Track return variables: maps source field name → C# variable name
             // e.g., "content" → "csvreaderResult" (from the call that produced content)
             var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // Track prior return variable names IN ORDER (for positional fallback)
+            var priorReturnVarOrder = new List<string>();
             
             // Also track CLI input params that are available as sources
             foreach (var p in entryParams)
@@ -977,26 +980,24 @@ public sealed class CSharpImplementationPhase : IPhase
                         }
                         else
                         {
-                            // Positional fallback: if there's exactly one prior non-void
-                            // call, use its return variable. The architect uses semantic
-                            // names (parsedData, validatedData) that don't match component
-                            // names or types — but in a linear chain, the previous call's
-                            // output IS the next call's input.
-                            var priorReturnVars = sourceToReturnVar
-                                .Where(kvp => kvp.Value.EndsWith("Result", StringComparison.OrdinalIgnoreCase) &&
-                                              !entryParams.Any(p => p.Name == kvp.Value))
-                                .Select(kvp => kvp.Value)
+                            // Positional fallback: the architect uses semantic
+                            // names (parsedData, validatedData) that don't match
+                            // component names or return types. In a linear chain,
+                            // the MOST RECENT prior call's output IS the next
+                            // call's input. Pick the last return var we registered.
+                            var priorReturnVars = priorReturnVarOrder
+                                .Where(v => !entryParams.Any(p => p.Name == v))
                                 .Distinct()
                                 .ToList();
                             
-                            if (priorReturnVars.Count == 1)
+                            if (priorReturnVars.Count >= 1)
                             {
-                                // Only one prior call with a return value — it must be the source
-                                resolvedArgs.Add(priorReturnVars[0]);
+                                // Use the most recent prior call's return variable
+                                resolvedArgs.Add(priorReturnVars[^1]);
                             }
                             else
                             {
-                                // Can't determine which prior call to use
+                                // No prior calls at all — can't determine source
                                 resolvedArgs.Add($"/* unresolved: {source} */ null");
                             }
                         }
@@ -1015,6 +1016,7 @@ public sealed class CSharpImplementationPhase : IPhase
                     // Map both the component name and common field names to this return var
                     sourceToReturnVar[conn.ToComponent] = returnVarName;
                     sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
+                    priorReturnVarOrder.Add(returnVarName);
                     
                     // Also map the return type name if specified (e.g., "content", "table", "records")
                     // The architect may use these as source names in subsequent argMappings
