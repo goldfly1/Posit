@@ -488,14 +488,63 @@ public sealed class ArchitecturePhase : IPhase
                 // Carapace enforcement: connector forms are REQUIRED for any component
                 // with dependencies. No connector specs → reject → send back to the model.
                 // The orchestrator cannot wire without these. Cotton candy prevention.
+                //
+                // BUT: not all dependencies are method calls. Some are type-only dependencies
+                // (e.g., a Contracts module that defines datatypes used via Dafny `include`).
+                // Type-only dependencies need sharedTypes, not connections.
+                // A dependency is "type-only" if its publicSurface contains no method-like names
+                // (i.e., all entries start with uppercase and look like type names, not verbs).
+                
+                // Classify dependencies: method-call deps vs type-only deps
+                var methodCallDeps = new List<string>();
+                var typeOnlyDeps = new List<string>();
+                foreach (var dep in c.Dependencies)
+                {
+                    if (componentByName.TryGetValue(dep, out var depComp))
+                    {
+                        // A type-only dependency has no methodSignatures (or empty)
+                        // and its publicSurface looks like type names (not method calls)
+                        var hasMethods = depComp.MethodSignatures?.Length > 0 ||
+                            (depComp.PublicSurface?.Any(s => !string.IsNullOrEmpty(s) && 
+                                char.IsLower(s[0]) || s.Contains("()")) == true);
+                        
+                        // If the dependency has no publicSurface at all (pure types module),
+                        // or its surface entries all look like type names, it's type-only
+                        if (!hasMethods || depComp.PublicSurface is null or { Length: 0 })
+                        {
+                            typeOnlyDeps.Add(dep);
+                        }
+                        else
+                        {
+                            // Check if ALL public surface entries look like types (PascalCase, no parens)
+                            var allTypes = depComp.PublicSurface!.All(s => 
+                                !string.IsNullOrEmpty(s) && 
+                                char.IsUpper(s[0]) && 
+                                !s.Contains("()") &&
+                                !s.EndsWith("Async", StringComparison.OrdinalIgnoreCase));
+                            
+                            if (allTypes && (depComp.MethodSignatures is null || depComp.MethodSignatures.Length == 0))
+                                typeOnlyDeps.Add(dep);
+                            else
+                                methodCallDeps.Add(dep);
+                        }
+                    }
+                    else
+                    {
+                        methodCallDeps.Add(dep); // unknown dep — treat as method-call to get an error
+                    }
+                }
+
+                // methodSignatures required if the component has ANY dependencies
                 if (c.MethodSignatures is null || c.MethodSignatures.Length == 0)
                     errors.Add($"validation.missing.methodSignatures: {prefix} '{c.Name}' has dependencies but no methodSignatures — the orchestrator needs these to wire deterministically");
 
-                if (c.Connections is null || c.Connections.Length == 0)
-                    errors.Add($"validation.missing.connections: {prefix} '{c.Name}' has dependencies but no connections — specify how this component calls each dependency");
+                // Connections required only for method-call dependencies
+                if (methodCallDeps.Count > 0 && (c.Connections is null || c.Connections.Length == 0))
+                    errors.Add($"validation.missing.connections: {prefix} '{c.Name}' has method-call dependencies {string.Join(", ", methodCallDeps)} but no connections — specify how this component calls each");
 
-                // Validate that every dependency has at least one connection spec
-                if (c.Connections is not null)
+                // Validate that every method-call dependency has a connection spec
+                if (c.Connections is not null && methodCallDeps.Count > 0)
                 {
                     var connectedDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var conn in c.Connections)
@@ -519,29 +568,17 @@ public sealed class ArchitecturePhase : IPhase
                         }
                     }
 
-                    foreach (var dep in c.Dependencies)
+                    foreach (var dep in methodCallDeps)
                     {
                         if (!connectedDeps.Contains(dep))
-                            errors.Add($"validation.missing.connection_for_dependency: {prefix} '{c.Name}' depends on '{dep}' but no connection spec targets it");
+                            errors.Add($"validation.missing.connection_for_dependency: {prefix} '{c.Name}' depends on '{dep}' (method-call) but no connection spec targets it");
                     }
                 }
 
-                // Validate sharedTypes if the component has dafny dependencies
-                if (c.SharedTypes is null || c.SharedTypes.Length == 0)
+                // sharedTypes required if the component has type-only dafny dependencies
+                if (typeOnlyDeps.Count > 0 && (c.SharedTypes is null || c.SharedTypes.Length == 0))
                 {
-                    // Check if any dependency is a dafny component (would need shared types)
-                    var hasDafnyDeps = false;
-                    foreach (var dep in c.Dependencies)
-                    {
-                        if (componentByName.TryGetValue(dep, out var depComp) &&
-                            depComp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
-                        {
-                            hasDafnyDeps = true;
-                            break;
-                        }
-                    }
-                    if (hasDafnyDeps)
-                        errors.Add($"validation.missing.sharedTypes: {prefix} '{c.Name}' depends on dafny components but has no sharedTypes — list types shared via Dafny include");
+                    errors.Add($"validation.missing.sharedTypes: {prefix} '{c.Name}' has type-only dependencies {string.Join(", ", typeOnlyDeps)} but no sharedTypes — list types shared via Dafny include");
                 }
             }
         }
