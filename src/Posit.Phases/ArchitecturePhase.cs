@@ -406,7 +406,7 @@ public sealed class ArchitecturePhase : IPhase
         });
     }
 
-    private static void ValidateContract(ArchitectureContract contract, List<string> errors)
+    private void ValidateContract(ArchitectureContract contract, List<string> errors)
     {
         if (string.IsNullOrWhiteSpace(contract.SystemContext))
             errors.Add("validation.empty.systemContext: systemContext is required");
@@ -565,6 +565,36 @@ public sealed class ArchitecturePhase : IPhase
                         {
                             if (!c.MethodSignatures.Any(ms => string.Equals(ms.Name, conn.FromMethod, StringComparison.OrdinalIgnoreCase)))
                                 errors.Add($"validation.mismatch.connection_fromMethod: {prefix} '{c.Name}' connection fromMethod '{conn.FromMethod}' does not match any methodSignature name");
+                        }
+
+                        // Carapace enforcement: toMethod must exist on the target component's pattern.
+                        // The architect invents method names (e.g., "Parse") but the pattern provides
+                        // real methods (e.g., "ParseLine"). Reject if toMethod doesn't match any
+                        // real pattern method on the target component.
+                        if (!string.IsNullOrWhiteSpace(conn.ToMethod) &&
+                            !string.IsNullOrWhiteSpace(conn.ToComponent) &&
+                            componentByName.TryGetValue(conn.ToComponent, out var targetComp) &&
+                            !string.IsNullOrWhiteSpace(targetComp.PatternName))
+                        {
+                            var patternSigs = _registry.GetPatternSignatures(targetComp.PatternName);
+                            if (patternSigs.Count > 0)
+                            {
+                                // Check toMethod against both the pattern's real method names
+                                // and the target component's MethodSignatures (which may include PatternMethod mappings)
+                                var patternMethodNames = patternSigs.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                                var targetSigNames = targetComp.MethodSignatures?
+                                    .Select(s => s.PatternMethod ?? s.Name)
+                                    .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                                // The toMethod should match either a real pattern method or a declared method signature
+                                if (!patternMethodNames.Contains(conn.ToMethod) &&
+                                    !targetSigNames.Contains(conn.ToMethod) &&
+                                    !targetComp.MethodSignatures?.Any(ms => string.Equals(ms.Name, conn.ToMethod, StringComparison.OrdinalIgnoreCase)) == true)
+                                {
+                                    var realMethods = string.Join(", ", patternMethodNames);
+                                    errors.Add($"validation.mismatch.connection_toMethod: {prefix} '{c.Name}' connection toMethod '{conn.ToMethod}' does not exist on target '{conn.ToComponent}' (pattern '{targetComp.PatternName}'). Real methods: {realMethods}");
+                                }
+                            }
                         }
                     }
 
