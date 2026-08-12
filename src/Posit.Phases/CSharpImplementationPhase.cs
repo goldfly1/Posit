@@ -758,11 +758,35 @@ public sealed class CSharpImplementationPhase : IPhase
 
         if (cliComponent is null) return null;
 
-        // Find the entry component — the first dependency with connector specs
-        var topLevelDeps = cliComponent.Dependencies ?? [];
-        var entryComponent = components.FirstOrDefault(c =>
-            topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase) &&
-            c.PublicSurface?.Length > 0);
+        // The entry component is the one that HAS the connector forms (methodSignatures + connections).
+        // This is the orchestrator — the component that calls its dependencies.
+        // It might be the cliComponent itself (when the CLI orchestrates directly),
+        // or it might be a dependency of the CLI (when the CLI delegates to an engine).
+        //
+        // Priority:
+        // 1. If cliComponent has connections → it IS the entry (CLI orchestrates directly)
+        // 2. Otherwise, find a dependency of cliComponent that has connections (CLI delegates to engine)
+        // 3. Otherwise, find ANY component in the graph that has connections
+        Component? entryComponent = null;
+
+        if (cliComponent.Connections?.Length > 0 && cliComponent.MethodSignatures?.Length > 0)
+        {
+            // CLI component itself has the connector forms — it's the orchestrator
+            entryComponent = cliComponent;
+        }
+        else
+        {
+            // Look for a dependency that has connector forms (the engine)
+            var topLevelDeps = cliComponent.Dependencies ?? [];
+            entryComponent = components.FirstOrDefault(c =>
+                topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase) &&
+                c.Connections?.Length > 0 &&
+                c.MethodSignatures?.Length > 0);
+
+            // Fallback: any component with connector forms
+            entryComponent ??= components.FirstOrDefault(c =>
+                c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0);
+        }
 
         if (entryComponent is null) return null;
 
