@@ -524,6 +524,182 @@ public sealed class PatternRegistry
         return new RegistrySuggestion(fallbackPattern, stubs.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
+    /// <summary>
+    /// Extract method signatures from a pattern's Dafny source. Returns the
+    /// public surface — method names, parameter types, and return types.
+    /// This is the data the architect needs to fill out connector specs on
+    /// the carapace. The orchestrator uses it to wire deterministically.
+    /// </summary>
+    public static List<MethodSignature> ExtractMethodSignatures(string dafnySource)
+    {
+        var signatures = new List<MethodSignature>();
+        var lines = dafnySource.Split(['\r', '\n'], StringSplitOptions.None);
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+
+            // Match: method Name(params) returns (type)
+            // Match: function Name(params): type
+            if (!trimmed.StartsWith("method ", StringComparison.Ordinal) &&
+                !trimmed.StartsWith("function ", StringComparison.Ordinal))
+                continue;
+
+            // Skip {:extern} — those are stubs, not pattern methods
+            if (trimmed.Contains("{:extern}"))
+                continue;
+
+            var isFunction = trimmed.StartsWith("function ", StringComparison.Ordinal);
+            var rest = trimmed[(isFunction ? 9 : 7)..].TrimStart();
+
+            // Extract method name
+            var parenStart = rest.IndexOf('(');
+            if (parenStart <= 0) continue;
+            var methodName = rest[..parenStart].Trim();
+
+            // Extract parameters
+            var parenEnd = FindMatchingParen(rest, parenStart);
+            if (parenEnd < 0) continue;
+            var paramStr = rest[(parenStart + 1)..parenEnd];
+
+            var paramList = new List<MethodParam>();
+            if (!string.IsNullOrWhiteSpace(paramStr))
+            {
+                foreach (var p in SplitParams(paramStr))
+                {
+                    var colonIdx = p.IndexOf(':');
+                    if (colonIdx > 0)
+                    {
+                        var pName = p[..colonIdx].Trim();
+                        var pType = p[(colonIdx + 1)..].Trim();
+                        paramList.Add(new MethodParam(pName, pType, pType));
+                    }
+                }
+            }
+
+            // Extract return type
+            string returnType = "void";
+            string? returnDafnyType = null;
+            if (isFunction)
+            {
+                // function Name(params): type
+                var afterParams = rest[(parenEnd + 1)..].TrimStart();
+                if (afterParams.StartsWith(':'))
+                {
+                    var typeStr = afterParams[1..].Trim();
+                    // Stop at requires/ensures/decreases or newline
+                    var stopIdx = typeStr.IndexOfAny([' ', '\t']);
+                    if (stopIdx > 0)
+                        typeStr = typeStr[..stopIdx];
+                    returnType = MapDafnyTypeToCSharp(typeStr);
+                    returnDafnyType = typeStr;
+                }
+            }
+            else
+            {
+                // method Name(params) returns (type)
+                var afterParams = rest[(parenEnd + 1)..].TrimStart();
+                if (afterParams.StartsWith("returns"))
+                {
+                    var retParenStart = afterParams.IndexOf('(');
+                    var retParenEnd = FindMatchingParen(afterParams, retParenStart);
+                    if (retParenStart >= 0 && retParenEnd > retParenStart)
+                    {
+                        var typeStr = afterParams[(retParenStart + 1)..retParenEnd].Trim();
+                        // Handle named returns: "result: seq<string>" → take type after colon
+                        var colonIdx = typeStr.IndexOf(':');
+                        if (colonIdx >= 0)
+                            typeStr = typeStr[(colonIdx + 1)..].Trim();
+                        returnType = MapDafnyTypeToCSharp(typeStr);
+                        returnDafnyType = typeStr;
+                    }
+                }
+            }
+
+            signatures.Add(new MethodSignature(methodName, paramList.ToArray(), returnType, returnDafnyType));
+        }
+
+        return signatures;
+    }
+
+    /// <summary>
+    /// Get method signatures for a named pattern. Convenience wrapper.
+    /// </summary>
+    public List<MethodSignature> GetPatternSignatures(string patternName)
+    {
+        var pattern = GetPattern(patternName);
+        return ExtractMethodSignatures(pattern.Source);
+    }
+
+    /// <summary>
+    /// Format a pattern's method signatures as a compact string for the
+    /// architecture prompt. The architect sees this to fill out connector specs.
+    /// </summary>
+    public string FormatPatternSignatures(string patternName)
+    {
+        var sigs = GetPatternSignatures(patternName);
+        if (sigs.Count == 0) return "(no public methods)";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Pattern '{patternName}' provides these methods:");
+        foreach (var sig in sigs)
+        {
+            var params_ = string.Join(", ", sig.Params.Select(p => $"{p.Name}: {p.DafnyType ?? p.Type}"));
+            sb.AppendLine($"  - {sig.Name}({params_}) → {sig.ReturnDafnyType ?? sig.ReturnType}");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static int FindMatchingParen(string s, int start)
+    {
+        if (start < 0 || start >= s.Length || s[start] != '(') return -1;
+        int depth = 0;
+        for (int i = start; i < s.Length; i++)
+        {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') { depth--; if (depth == 0) return i; }
+        }
+        return -1;
+    }
+
+    private static List<string> SplitParams(string paramStr)
+    {
+        var result = new List<string>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < paramStr.Length; i++)
+        {
+            if (paramStr[i] == '(' || paramStr[i] == '[') depth++;
+            else if (paramStr[i] == ')' || paramStr[i] == ']') depth--;
+            else if (paramStr[i] == ',' && depth == 0)
+            {
+                result.Add(paramStr[start..i].Trim());
+                start = i + 1;
+            }
+        }
+        var last = paramStr[start..].Trim();
+        if (!string.IsNullOrEmpty(last)) result.Add(last);
+        return result;
+    }
+
+    /// <summary>
+    /// Map Dafny types to C# equivalents for the orchestrator's wiring code.
+    /// </summary>
+    private static string MapDafnyTypeToCSharp(string dafnyType)
+    {
+        var t = dafnyType.Trim();
+        return t switch
+        {
+            "int" => "BigInteger",
+            "bool" => "bool",
+            "string" => "Dafny.ISequence<Dafny.Rune>",
+            _ when t.StartsWith("seq<") => "Dafny.ISequence<" + MapDafnyTypeToCSharp(t[4..^1]) + ">",
+            _ when t.StartsWith("set<") => "Dafny.ISet<" + MapDafnyTypeToCSharp(t[4..^1]) + ">",
+            _ when t.StartsWith("map<") => "Dafny.IMap<" + t[4..^1].Split(',')[0].Trim() + ", " + MapDafnyTypeToCSharp(t[4..^1].Split(',')[1].Trim()) + ">",
+            _ => t // datatypes and user-defined types pass through
+        };
+    }
+
     private void Load()
     {
         foreach (var file in Directory.EnumerateFiles(_patternsDirectory, "*.dfy"))

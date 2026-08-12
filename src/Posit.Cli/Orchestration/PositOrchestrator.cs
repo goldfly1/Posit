@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Posit.Contracts.Artifacts;
 using Posit.Contracts.Core;
 using Posit.Contracts.Serialization;
 using static Posit.Contracts.Serialization.PositJson;
@@ -528,8 +529,12 @@ public sealed class PositOrchestrator
                             PatternName = c.PatternName,
                             StubNames = c.StubNames,
                             DafnyContractPath = c.DafnyContractPath,
+                            ParametersJson = c.ParametersJson,
                             TestCases = c.TestCases?.Select(tc => new DesignTestCase(
-                                tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray() ?? []
+                                tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray() ?? [],
+                            MethodSignatures = c.MethodSignatures ?? [],
+                            Connections = c.Connections ?? [],
+                            SharedTypes = c.SharedTypes ?? []
                         }).ToArray(),
                         DataStores = arch.DataStores?.Select(ds => new DesignDataStore(
                             ds.Id, ds.Name, ds.Kind.ToString(), ds.Schema)).ToArray() ?? [],

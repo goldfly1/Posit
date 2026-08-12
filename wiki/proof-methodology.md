@@ -86,6 +86,18 @@ That list is the bridge. It's produced from the spec, checked against the runnin
 - Option B: DONE (io-shell components get Dafny skeletons — every component has a contract)
 - Item 3 (xUnit tests): answered by runtime verification — the program doing what the spec asked IS the test
 - Item 1 (contract review): the user-facing requirements list bridges this
-- Item 11 (cotton candy): the hard part — but the handle is: CLI + GUI + data + expected results
+- Item 11 (cotton candy): **ROOT CAUSE FOUND** — the carapace has no connector data. The orchestrator can't wire components because the architect was never asked for connection specifications. See `wiki/connector-diagnosis.md`.
 - Item 12 (Testmaster): the Blazor desktop where the test is launched and results are shown
 - Item 13 (harness → JSON): the harness pushes data and captures output as structured proof
+
+## The Closed Loop (Aug 12, 2026)
+
+Two insights closed the loop:
+
+1. **Connector forms on the carapace** — the architect fills out not just component names and dependencies, but method signatures, connection specs (A.method calls B.method with what args), and shared types. The orchestrator reads these and wires deterministically. No model judgment at wiring time.
+
+2. **Automated QA via bot harness** — every GUI control is keyboard-reachable. A bot (script, not LLM) maps hotkeys, pushes data, captures output, compares to spec. Fully deterministic, no human.
+
+The pipeline shrinks: AI does thinking (ideation, architecture, design review). Code does everything else (assemble, verify, translate, test). See `wiki/connector-diagnosis.md` for the full diagnosis and the shrunk pipeline.
+
+The registry grows organically: 17 atoms → proven molecules → proven compounds → proven systems. Each cycle makes the next assembly richer.

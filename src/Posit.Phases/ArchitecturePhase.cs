@@ -292,7 +292,20 @@ public sealed class ArchitecturePhase : IPhase
                        .Replace("\"dafny_contract_path\"", "\"dafnyContractPath\"")
                        .Replace("\"test_cases\"", "\"testCases\"")
                        .Replace("\"target_type\"", "\"targetType\"")
-                       .Replace("\"expected_behavior\"", "\"expectedBehavior\"");
+                       .Replace("\"expected_behavior\"", "\"expectedBehavior\"")
+                       .Replace("\"method_signatures\"", "\"methodSignatures\"")
+                       .Replace("\"pattern_method\"", "\"patternMethod\"")
+                       .Replace("\"return_dafny_type\"", "\"returnDafnyType\"")
+                       .Replace("\"dafny_type\"", "\"dafnyType\"")
+                       .Replace("\"arg_mappings\"", "\"argMappings\"")
+                       .Replace("\"return_type\"", "\"returnType\"")
+                       .Replace("\"return_usage\"", "\"returnUsage\"")
+                       .Replace("\"from_method\"", "\"fromMethod\"")
+                       .Replace("\"to_component\"", "\"toComponent\"")
+                       .Replace("\"to_method\"", "\"toMethod\"")
+                       .Replace("\"shared_types\"", "\"sharedTypes\"")
+                       .Replace("\"defined_in_module\"", "\"definedInModule\"")
+                       .Replace("\"connections\"", "\"connections\"");
 
             var contract = JsonSerializer.Deserialize<ArchitectureContract>(json, JsonOptions);
             if (contract is null)

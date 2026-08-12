@@ -186,42 +186,43 @@ body {
     <ul>
     <li class="folder">Architecture
 <ul>
-<li class="page"><a href="#page-13166365">Posit Architecture</a></li>
+<li class="page"><a href="#page-9980457">Posit Architecture</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-5052288">Carapace Doctrine</a></li>
+<li class="page"><a href="#page-16454316">Carapace Doctrine</a></li>
+<li class="page"><a href="#page-3721380">Connector Diagnosis</a></li>
 <li class="folder">Contracts
 <ul>
-<li class="page"><a href="#page-6570604">Dafny Contract Templates</a></li>
+<li class="page"><a href="#page-14040247">Dafny Contract Templates</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-3183247">Current Abilities</a></li>
-<li class="page"><a href="#page-1942238">Desktop Port Plan</a></li>
+<li class="page"><a href="#page-12620737">Current Abilities</a></li>
+<li class="page"><a href="#page-11874093">Desktop Port Plan</a></li>
 <li class="folder">Evolution
 <ul>
-<li class="page"><a href="#page-5716026">Architecture Evolution Map</a></li>
+<li class="page"><a href="#page-1928349">Architecture Evolution Map</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-7606430">Handoff 2026 08 07</a></li>
-<li class="page"><a href="#page-14069938">Handoff 2026 08 08</a></li>
-<li class="page"><a href="#page-1646227">Handoff 2026 08 11 Supplemental</a></li>
-<li class="page"><a href="#page-12486159">Handoff 2026 08 12</a></li>
+<li class="page"><a href="#page-13456054">Handoff 2026 08 07</a></li>
+<li class="page"><a href="#page-4590840">Handoff 2026 08 08</a></li>
+<li class="page"><a href="#page-852399">Handoff 2026 08 11 Supplemental</a></li>
+<li class="page"><a href="#page-13916207">Handoff 2026 08 12</a></li>
 <li class="folder">Plans
 <ul>
-<li class="page"><a href="#page-7542974">Dafny First Pipeline Plan</a></li>
+<li class="page"><a href="#page-3566734">Dafny First Pipeline Plan</a></li>
 </ul>
 </li>
-<li class="page"><a href="#page-10455172">Proof Methodology</a></li>
+<li class="page"><a href="#page-14717490">Proof Methodology</a></li>
 <li class="folder">Reference
 <ul>
-<li class="page"><a href="#page-16404243">Dafny Runtime Cs</a></li>
-<li class="page"><a href="#page-3939668">Dafny Runtime System Cs</a></li>
-<li class="page"><a href="#page-3789777">Dafny Stdlib</a></li>
+<li class="page"><a href="#page-620841">Dafny Runtime Cs</a></li>
+<li class="page"><a href="#page-12821742">Dafny Runtime System Cs</a></li>
+<li class="page"><a href="#page-15623710">Dafny Stdlib</a></li>
 </ul>
 </li>
 <li class="folder">Trials
 <ul>
-<li class="page"><a href="#page-6013892">Trial Specs</a></li>
+<li class="page"><a href="#page-6446857">Trial Specs</a></li>
 </ul>
 </li>
     </ul>
@@ -232,7 +233,7 @@ body {
 <input type="text" id="filter" placeholder="Filter pages by title or content..." autocomplete="off">
 </div>
 
-        <div class="page" id="page-5052288" data-title="Carapace Doctrine">
+        <div class="page" id="page-16454316" data-title="Carapace Doctrine">
             <h1>Carapace Doctrine</h1>
             <div class="page-path">carapace-doctrine.md</div>
             
@@ -253,7 +254,276 @@ body {
 </ul><p>The skeleton says what should exist. The orchestrator enforces that what exists matches. If something exists that the skeleton doesn&#x27;t name, it&#x27;s rejected. If something the skeleton names is missing, it&#x27;s flagged. That&#x27;s the carapace principle applied fully — not just at the directory level, but at the filename, type reference, and stub-binding level.</p>
         </div>
 
-        <div class="page" id="page-3183247" data-title="Current Abilities">
+        <div class="page" id="page-3721380" data-title="Connector Diagnosis">
+            <h1>Connector Diagnosis</h1>
+            <div class="page-path">connector-diagnosis.md</div>
+            
+            <h1 id="the-connector-diagnosis-how-the-loop-closes">The Connector Diagnosis — How the Loop Closes</h1>
+
+<blockquote><strong>&quot;We should be capturing EVERYTHING in order to troubleshoot and document.&quot;</strong></blockquote>
+
+<h2 id="the-discovery">The Discovery</h2>
+
+<p>Aug 12, 2026. Traced the full data flow from architecture prompt → model → artifact → orchestrator → wiring phase. Found the root cause of the Bluejohn problem: <strong>the carapace doesn&#x27;t carry connector data.</strong> The orchestrator was expected to wire components deterministically from a dependency graph of names alone — no signatures, no connection points, no type mappings. The data was never requested, never produced, never captured. Nothing was lost in transit; nothing existed to capture.</p>
+
+<h2 id="the-triereme-analogy">The Triereme Analogy</h2>
+
+<p>The vision: an ancient Roman finds a trireme kit with instructions. Copies it. Builds a fleet. Becomes unstoppable.</p>
+
+<p>The kit has numbered pieces. Each piece says where it connects — tab A into slot B. You don&#x27;t engineer the connections; the kit specifies them. You build, it floats, you scale.</p>
+
+<p>Posit&#x27;s 17 patterns are the trireme hulls — proven, complete, Z3-verified. But the kit was missing the connection instructions. The architect said &quot;piece A is near piece B&quot; and the orchestrator was expected to figure out how they bolt together. That&#x27;s not a kit — that&#x27;s a pile of planks.</p>
+
+<h2 id="the-data-flow-trace">The Data Flow Trace</h2>
+
+<h3 id="layer-1-the-prompt">Layer 1: The Prompt</h3>
+
+<p><code class="inline">prompts/architecture/1.0.0.md</code> asks the model for:</p>
+<ul><li style="margin-left:0ch"><code class="inline">publicSurface: [&quot;RunPipeline&quot;]</code> — <strong>names only, no signatures</strong></li>
+<li style="margin-left:0ch"><code class="inline">dependencies: [&quot;DagResolver&quot;, &quot;JobScheduler&quot;]</code> — <strong>names only, no connection points</strong></li>
+<li style="margin-left:0ch"><code class="inline">internals: &quot;Coordinates DagResolver, JobScheduler...&quot;</code> — <strong>free-text prose</strong></li>
+
+</ul><p>The model is NEVER asked for:</p>
+<ul><li style="margin-left:0ch">Method signatures (parameter types, return types)</li>
+<li style="margin-left:0ch">Which method on A calls which method on B</li>
+<li style="margin-left:0ch">What data flows between components</li>
+<li style="margin-left:0ch">Type mappings between components</li>
+<li style="margin-left:0ch">Input/output port specifications</li>
+
+</ul><h3 id="layer-2-the-model-output">Layer 2: The Model Output</h3>
+
+<p>Raw DB response for PipelineEngine (T8):</p>
+<pre><code class="language-json">
+{
+  &quot;publicSurface&quot;: [&quot;RunPipeline&quot;],
+  &quot;dependencies&quot;: [&quot;DagResolver&quot;, &quot;JobScheduler&quot;, &quot;StepExecutor&quot;, &quot;ArtifactManager&quot;, &quot;NotificationSystem&quot;],
+  &quot;internals&quot;: &quot;Uses pipeline pattern. Coordinates DagResolver, JobScheduler...&quot;
+}
+</code></pre>
+
+<p>The model gave exactly what was asked for — names and prose. No connection data exists to capture.</p>
+
+<h3 id="layer-3-the-artifact-architecturecontract-">Layer 3: The Artifact (ArchitectureContract)</h3>
+
+<p><code class="inline">Component</code> record captures: <code class="inline">PublicSurface: string[]</code>, <code class="inline">Dependencies: string[]</code>, <code class="inline">Internals: string</code>, <code class="inline">ParametersJson: string?</code></p>
+
+<p>No fields for connector specifications exist in the schema.</p>
+
+<h3 id="layer-4-the-orchestrator-designcontext-snowball-">Layer 4: The Orchestrator (DesignContext snowball)</h3>
+
+<p><code class="inline">DesignComponent</code> carries: Name, Responsibility, Tech, PublicSurface, Internals, Dependencies, Classification, PatternName, StubNames, DafnyContractPath, TestCases, IsVerified</p>
+
+<p><strong>DROPPED vs ArchitectureContract:</strong> <code class="inline">ParametersJson</code>, <code class="inline">Layer</code> — both lost in the mapping at PositOrchestrator.cs line 523-533.</p>
+
+<h3 id="layer-5-generatewiring-what-the-wiring-code-receives-">Layer 5: GenerateWiring (what the wiring code receives)</h3>
+
+<pre><code class="language-csharp">
+GenerateWiring(ArchitectureContract arch, List&lt;(string ModuleName, string CSharpPath)&gt; translatedFiles)
+</code></pre>
+
+<p>It gets:</p>
+<ul><li style="margin-left:0ch"><code class="inline">arch.Components[].PublicSurface</code> → <code class="inline">[&quot;RunPipeline&quot;]</code> (names)</li>
+<li style="margin-left:0ch"><code class="inline">arch.Components[].Dependencies</code> → <code class="inline">[&quot;DagResolver&quot;]</code> (names)</li>
+<li style="margin-left:0ch"><code class="inline">translatedFiles</code> → module name + file path (no parsed signatures)</li>
+
+</ul><p>It does NOT get:</p>
+<ul><li style="margin-left:0ch">Actual method signatures from translated C#</li>
+<li style="margin-left:0ch">Type information</li>
+<li style="margin-left:0ch">Connection specifications (A.method calls B.method with what args?)</li>
+<li style="margin-left:0ch">The pattern&#x27;s actual method names (the pattern provides <code class="inline">HandleRequest</code>; the architect called it <code class="inline">RunPipeline</code>)</li>
+
+</ul><h3 id="the-mismatches">The Mismatches</h3>
+
+<p>Three problems, all fatal to deterministic wiring:</p>
+
+<ul><li><strong>Method names don&#x27;t match.</strong> The architect says <code class="inline">RunPipeline</code>. The pattern provides <code class="inline">HandleRequest</code>. The orchestrator can&#x27;t call a method that doesn&#x27;t exist.</li>
+
+<li><strong>Patterns are sealed capsules.</strong> The <code class="inline">pipeline</code> pattern is self-contained: Parse → Validate → Transform → Store. It has no hooks for calling DagResolver, JobScheduler, or anything external. The dependency graph says &quot;PipelineEngine calls DagResolver&quot; but the pattern body has no place where that call could go.</li>
+
+<li><strong>No shared types.</strong> Each translated Dafny module gets its own <code class="inline">_module</code> namespace with its own <code class="inline">Entity</code>, its own <code class="inline">Result</code>. They can&#x27;t pass data to each other because they don&#x27;t share a type vocabulary.</li>
+
+</ul><h2 id="the-verdict">The Verdict</h2>
+
+<p><strong>It was never asked for.</strong> The data doesn&#x27;t exist at any layer. The architect was never told to produce connector specifications. The schema has no fields for them. The prompt asks for names and prose, and that&#x27;s exactly what came back. Nothing was captured and lost — nothing was ever requested.</p>
+
+<h2 id="the-fix-connector-forms-on-the-carapace">The Fix — Connector Forms on the Carapace</h2>
+
+<p>The carapace needs new fields that the architect fills out. These are the tabs and slots — the connection instructions in the trireme kit.</p>
+
+<h3 id="new-component-fields">New Component Fields</h3>
+
+<ul><li><strong><code class="inline">Connections: ConnectionSpec[]</code></strong> — for each dependency, which method calls which:</li>
+</ul><pre><code class="language-">
+   {
+     fromMethod: &quot;RunPipeline&quot;,
+     toComponent: &quot;DagResolver&quot;,
+     toMethod: &quot;Resolve&quot;,
+     argMapping: &quot;pipeline.jobs → jobs&quot;,
+     returnType: &quot;DAG&quot;
+   }
+</code></pre>
+
+<ul><li><strong><code class="inline">MethodSignatures: MethodSignature[]</code></strong> — the actual signature for each public surface method:</li>
+</ul><pre><code class="language-">
+   {
+     name: &quot;RunPipeline&quot;,
+     params: [{ name: &quot;input&quot;, type: &quot;string&quot; }],
+     returns: { type: &quot;Result&lt;ExecutionResult&gt;&quot; }
+   }
+</code></pre>
+
+<ul><li><strong><code class="inline">SharedTypes: string[]</code></strong> — which types from which module are shared (via Dafny <code class="inline">include</code>)</li>
+
+</ul><h3 id="new-prompt-requirements">New Prompt Requirements</h3>
+
+<p>The architecture prompt must ask the model to produce:</p>
+<ul><li style="margin-left:0ch">Method signatures, not just names</li>
+<li style="margin-left:0ch">Connection specifications — which method calls which, with what arguments</li>
+<li style="margin-left:0ch">Type mappings between components</li>
+<li style="margin-left:0ch">Which pattern method maps to which architect-named method (e.g., <code class="inline">RunPipeline</code> → <code class="inline">HandleRequest</code>)</li>
+
+</ul><h3 id="registry-enhancement">Registry Enhancement</h3>
+
+<p>The pattern registry must expose its actual method signatures so:</p>
+<ul><li style="margin-left:0ch">The architect can see what methods the pattern provides</li>
+<li style="margin-left:0ch">The orchestrator can map architect names to pattern methods</li>
+<li style="margin-left:0ch">The carapace can carry the full connection specification</li>
+
+</ul><h2 id="the-shrunk-pipeline">The Shrunk Pipeline</h2>
+
+<p>The diagnosis revealed something bigger: most of the pipeline phases are unnecessary.</p>
+
+<h3 id="ai-team-thinking-design-">AI Team (thinking, design)</h3>
+
+<table>
+<tr>
+<th>Phase</th>
+<th>Model</th>
+<th>What it does</th>
+</tr>
+<tr>
+<td>Ideation</td>
+<td>AI</td>
+<td>Requirements → concept</td>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>AI</td>
+<td>Decompose, classify, fill carapace WITH connectors</td>
+</tr>
+<tr>
+<td>Design Review</td>
+<td>AI</td>
+<td>Review the design — this IS the design QA</td>
+</tr>
+</table>
+
+<h3 id="code-deterministic-no-model-">Code (deterministic, no model)</h3>
+
+<table>
+<tr>
+<th>Phase</th>
+<th>How</th>
+<th>What it does</th>
+</tr>
+<tr>
+<td>Assemble</td>
+<td>Orchestrator (code)</td>
+<td>Wire from carapace connector specs</td>
+</tr>
+<tr>
+<td>Verify</td>
+<td>Z3 (code)</td>
+<td>Prove contracts consistent</td>
+</tr>
+<tr>
+<td>Translate</td>
+<td>Dafny→C# (code)</td>
+<td>With <code class="inline">--test-assumptions Externs</code> → contracts become runtime checks</td>
+</tr>
+<tr>
+<td>Test</td>
+<td>Bot harness (code)</td>
+<td>Push data through CLI, exercise GUI via hotkeys, compare to spec</td>
+</tr>
+</table>
+
+<h3 id="result">Result</h3>
+
+<pre><code class="language-">
+Pass  → carve to registry → done
+Fail  → retry (several tries, AI team adjusts)
+Still fails → human opens it up
+</code></pre>
+
+<h3 id="phases-eliminated">Phases Eliminated</h3>
+
+<ul><li style="margin-left:0ch"><strong>Pseudocode</strong> — gone. The carapace IS the design.</li>
+<li style="margin-left:0ch"><strong>Dafny Implementation (Imp)</strong> — gone. Patterns ship with pre-written Z3-proven bodies. If the pattern fits, no model call needed.</li>
+<li style="margin-left:0ch"><strong>C# Implementation (Imp)</strong> — gone. Stub caps are registry-driven, mechanical. Wiring is deterministic from connector specs.</li>
+<li style="margin-left:0ch"><strong>QA phase (model)</strong> — gone. Replaced by Design Review (upstream, AI) + bot harness (downstream, deterministic).</li>
+
+</ul><p>The model&#x27;s job is <em>thinking</em> — ideation, architecture, design review. Everything after that is code. The AI designs the ship. The orchestrator builds it from the kit. The bot sails it to see if it floats.</p>
+
+<h2 id="the-qa-automation-insight">The QA Automation Insight</h2>
+
+<p>The GUI is testable because every control is keyboard-reachable. A bot (script, not LLM) can:</p>
+<ul><li>Map the GUI — every hotkey → every control</li>
+<li>Feed test data through each control</li>
+<li>Capture the output</li>
+<li>Compare to expected result from the spec</li>
+<li>Pass/fail — fully automated, no human in the loop</li>
+
+</ul><p>This is deterministic. The bot is a script: push button, get output, compare. No bleary-eyed humans.</p>
+
+<h2 id="the-closed-loop">The Closed Loop</h2>
+
+<pre><code class="language-">
+SEED       → 17 proven atoms in the registry (jigsaw pieces)
+ASSEMBLE   → orchestrator wires from carapace connectors (deterministic)
+TEST       → bot pushes data through CLI, exercises GUI, captures output (deterministic)
+PROVE      → output matches spec → it works (deterministic comparison)
+CARVE      → pull the proven assembly back into the registry
+</code></pre>
+
+<p>Both blockers are now addressed:</p>
+<ul><li style="margin-left:0ch"><strong>Without connectors</strong>, nothing assembles → <strong>fix: connector forms on the carapace</strong></li>
+<li style="margin-left:0ch"><strong>Without automated QA</strong>, nothing gets proven → <strong>fix: bot harness with hotkey mapping</strong></li>
+
+</ul><p>With both, the cycle runs end to end. Every cycle makes the registry richer. The registry grows organically:</p>
+
+<pre><code class="language-">
+17 atoms → proven 2-component molecules → proven compounds → proven systems
+</code></pre>
+
+<p>Eventually the AI selects from large proven segments, not atoms. The orchestrator snaps them together. The bot exercises the result. The cycle accelerates.</p>
+
+<h2 id="runtime-contract-checking-test-assumptions-externs-">Runtime Contract Checking (<code class="inline">--test-assumptions Externs</code>)</h2>
+
+<p>Dafny can emit runtime contract checks for <code class="inline">{:extern}</code> methods in the translated C#. When enabled, the translated C# checks <code class="inline">requires</code> and <code class="inline">ensures</code> at runtime. If a stub violates the contract, it throws. Works across all 7 target languages.</p>
+
+<p><strong>Status: HOPEFUL but NOT YET VERIFIED.</strong> This needs to be tested before relying on it. If it works, the proof follows the code all the way to execution — Z3 proves the logic, runtime checks enforce the contracts on the stubs. Another deterministic check, not a model judgment.</p>
+
+<h2 id="next-steps">Next Steps</h2>
+
+<ul><li><strong>Add connector fields to the Component record</strong> — <code class="inline">Connections</code>, <code class="inline">MethodSignatures</code>, <code class="inline">SharedTypes</code></li>
+<li><strong>Update the architecture prompt</strong> — ask the model to fill out connector specs</li>
+<li><strong>Expose pattern method signatures in the registry</strong> — so the architect can map names to real methods</li>
+<li><strong>Rewrite GenerateWiring</strong> — read connector specs from the carapace, generate calls deterministically</li>
+<li><strong>Verify <code class="inline">--test-assumptions Externs</code></strong> — test it standalone before relying on it</li>
+<li><strong>Build the bot harness</strong> — CLI data pushing + GUI hotkey mapping + output comparison</li>
+<li><strong>Build the Testmaster</strong> — Blazor desktop with prompt selection sheet (left) + proof dashboard (right)</li>
+<li><strong>Run the loop</strong> — assemble T8, test, prove, carve</li>
+
+</ul><h2 id="see-also">See Also</h2>
+
+<ul><li style="margin-left:0ch"><code class="inline">wiki/proof-methodology.md</code> — seed → assemble → test → prove → carve flow</li>
+<li style="margin-left:0ch"><code class="inline">wiki/carapace-doctrine.md</code> — &quot;Computers should know what I MEANT to say&quot;</li>
+<li style="margin-left:0ch"><code class="inline">wiki/current-abilities.md</code> — 17 patterns, 6 stubs, trial scorecard</li>
+<li style="margin-left:0ch"><code class="inline">wiki/handoff-2026-08-12.md</code> — Bluejohn discovery, wiring scaffold, session handoff</li></ul>
+        </div>
+
+        <div class="page" id="page-12620737" data-title="Current Abilities">
             <h1>Current Abilities</h1>
             <div class="page-path">current-abilities.md</div>
             
@@ -498,31 +768,40 @@ body {
 
 <h2 id="what-we-are-about-to-do">What We Are About To Do</h2>
 
-<h3 id="prompt-selection-sheet-user-requirements-checklist-">Prompt Selection Sheet (User Requirements Checklist)</h3>
+<h3 id="the-pipeline-has-shrunk">The Pipeline Has Shrunk</h3>
 
-<p>Instead of free-form spec writing, present a structured menu of common software requirements. The user selects what they need. Each selection has a cost (complexity, tokens, panels). The price scales with selections.</p>
+<p>The connector diagnosis (Aug 12) revealed that most pipeline phases are unnecessary. The model&#x27;s job is <em>thinking</em>; everything after architecture is code.</p>
 
-<p><strong>Common software requirements (checklist):</strong></p>
-<ul><li style="margin-left:0ch">User authentication (login, roles, permissions)</li>
-<li style="margin-left:0ch">Data entry (forms, validation, CRUD)</li>
-<li style="margin-left:0ch">Reporting (summaries, exports, charts)</li>
-<li style="margin-left:0ch">Notifications (email, SMS, push)</li>
-<li style="margin-left:0ch">Search and filtering</li>
-<li style="margin-left:0ch">File import/export</li>
-<li style="margin-left:0ch">API integration (third-party services)</li>
-<li style="margin-left:0ch">Audit logging</li>
-<li style="margin-left:0ch">Multi-user concurrency</li>
-<li style="margin-left:0ch">Scheduling and reminders</li>
-<li style="margin-left:0ch">Dashboard/analytics</li>
-<li style="margin-left:0ch">Workflow automation</li>
+<p><strong>AI team (design, thinking):</strong></p>
+<ul><li style="margin-left:0ch">Ideation → Architecture (carapace WITH connector specs) → Design Review (= design QA)</li>
 
-</ul><p>The user picks from the menu. The architect becomes a configurator, not an interpreter. No guessing, no scope creep — ordered from the menu, here&#x27;s what it costs, here&#x27;s what you get.</p>
+</ul><p><strong>Code (deterministic, no model):</strong></p>
+<ul><li style="margin-left:0ch">Orchestrator assembles from carapace connector specs (wires components)</li>
+<li style="margin-left:0ch">Z3 verifies contracts</li>
+<li style="margin-left:0ch">Dafny → C# translation (with <code class="inline">--test-assumptions Externs</code> → runtime contract checks)</li>
+<li style="margin-left:0ch">Bot harness tests (pushes data through CLI, exercises GUI via hotkeys, compares to spec)</li>
 
-<h3 id="automated-proof-gui-test-harness-">Automated Proof (GUI Test Harness)</h3>
+</ul><p><strong>Result:</strong></p>
+<ul><li style="margin-left:0ch">Pass → carve to registry</li>
+<li style="margin-left:0ch">Fail → retry (several tries, AI team adjusts)</li>
+<li style="margin-left:0ch">Still fails → human opens it up</li>
+
+</ul><p><strong>Eliminated phases:</strong> Pseudocode, Dafny Implementation (Imp), C# Implementation (Imp), QA phase (model). Design Review IS the QA. The bot harness IS the test.</p>
+
+<h3 id="connector-forms-on-the-carapace">Connector Forms on the Carapace</h3>
+
+<p>The carapace needs new fields:</p>
+<ul><li style="margin-left:0ch"><code class="inline">Connections</code> — which method on A calls which method on B, with argument mappings</li>
+<li style="margin-left:0ch"><code class="inline">MethodSignatures</code> — actual parameter types and return types, not just names</li>
+<li style="margin-left:0ch"><code class="inline">SharedTypes</code> — which types are shared across modules (via Dafny <code class="inline">include</code>)</li>
+
+</ul><p>The architecture prompt must ask the model to fill these out. The pattern registry must expose actual method signatures so the architect can map names to real pattern methods. See <code class="inline">wiki/connector-diagnosis.md</code>.</p>
+
+<h3 id="automated-proof-bot-harness-">Automated Proof (Bot Harness)</h3>
 
 <p>Every panel has a CLI (built-in stub cap). The GUI sits on top of the CLI — same commands, same entry points. Every field, button, and data entry point is keyboard-reachable.</p>
 
-<p>The test harness:</p>
+<p>The test harness (bot, not LLM):</p>
 <ul><li>Map the GUI (every hotkey → every control)</li>
 <li>Feed test data through each control</li>
 <li>Capture the output</li>
@@ -538,15 +817,20 @@ body {
 
 </ul><p>One application. Two functions. The user selects requirements, the program is built, the test is launched, the proof is displayed. All in one place.</p>
 
+<h3 id="verify-test-assumptions-externs-">Verify <code class="inline">--test-assumptions Externs</code></h3>
+
+<p>Dafny can emit runtime contract checks for <code class="inline">{:extern}</code> methods. Status: hopeful but not yet verified. Needs standalone testing before relying on it. If it works, contracts follow the code to execution.</p>
+
 <h2 id="see-also">See Also</h2>
 
-<ul><li style="margin-left:0ch"><code class="inline">wiki/proof-methodology.md</code> — the seed → assemble → test → prove → carve flow</li>
+<ul><li style="margin-left:0ch"><code class="inline">wiki/connector-diagnosis.md</code> — the data flow trace, the shrunk pipeline, the closed loop</li>
+<li style="margin-left:0ch"><code class="inline">wiki/proof-methodology.md</code> — the seed → assemble → test → prove → carve flow</li>
 <li style="margin-left:0ch"><code class="inline">wiki/carapace-doctrine.md</code> — &quot;Computers should know what I MEANT to say&quot;</li>
 <li style="margin-left:0ch"><code class="inline">AGENTS.md</code> — project context and locked decisions</li>
-<li style="margin-left:0ch"><code class="inline">wiki/handoff-2026-08-11-supplemental.md</code> — session handoff with moratorium list</li></ul>
+<li style="margin-left:0ch"><code class="inline">wiki/handoff-2026-08-12.md</code> — Bluejohn discovery, wiring scaffold, session handoff</li></ul>
         </div>
 
-        <div class="page" id="page-1942238" data-title="Desktop Port Plan">
+        <div class="page" id="page-11874093" data-title="Desktop Port Plan">
             <h1>Desktop Port Plan</h1>
             <div class="page-path">desktop-port-plan.md</div>
             
@@ -954,7 +1238,7 @@ body {
 </ul>
         </div>
 
-        <div class="page" id="page-7606430" data-title="Handoff 2026 08 07">
+        <div class="page" id="page-13456054" data-title="Handoff 2026 08 07">
             <h1>Handoff 2026 08 07</h1>
             <div class="page-path">handoff-2026-08-07.md</div>
             
@@ -1332,7 +1616,7 @@ body {
 <li><strong>I/O boundary is the proof boundary</strong> — pure logic in Dafny, side effects in C#. The function signature is the membrane.</li></ul>
         </div>
 
-        <div class="page" id="page-14069938" data-title="Posit Handoff Sheet — Aug 8, 2026">
+        <div class="page" id="page-4590840" data-title="Posit Handoff Sheet — Aug 8, 2026">
             <h1>Posit Handoff Sheet — Aug 8, 2026</h1>
             <div class="page-path">handoff-2026-08-08.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: handoff</span> · <span class='meta-item'><b>tags</b>: [posit, handoff, dafny, pipeline, trials, carapace, validation]</span> · <span class='meta-item'><b>component</b>: all</span> · <span class='meta-item'><b>version</b>: 1.0.2</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -1880,7 +2164,7 @@ posit verify &lt;session-id&gt;
 </ul>
         </div>
 
-        <div class="page" id="page-1646227" data-title="Handoff 2026 08 11 Supplemental">
+        <div class="page" id="page-852399" data-title="Handoff 2026 08 11 Supplemental">
             <h1>Handoff 2026 08 11 Supplemental</h1>
             <div class="page-path">handoff-2026-08-11-supplemental.md</div>
             
@@ -2120,7 +2404,7 @@ posit verify &lt;session-id&gt;
 <li style="margin-left:0ch"><strong>Commit count:</strong> ~100+</li></ul>
         </div>
 
-        <div class="page" id="page-12486159" data-title="Handoff 2026 08 12">
+        <div class="page" id="page-13916207" data-title="Handoff 2026 08 12">
             <h1>Handoff 2026 08 12</h1>
             <div class="page-path">handoff-2026-08-12.md</div>
             
@@ -2373,7 +2657,7 @@ case &quot;start&quot;:
 <li><strong>Bluejohn</strong> — looks like stone, crumbles when you touch it. The trial artifacts looked like programs. They compiled. They had CLIs. But the CLIs were hollow shells that printed messages instead of calling logic.</li></ul>
         </div>
 
-        <div class="page" id="page-10455172" data-title="Proof Methodology">
+        <div class="page" id="page-14717490" data-title="Proof Methodology">
             <h1>Proof Methodology</h1>
             <div class="page-path">proof-methodology.md</div>
             
@@ -2465,12 +2749,24 @@ case &quot;start&quot;:
 <li style="margin-left:0ch">Option B: DONE (io-shell components get Dafny skeletons — every component has a contract)</li>
 <li style="margin-left:0ch">Item 3 (xUnit tests): answered by runtime verification — the program doing what the spec asked IS the test</li>
 <li style="margin-left:0ch">Item 1 (contract review): the user-facing requirements list bridges this</li>
-<li style="margin-left:0ch">Item 11 (cotton candy): the hard part — but the handle is: CLI + GUI + data + expected results</li>
+<li style="margin-left:0ch">Item 11 (cotton candy): <strong>ROOT CAUSE FOUND</strong> — the carapace has no connector data. The orchestrator can&#x27;t wire components because the architect was never asked for connection specifications. See <code class="inline">wiki/connector-diagnosis.md</code>.</li>
 <li style="margin-left:0ch">Item 12 (Testmaster): the Blazor desktop where the test is launched and results are shown</li>
-<li style="margin-left:0ch">Item 13 (harness → JSON): the harness pushes data and captures output as structured proof</li></ul>
+<li style="margin-left:0ch">Item 13 (harness → JSON): the harness pushes data and captures output as structured proof</li>
+
+</ul><h2 id="the-closed-loop-aug-12-2026-">The Closed Loop (Aug 12, 2026)</h2>
+
+<p>Two insights closed the loop:</p>
+
+<ul><li><strong>Connector forms on the carapace</strong> — the architect fills out not just component names and dependencies, but method signatures, connection specs (A.method calls B.method with what args), and shared types. The orchestrator reads these and wires deterministically. No model judgment at wiring time.</li>
+
+<li><strong>Automated QA via bot harness</strong> — every GUI control is keyboard-reachable. A bot (script, not LLM) maps hotkeys, pushes data, captures output, compares to spec. Fully deterministic, no human.</li>
+
+</ul><p>The pipeline shrinks: AI does thinking (ideation, architecture, design review). Code does everything else (assemble, verify, translate, test). See <code class="inline">wiki/connector-diagnosis.md</code> for the full diagnosis and the shrunk pipeline.</p>
+
+<p>The registry grows organically: 17 atoms → proven molecules → proven compounds → proven systems. Each cycle makes the next assembly richer.</p>
         </div>
 
-        <div class="page" id="page-2478111" data-title="Posit Architecture">
+        <div class="page" id="page-2602788" data-title="Posit Architecture">
             <h1>Posit Architecture</h1>
             <div class="page-path">architecture\posit-architecture.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: architecture</span> · <span class='meta-item'><b>tags</b>: [posit, architecture, pipeline, dafny]</span> · <span class='meta-item'><b>component</b>: core</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -3328,7 +3624,7 @@ QA fails io-shell module
 <li style="margin-left:0ch">Compare: modules verified, verification rate, QA prompt size, total pipeline time</li></ul>
         </div>
 
-        <div class="page" id="page-16040590" data-title="Dafny Contract Templates">
+        <div class="page" id="page-12694875" data-title="Dafny Contract Templates">
             <h1>Dafny Contract Templates</h1>
             <div class="page-path">contracts\dafny-contract-templates.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: pattern</span> · <span class='meta-item'><b>tags</b>: [dafny, contracts, templates, architect]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 1.0.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-06</span></div>
@@ -3494,7 +3790,7 @@ public partial class FileProcessor {
 <li>Predicates have bodies (they&#x27;re definitions). Methods, functions, and constructors are bodyless (they&#x27;re specs). <code class="inline">{:axiom}</code> goes on bodyless methods; <code class="inline">{:extern}</code> goes on I/O portals.</li></ul>
         </div>
 
-        <div class="page" id="page-2854993" data-title="Posit Architecture Evolution Map">
+        <div class="page" id="page-1397186" data-title="Posit Architecture Evolution Map">
             <h1>Posit Architecture Evolution Map</h1>
             <div class="page-path">evolution\architecture-evolution-map.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: design</span> · <span class='meta-item'><b>tags</b>: [architecture, evolution, registry, vector-db, vision]</span> · <span class='meta-item'><b>component</b>: posit</span> · <span class='meta-item'><b>version</b>: 0.1</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-08</span></div>
@@ -4032,7 +4328,7 @@ Each box = a locale (designed independently).
 
         </div>
 
-        <div class="page" id="page-2384329" data-title="Plans\Dafny First Pipeline Plan">
+        <div class="page" id="page-8789852" data-title="Plans\Dafny First Pipeline Plan">
             <h1>Plans\Dafny First Pipeline Plan</h1>
             <div class="page-path">plans\dafny-first-pipeline-plan.md</div>
             
@@ -4322,7 +4618,7 @@ public class CsvFileReader
 <li><strong>Pattern registry</strong> — architect selects from pre-cut registry of hull shapes (patterns) and I/O portals (stubs), not invents from scratch. 9 patterns + 6 stub files, all Z3-verified. 2 from column A, 6 from column B.</li></ul>
         </div>
 
-        <div class="page" id="page-3727178" data-title="DafnyRuntime.cs — C# Runtime Reference">
+        <div class="page" id="page-6879355" data-title="DafnyRuntime.cs — C# Runtime Reference">
             <h1>DafnyRuntime.cs — C# Runtime Reference</h1>
             <div class="page-path">reference\dafny-runtime-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -6303,7 +6599,7 @@ namespace Dafny {
 
         </div>
 
-        <div class="page" id="page-7385265" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
+        <div class="page" id="page-5382288" data-title="DafnyRuntimeSystemModule.cs — C# System Module Reference">
             <h1>DafnyRuntimeSystemModule.cs — C# System Module Reference</h1>
             <div class="page-path">reference\dafny-runtime-system-cs.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [csharp, dafny, runtime, reference]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -10006,7 +10302,7 @@ namespace _System {
 
         </div>
 
-        <div class="page" id="page-15405703" data-title="Dafny Standard Library Reference">
+        <div class="page" id="page-13172248" data-title="Dafny Standard Library Reference">
             <h1>Dafny Standard Library Reference</h1>
             <div class="page-path">reference\dafny-stdlib.md</div>
             <div class='page-meta'><span class='meta-item'><b>type</b>: reference</span> · <span class='meta-item'><b>tags</b>: [dafny, stdlib, reference, types, contracts]</span> · <span class='meta-item'><b>component</b>: dafny</span> · <span class='meta-item'><b>version</b>: 4.11.0</span> · <span class='meta-item'><b>last_updated</b>: 2026-08-07</span></div>
@@ -28804,7 +29100,7 @@ module Std.Wrappers {
 
         </div>
 
-        <div class="page" id="page-6225910" data-title="Trials\Trial Specs">
+        <div class="page" id="page-3970398" data-title="Trials\Trial Specs">
             <h1>Trials\Trial Specs</h1>
             <div class="page-path">trials\trial-specs.md</div>
             

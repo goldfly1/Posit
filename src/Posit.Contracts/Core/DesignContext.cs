@@ -1,3 +1,5 @@
+using Posit.Contracts.Artifacts;
+
 namespace Posit.Contracts.Core;
 
 /// <summary>
@@ -194,6 +196,30 @@ public record DesignComponent(string Id, string Name, string Responsibility, str
     /// skip QA test stubs and edge case patterns — the proof IS the test.
     /// </summary>
     public bool IsVerified { get; init; }
+
+    /// <summary>
+    /// Pattern parameters (JSON). Carried from ArchitectureContract.
+    /// Was previously dropped during orchestrator mapping.
+    /// </summary>
+    public string? ParametersJson { get; init; }
+
+    /// <summary>
+    /// Method signatures for public surface methods — actual parameter types
+    /// and return types, not just names. The orchestrator uses these for
+    /// deterministic wiring.
+    /// </summary>
+    public MethodSignature[] MethodSignatures { get; init; } = [];
+
+    /// <summary>
+    /// Connection specifications — how this component calls its dependencies.
+    /// The orchestrator reads these to generate wiring code deterministically.
+    /// </summary>
+    public ConnectionSpec[] Connections { get; init; } = [];
+
+    /// <summary>
+    /// Types shared with other modules via Dafny `include`.
+    /// </summary>
+    public SharedTypeRef[] SharedTypes { get; init; } = [];
 }
 
 public record DesignTestCase(string Id, string Name, string TargetType, string Description, string ExpectedBehavior);

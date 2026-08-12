@@ -71,31 +71,40 @@ These are future expansion targets, not current capabilities. The architecture s
 
 ## What We Are About To Do
 
-### Prompt Selection Sheet (User Requirements Checklist)
+### The Pipeline Has Shrunk
 
-Instead of free-form spec writing, present a structured menu of common software requirements. The user selects what they need. Each selection has a cost (complexity, tokens, panels). The price scales with selections.
+The connector diagnosis (Aug 12) revealed that most pipeline phases are unnecessary. The model's job is *thinking*; everything after architecture is code.
 
-**Common software requirements (checklist):**
-- User authentication (login, roles, permissions)
-- Data entry (forms, validation, CRUD)
-- Reporting (summaries, exports, charts)
-- Notifications (email, SMS, push)
-- Search and filtering
-- File import/export
-- API integration (third-party services)
-- Audit logging
-- Multi-user concurrency
-- Scheduling and reminders
-- Dashboard/analytics
-- Workflow automation
+**AI team (design, thinking):**
+- Ideation → Architecture (carapace WITH connector specs) → Design Review (= design QA)
 
-The user picks from the menu. The architect becomes a configurator, not an interpreter. No guessing, no scope creep — ordered from the menu, here's what it costs, here's what you get.
+**Code (deterministic, no model):**
+- Orchestrator assembles from carapace connector specs (wires components)
+- Z3 verifies contracts
+- Dafny → C# translation (with `--test-assumptions Externs` → runtime contract checks)
+- Bot harness tests (pushes data through CLI, exercises GUI via hotkeys, compares to spec)
 
-### Automated Proof (GUI Test Harness)
+**Result:**
+- Pass → carve to registry
+- Fail → retry (several tries, AI team adjusts)
+- Still fails → human opens it up
+
+**Eliminated phases:** Pseudocode, Dafny Implementation (Imp), C# Implementation (Imp), QA phase (model). Design Review IS the QA. The bot harness IS the test.
+
+### Connector Forms on the Carapace
+
+The carapace needs new fields:
+- `Connections` — which method on A calls which method on B, with argument mappings
+- `MethodSignatures` — actual parameter types and return types, not just names
+- `SharedTypes` — which types are shared across modules (via Dafny `include`)
+
+The architecture prompt must ask the model to fill these out. The pattern registry must expose actual method signatures so the architect can map names to real pattern methods. See `wiki/connector-diagnosis.md`.
+
+### Automated Proof (Bot Harness)
 
 Every panel has a CLI (built-in stub cap). The GUI sits on top of the CLI — same commands, same entry points. Every field, button, and data entry point is keyboard-reachable.
 
-The test harness:
+The test harness (bot, not LLM):
 1. Map the GUI (every hotkey → every control)
 2. Feed test data through each control
 3. Capture the output
@@ -111,9 +120,14 @@ The prompt selection sheet and the automated proof harness share the same user G
 
 One application. Two functions. The user selects requirements, the program is built, the test is launched, the proof is displayed. All in one place.
 
+### Verify `--test-assumptions Externs`
+
+Dafny can emit runtime contract checks for `{:extern}` methods. Status: hopeful but not yet verified. Needs standalone testing before relying on it. If it works, contracts follow the code to execution.
+
 ## See Also
 
+- `wiki/connector-diagnosis.md` — the data flow trace, the shrunk pipeline, the closed loop
 - `wiki/proof-methodology.md` — the seed → assemble → test → prove → carve flow
 - `wiki/carapace-doctrine.md` — "Computers should know what I MEANT to say"
 - `AGENTS.md` — project context and locked decisions
-- `wiki/handoff-2026-08-11-supplemental.md` — session handoff with moratorium list
+- `wiki/handoff-2026-08-12.md` — Bluejohn discovery, wiring scaffold, session handoff

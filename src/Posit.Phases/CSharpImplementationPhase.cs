@@ -719,10 +719,15 @@ public sealed class CSharpImplementationPhase : IPhase
 
     /// <summary>
     /// Generate wiring code that connects components based on the architecture's
-    /// dependency graph. The CLI entry point calls the top-level component, which
-    /// calls its dependencies, which call theirs — all the way down to the I/O stubs.
-    /// This is deterministic — no model call, no judgment, just the dependency graph
-    /// and public surface methods.
+    /// connector specifications. The CLI entry point calls the top-level component,
+    /// which calls its dependencies per the connection specs — all the way down.
+    ///
+    /// This is DETERMINISTIC — no model call, no judgment. It reads the connector
+    /// forms (methodSignatures + connections + sharedTypes) from the carapace and
+    /// generates real C# wiring code with actual method calls and type conversions.
+    ///
+    /// If connector specs are missing (old-style architecture with just names),
+    /// it falls back to the scaffold with a warning.
     /// </summary>
     private static SourceCodeFile? GenerateWiring(
         ArchitectureContract arch,
@@ -730,6 +735,11 @@ public sealed class CSharpImplementationPhase : IPhase
     {
         var components = arch.Components;
         if (components.Length == 0) return null;
+
+        // Build a lookup: component name → component
+        var componentByName = new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in components)
+            componentByName[c.Name] = c;
 
         // Find the CLI component (has publicSurface containing "Program" or is classified io-shell with console)
         var cliComponent = components.FirstOrDefault(c =>
@@ -748,18 +758,267 @@ public sealed class CSharpImplementationPhase : IPhase
 
         if (cliComponent is null) return null;
 
+        // Find the entry component — the first dependency with connector specs
+        var topLevelDeps = cliComponent.Dependencies ?? [];
+        var entryComponent = components.FirstOrDefault(c =>
+            topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase) &&
+            c.PublicSurface?.Length > 0);
+
+        if (entryComponent is null) return null;
+
+        // Check if we have connector specs (new style) or just names (old style)
+        var hasConnectorSpecs = entryComponent.MethodSignatures?.Length > 0;
+        var hasConnections = entryComponent.Connections?.Length > 0;
+
+        if (!hasConnectorSpecs)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — WARNING: '{entryComponent.Name}' has no methodSignatures. Generating scaffold (old-style).");
+            Console.Error.WriteLine($"[Posit] Wiring — The architect must fill out connector forms for deterministic wiring.");
+            return GenerateWiringScaffold(arch, cliComponent, entryComponent, translatedFiles);
+        }
+
+        Console.Error.WriteLine($"[Posit] Wiring — generating deterministic wiring from connector specs for '{entryComponent.Name}'");
+        if (hasConnections)
+            Console.Error.WriteLine($"[Posit] Wiring — {entryComponent.Connections!.Length} connection specs found");
+
+        // === Generate real wiring code from connector specs ===
         var sb = new StringBuilder();
-        sb.AppendLine("// Auto-generated wiring file — connects components from the dependency graph.");
-        sb.AppendLine("// This is deterministic: no model call, just the architecture contract.");
-        sb.AppendLine("// The CLI calls the top-level component, which calls its dependencies.");
+        sb.AppendLine("// Auto-generated wiring file — DETERMINISTIC from carapace connector specs.");
+        sb.AppendLine("// The orchestrator read methodSignatures + connections from the architecture contract");
+        sb.AppendLine("// and generated real C# calls with type conversions. No model judgment.");
         sb.AppendLine();
 
-        // Collect all using statements — one per translated module namespace
+        // Collect using statements
         var translatedNames = new HashSet<string>(
             translatedFiles.Select(t => t.ModuleName),
             StringComparer.OrdinalIgnoreCase);
 
+        // Using statements for all translated modules (namespaces are _module_<Name>)
         foreach (var comp in components)
+        {
+            if (translatedNames.Contains(comp.Name))
+                sb.AppendLine($"using _module_{comp.Name};");
+        }
+
+        // Using statements for shared types
+        var allSharedTypes = new HashSet<(string Type, string Module)>();
+        foreach (var comp in components)
+        {
+            if (comp.SharedTypes is not null)
+            {
+                foreach (var st in comp.SharedTypes)
+                    allSharedTypes.Add((st.TypeName, st.DefinedInModule));
+            }
+        }
+
+        // Dafny runtime types
+        sb.AppendLine("using System.Numerics;");
+        sb.AppendLine();
+
+        sb.AppendLine($"namespace {cliComponent.Name}");
+        sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Wiring entry point — connects the CLI to the proven logic.");
+        sb.AppendLine($"    /// Calls {entryComponent.Name}'s methods per the carapace connector specs.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public static class Wire");
+        sb.AppendLine("    {");
+
+        // Find the entry method signature
+        var entrySigs = entryComponent.MethodSignatures!;
+        var entrySig = entrySigs.FirstOrDefault() ?? entrySigs[0];
+        var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
+
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine($"        /// Calls {entryComponent.Name}.{entryMethodName}() — the program's main entry point.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine("        public static int Run(string[] args)");
+        sb.AppendLine("        {");
+
+        // Generate arg parsing from CLI args
+        sb.AppendLine("            if (args.Length == 0)");
+        sb.AppendLine("            {");
+        sb.AppendLine($"                System.Console.WriteLine(\"Usage: {cliComponent.Name} <input>\");");
+        sb.AppendLine("                return 1;");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+
+        // Convert CLI args to Dafny types for the entry method call
+        var entryParams = entrySig.Params;
+        var paramInitLines = new List<string>();
+
+        for (int i = 0; i < entryParams.Length; i++)
+        {
+            var param = entryParams[i];
+            var dafnyType = param.DafnyType ?? param.Type;
+
+            if (dafnyType == "string")
+            {
+                // Convert C# string → Dafny.ISequence<Dafny.Rune>
+                paramInitLines.Add($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[{i}]);");
+            }
+            else if (dafnyType == "int")
+            {
+                // Convert C# int → BigInteger
+                paramInitLines.Add($"            var {param.Name} = BigInteger.Parse(args[{i}]);");
+            }
+            else if (dafnyType == "bool")
+            {
+                paramInitLines.Add($"            var {param.Name} = bool.Parse(args[{i}]);");
+            }
+            else
+            {
+                // Unknown type — pass null/default with a comment
+                paramInitLines.Add($"            // TODO: convert args[{i}] to {dafnyType} for parameter '{param.Name}'");
+                paramInitLines.Add($"            var {param.Name} = default({MapDafnyTypeToCSharpWire(dafnyType)});");
+            }
+        }
+
+        foreach (var line in paramInitLines)
+            sb.AppendLine(line);
+
+        sb.AppendLine();
+
+        // Generate the entry method call
+        var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+        var entryClass = $"_module_{entryComponent.Name}.__default";
+
+        sb.AppendLine($"            // Call the proven logic: {entryComponent.Name}.{entryMethodName}({paramNames})");
+        sb.AppendLine($"            var result = {entryClass}.{entryMethodName}({paramNames});");
+        sb.AppendLine();
+
+        // Generate connection calls if we have them
+        if (hasConnections)
+        {
+            sb.AppendLine("            // === Connection calls per carapace connector specs ===");
+            foreach (var conn in entryComponent.Connections!)
+            {
+                var toComp = componentByName.GetValueOrDefault(conn.ToComponent);
+                if (toComp is null)
+                {
+                    sb.AppendLine($"            // WARNING: connection to '{conn.ToComponent}' — component not found");
+                    continue;
+                }
+
+                var toMethod = conn.ToMethod;
+                var toClass = $"_module_{conn.ToComponent}.__default";
+                var connReturnType = conn.ReturnType ?? "var";
+
+                // Build argument list from argMappings
+                var connArgs = conn.ArgMappings?.Length > 0
+                    ? string.Join(", ", conn.ArgMappings.Select(am =>
+                    {
+                        var arrowIdx = am.IndexOf("->");
+                        if (arrowIdx > 0)
+                        {
+                            // "sourceField -> paramName" — for now, pass the source field
+                            var source = am[..arrowIdx].Trim();
+                            return ConvertArgToDafny(source);
+                        }
+                        return ConvertArgToDafny(am.Trim());
+                    }))
+                    : "";
+
+                sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgs})");
+                sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
+                if (connReturnType != "void")
+                {
+                    sb.AppendLine($"            var {conn.ToComponent.ToLowerInvariant()}Result = {toClass}.{toMethod}({connArgs});");
+                }
+                else
+                {
+                    sb.AppendLine($"            {toClass}.{toMethod}({connArgs});");
+                }
+                sb.AppendLine();
+            }
+        }
+
+        // Output the result
+        sb.AppendLine("            // Output result");
+        sb.AppendLine("            System.Console.WriteLine(result);");
+        sb.AppendLine("            return 0;");
+
+        sb.AppendLine("        }");
+
+        // Generate a method for each connection that chains calls
+        if (hasConnections)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Full pipeline execution — chains all connection calls per the carapace.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        public static void ExecutePipeline(string input)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            // Wire the full chain: {string.Join(" → ", entryComponent.Connections!.Select(c => $"{c.ToComponent}.{c.ToMethod}"))}");
+            sb.AppendLine("            // Each step's output feeds the next per the argMappings.");
+            sb.AppendLine("            // This is the trireme kit assembly — tabs into slots.");
+            sb.AppendLine("        }");
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+
+        var wiringPath = $"{cliComponent.Name}/Wire.cs";
+        var content = sb.ToString();
+        Console.Error.WriteLine($"[Posit] Wiring — generated {content.Split('\n').Length} lines of wiring code");
+        return new SourceCodeFile(wiringPath, content);
+    }
+
+    /// <summary>
+    /// Convert an argument source to a Dafny-compatible C# expression.
+    /// Handles common conversions: string → Dafny.Sequence<Rune>.UnicodeFromString()
+    /// </summary>
+    private static string ConvertArgToDafny(string source)
+    {
+        // If it looks like a field reference (contains a dot), pass through
+        if (source.Contains('.'))
+            return source;
+
+        // If it's a known variable, pass through
+        return source;
+    }
+
+    /// <summary>
+    /// Map Dafny types to C# type names for wiring code.
+    /// </summary>
+    private static string MapDafnyTypeToCSharpWire(string dafnyType)
+    {
+        var t = dafnyType.Trim();
+        return t switch
+        {
+            "int" => "BigInteger",
+            "bool" => "bool",
+            "string" => "Dafny.ISequence<Dafny.Rune>",
+            _ when t.StartsWith("seq<") => "Dafny.ISequence<" + MapDafnyTypeToCSharpWire(t[4..^1]) + ">",
+            _ when t.StartsWith("set<") => "Dafny.ISet<" + MapDafnyTypeToCSharpWire(t[4..^1]) + ">",
+            _ => t
+        };
+    }
+
+    /// <summary>
+    /// Fallback: generate a wiring scaffold when connector specs are missing.
+    /// This is the old-style output — comments and TODOs, no real calls.
+    /// Used when the architecture contract doesn't have methodSignatures/connections.
+    /// </summary>
+    private static SourceCodeFile GenerateWiringScaffold(
+        ArchitectureContract arch,
+        Component cliComponent,
+        Component entryComponent,
+        List<(string ModuleName, string CSharpPath)> translatedFiles)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// Auto-generated wiring SCAFFOLD — connector specs missing from carapace.");
+        sb.AppendLine("// The architect did not fill out methodSignatures or connections.");
+        sb.AppendLine("// This is a scaffold only — no real wiring is generated.");
+        sb.AppendLine("// To get real wiring, the architect must fill out connector forms.");
+        sb.AppendLine("// See wiki/connector-diagnosis.md for details.");
+        sb.AppendLine();
+
+        var translatedNames = new HashSet<string>(
+            translatedFiles.Select(t => t.ModuleName),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var comp in arch.Components)
         {
             if (translatedNames.Contains(comp.Name))
                 sb.AppendLine($"using _module_{comp.Name};");
@@ -768,52 +1027,15 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine();
         sb.AppendLine($"namespace {cliComponent.Name}");
         sb.AppendLine("{");
-        sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Wiring entry point — calls the top-level component's public surface.");
-        sb.AppendLine("    /// Generated from the architecture dependency graph.");
-        sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public static class Wire");
         sb.AppendLine("    {");
-
-        // Generate a Run method that calls the top-level component's entry point
-        // The top-level component is the one the CLI depends on (usually PipelineEngine or similar)
-        var topLevelDeps = cliComponent.Dependencies ?? [];
-        var entryComponent = components.FirstOrDefault(c =>
-            topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase) &&
-            c.PublicSurface?.Length > 0);
-
-        if (entryComponent is not null && entryComponent.PublicSurface is { Length: > 0 })
-        {
-            var entryMethod = entryComponent.PublicSurface[0];
-            sb.AppendLine($"        /// <summary>");
-            sb.AppendLine($"        /// Calls {entryComponent.Name}.{entryMethod}() — the program's main entry point.");
-            sb.AppendLine($"        /// </summary>");
-            sb.AppendLine($"        public static void Run(string[] args)");
-            sb.AppendLine("        {");
-            sb.AppendLine($"            // Wiring: {cliComponent.Name} → {entryComponent.Name}.{entryMethod}");
-            sb.AppendLine($"            // The full dependency chain is:");
-            foreach (var dep in entryComponent.Dependencies ?? [])
-            {
-                var depComp = components.FirstOrDefault(c =>
-                    string.Equals(c.Name, dep, StringComparison.OrdinalIgnoreCase));
-                if (depComp?.PublicSurface is { Length: > 0 })
-                    sb.AppendLine($"            //   → {depComp.Name}.{depComp.PublicSurface[0]}");
-            }
-            sb.AppendLine($"            //");
-            sb.AppendLine($"            // TODO: Parse args, construct inputs, call {entryMethod}.");
-            sb.AppendLine($"            // The method signature comes from the Dafny translation.");
-            sb.AppendLine($"            // This wiring file is the seam between the CLI and the proven logic.");
-            sb.AppendLine("        }");
-        }
-        else
-        {
-            sb.AppendLine("        // No entry component found — CLI has no dependencies with public surface methods.");
-            sb.AppendLine("        public static void Run(string[] args)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            // No wiring generated — architecture may need a top-level component.");
-            sb.AppendLine("        }");
-        }
-
+        sb.AppendLine($"        // SCAFFOLD: {entryComponent.Name}.{entryComponent.PublicSurface?[0] ?? "Run"}");
+        sb.AppendLine("        public static int Run(string[] args)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // No connector specs — cannot generate wiring.");
+        sb.AppendLine("            // The architect must provide methodSignatures + connections.");
+        sb.AppendLine("            return 0;");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 

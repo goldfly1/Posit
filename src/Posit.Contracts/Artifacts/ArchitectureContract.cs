@@ -64,7 +64,81 @@ public record Component(
     /// Set by the Dafny Contracts verification gate after successful proof.
     /// </summary>
     public bool IsVerified { get; init; }
+
+    /// <summary>
+    /// Method signatures for each public surface method. The architect fills
+    /// these out so the orchestrator can wire components deterministically —
+    /// it knows the actual parameter types and return types, not just names.
+    /// This is the tab/slot data for the trireme kit.
+    /// </summary>
+    public MethodSignature[] MethodSignatures { get; init; } = [];
+
+    /// <summary>
+    /// Connection specifications — how this component calls its dependencies.
+    /// Each spec says: this component's method X calls dependency Y's method Z
+    /// with these argument mappings. The orchestrator reads these to generate
+    /// wiring code deterministically. No model judgment at wiring time.
+    /// </summary>
+    public ConnectionSpec[] Connections { get; init; } = [];
+
+    /// <summary>
+    /// Types shared with other modules via Dafny `include`. Each entry names
+    /// the type and which module defines it. The orchestrator uses this to
+    /// resolve cross-module type references during wiring.
+    /// </summary>
+    public SharedTypeRef[] SharedTypes { get; init; } = [];
 }
+
+/// <summary>
+/// A method signature — the actual contract for a public surface method.
+/// The architect fills these out instead of just listing method names.
+/// </summary>
+public record MethodSignature(
+    string Name,
+    MethodParam[] Params,
+    string ReturnType,
+    string? ReturnDafnyType)
+{
+    /// <summary>
+    /// The pattern method this maps to (e.g., architect names it "RunPipeline"
+    /// but the pipeline pattern provides "HandleRequest"). The orchestrator
+    /// uses this to generate the actual call.
+    /// </summary>
+    public string? PatternMethod { get; init; }
+}
+
+public record MethodParam(string Name, string Type, string? DafnyType);
+
+/// <summary>
+/// A connection specification — how one component calls another.
+/// This is the connector data that makes deterministic wiring possible.
+/// The architect fills these out on the carapace.
+/// </summary>
+public record ConnectionSpec(
+    string FromMethod,
+    string ToComponent,
+    string ToMethod,
+    string[] ArgMappings)
+{
+    /// <summary>
+    /// The return type from the called method, used to declare the
+    /// variable that receives the result.
+    /// </summary>
+    public string? ReturnType { get; init; }
+
+    /// <summary>
+    /// How the return value is used by the calling method
+    /// (e.g., "passes to next dependency", "stores as local", "returns to caller").
+    /// </summary>
+    public string? ReturnUsage { get; init; }
+}
+
+/// <summary>
+/// A type shared across modules via Dafny `include`.
+/// </summary>
+public record SharedTypeRef(
+    string TypeName,
+    string DefinedInModule);
 
 public record ComponentTestCase(
     string Id,

@@ -77,16 +77,28 @@ See `wiki/carapace-doctrine.md` for the canonical text.
 22. **Runtime collision fixed.** `--no-include-runtime` + shared `Posit.DafnyRuntime` project (pre-built DLL). Translated C# files reference shared runtime, no type collisions.
 23. **Domain-specific C# stubs.** E-commerce, CI/CD, healthcare templates with `{{ComponentName}}` placeholders. PatternRegistry matches spec keywords to domain stubs.
 24. **`think: false` by default.** Thinking mode causes 65K output runaway. Traces saved to `.posit/staging/thinking/` when enabled for Architecture phase.
+25. **Connector forms on the carapace (CRITICAL).** The architect fills out `methodSignatures` (actual parameter types, return types, patternMethod mapping), `connections` (which method calls which dependency method, with arg mappings), and `sharedTypes` (types shared via Dafny include). The orchestrator reads these to wire components DETERMINISTICALLY. No model judgment at wiring time. Without connector forms, the program is cotton candy — proven parts that don't talk to each other. See `wiki/connector-diagnosis.md`.
+26. **Pipeline shrunk (Aug 12).** AI team = Ideation + Architecture (WITH connectors) + Design Review (= design QA). Code = Orchestrator assembles + Z3 verifies + Dafny→C# translates + Bot harness tests. ELIMINATED: Pseudocode, Dafny Imp, C# Imp, QA phase (model). Design Review IS the QA. The bot harness IS the test. See `wiki/connector-diagnosis.md`.
+27. **Bot harness (deterministic QA).** Every GUI control is keyboard-reachable. A bot (script, not LLM) maps hotkeys, pushes data through CLI, exercises every control, captures output, compares to spec. Fully automated, no human. If bot passes → carve to registry. If bot fails → retry (several tries, AI team adjusts). Still fails → human opens it up.
+28. **`--test-assumptions Externs` (HOPEFUL, not yet verified).** Dafny can emit runtime contract checks for `{:extern}` methods in translated C#. If it works, contracts follow the code to execution — Z3 proves logic, runtime enforces stub contracts. Needs standalone testing before relying on it.
+29. **Registry grows organically.** 17 atoms → proven 2-component molecules → proven compounds → proven systems. Each proven assembly is carved back into the registry. Next time the architect selects from larger proven segments. The trireme kit: one proven hull → copy → fleet.
 
-## Pipeline
+## Pipeline (Shrunk — Aug 12)
 
 ```
-Ideation → Architecture → API Definition → Pseudocode → Design Review
-  → Dafny Contracts (Z3 verifies skeletons)
-  → Dafny Implementation (Pass 1: fill bodies, Z3 verify, translate cs)
-  → C# Implementation (Pass 2: plug into extern portals, wire I/O)
-  → QA (compile verified, test unverified)
-  → Deployment → Observability → Documentation
+AI TEAM (thinking):
+  Ideation → Architecture (carapace WITH connector specs) → Design Review (= design QA)
+
+CODE (deterministic, no model):
+  Orchestrator assembles from carapace connector specs (wires components)
+  Z3 verifies contracts
+  Dafny → C# translation (with --test-assumptions Externs → runtime contract checks)
+  Bot harness tests (pushes data through CLI, exercises GUI via hotkeys, compares to spec)
+
+RESULT:
+  Pass → carve to registry
+  Fail → retry (several tries, AI team adjusts)
+  Still fails → human opens it up
 ```
 
 ## Project Structure
