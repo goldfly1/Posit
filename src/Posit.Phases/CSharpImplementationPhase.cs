@@ -977,9 +977,28 @@ public sealed class CSharpImplementationPhase : IPhase
                         }
                         else
                         {
-                            // Unknown source — pass as-is with a comment
-                            // This means the architect referenced something we can't trace
-                            resolvedArgs.Add($"/* unresolved: {source} */ null");
+                            // Positional fallback: if there's exactly one prior non-void
+                            // call, use its return variable. The architect uses semantic
+                            // names (parsedData, validatedData) that don't match component
+                            // names or types — but in a linear chain, the previous call's
+                            // output IS the next call's input.
+                            var priorReturnVars = sourceToReturnVar
+                                .Where(kvp => kvp.Value.EndsWith("Result", StringComparison.OrdinalIgnoreCase) &&
+                                              !entryParams.Any(p => p.Name == kvp.Value))
+                                .Select(kvp => kvp.Value)
+                                .Distinct()
+                                .ToList();
+                            
+                            if (priorReturnVars.Count == 1)
+                            {
+                                // Only one prior call with a return value — it must be the source
+                                resolvedArgs.Add(priorReturnVars[0]);
+                            }
+                            else
+                            {
+                                // Can't determine which prior call to use
+                                resolvedArgs.Add($"/* unresolved: {source} */ null");
+                            }
                         }
                     }
                 }
