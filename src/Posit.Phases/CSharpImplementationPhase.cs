@@ -114,17 +114,18 @@ public sealed class CSharpImplementationPhase : IPhase
             totalOutputTokens += outTok;
         }
 
-        // Pass 2c: Wire components together — generate glue code from the dependency graph
+        // Pass 2c: Wire components together — generate one Wire.cs per seam
         var arch = GetArchitectureContract(context);
         if (arch?.Components is { Length: > 0 } && translatedFiles.Count > 0)
         {
             Console.Error.WriteLine("[Posit] C# Implementation — wiring components from dependency graph...");
-            var wiringFile = GenerateWiring(arch, translatedFiles);
-            if (wiringFile is not null)
+            var wiringFiles = GenerateWiring(arch, translatedFiles);
+            foreach (var wf in wiringFiles)
             {
-                allFiles.Add(wiringFile);
-                Console.Error.WriteLine($"[Posit] C# Implementation — wiring file: {wiringFile.Path}");
+                allFiles.Add(wf);
+                Console.Error.WriteLine($"[Posit] C# Implementation — wiring file: {wf.Path}");
             }
+            Console.Error.WriteLine($"[Posit] C# Implementation — {wiringFiles.Count} wiring files generated");
         }
 
         Console.Error.WriteLine($"[Posit] C# Implementation — {allFiles.Count} C# files produced");
@@ -725,16 +726,15 @@ public sealed class CSharpImplementationPhase : IPhase
     /// This is DETERMINISTIC — no model call, no judgment. It reads the connector
     /// forms (methodSignatures + connections + sharedTypes) from the carapace and
     /// generates real C# wiring code with actual method calls and type conversions.
-    ///
-    /// If connector specs are missing (old-style architecture with just names),
-    /// it falls back to the scaffold with a warning.
+    /// One Wire.cs per component with connections — each seam wires locally.
     /// </summary>
-    private static SourceCodeFile? GenerateWiring(
+    private static List<SourceCodeFile> GenerateWiring(
         ArchitectureContract arch,
         List<(string ModuleName, string CSharpPath)> translatedFiles)
     {
+        var result = new List<SourceCodeFile>();
         var components = arch.Components;
-        if (components.Length == 0) return null;
+        if (components.Length == 0) return result;
 
         // Build a lookup: component name → component
         var componentByName = new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
@@ -756,95 +756,14 @@ public sealed class CSharpImplementationPhase : IPhase
             cliComponent = components.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
         }
 
-        if (cliComponent is null) return null;
+        if (cliComponent is null) return result;
 
-        // The entry component is the one that HAS the connector forms (methodSignatures + connections).
-        // This is the orchestrator — the component that calls its dependencies.
-        // It might be the cliComponent itself (when the CLI orchestrates directly),
-        // or it might be a dependency of the CLI (when the CLI delegates to an engine).
-        //
-        // Priority:
-        // 1. If cliComponent has connections → it IS the entry (CLI orchestrates directly)
-        // 2. Otherwise, find the dependency with the MOST connections (the engine)
-        // 3. Otherwise, find ANY component with the most connections
-        Component? entryComponent = null;
-
-        // Gather all components that have connector forms, sorted by connection count (desc)
-        var componentsWithConnections = components
-            .Where(c => c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0)
-            .OrderByDescending(c => c.Connections!.Length)
-            .ToList();
-
-        if (cliComponent.Connections?.Length > 0 && cliComponent.MethodSignatures?.Length > 0)
-        {
-            // CLI component itself has the connector forms — it's the orchestrator
-            entryComponent = cliComponent;
-        }
-        else if (componentsWithConnections.Count > 0)
-        {
-            // Pick the component with the most connections — that's the orchestrator
-            // First try dependencies of the CLI, then any component
-            var topLevelDeps = cliComponent.Dependencies ?? [];
-            entryComponent = componentsWithConnections.FirstOrDefault(c =>
-                topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase));
-            entryComponent ??= componentsWithConnections[0];
-        }
-
-        if (entryComponent is null) return null;
-
-        // Carapace enforcement: connector specs are REQUIRED. No specs → no wiring.
-        // The architecture validation should have caught this and rejected the contract,
-        // but if we get here anyway, fail hard. No scaffold. No cotton candy.
-        var hasConnectorSpecs = entryComponent.MethodSignatures?.Length > 0;
-        var hasConnections = entryComponent.Connections?.Length > 0;
-
-        if (!hasConnectorSpecs)
-        {
-            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{entryComponent.Name}' has no methodSignatures. Architecture contract should have been rejected at validation.");
-            Console.Error.WriteLine($"[Posit] Wiring — No wiring generated. The architect must fill out connector forms.");
-            return null;
-        }
-
-        if (!hasConnections)
-        {
-            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{entryComponent.Name}' has methodSignatures but no connections. Cannot wire without connection specs.");
-            return null;
-        }
-
-        Console.Error.WriteLine($"[Posit] Wiring — generating deterministic wiring from connector specs for '{entryComponent.Name}'");
-        Console.Error.WriteLine($"[Posit] Wiring — {entryComponent.Connections!.Length} connection specs found");
-
-        // === Generate real wiring code from connector specs ===
-        var sb = new StringBuilder();
-        sb.AppendLine("// Auto-generated wiring file — DETERMINISTIC from carapace connector specs.");
-        sb.AppendLine("// The orchestrator read methodSignatures + connections from the architecture contract");
-        sb.AppendLine("// and generated real C# calls with type conversions. No model judgment.");
-        sb.AppendLine();
-
-        // Collect using statements
+        // Translated module names for using statements
         var translatedNames = new HashSet<string>(
             translatedFiles.Select(t => t.ModuleName),
             StringComparer.OrdinalIgnoreCase);
 
-        // Using statements for all translated modules (namespaces are _module_<Name>)
-        // Also include components referenced in connections (they may be io-shell
-        // components that aren't in translatedFiles but still need a using)
-        var connectionTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (entryComponent.Connections is not null)
-        {
-            foreach (var conn in entryComponent.Connections)
-            {
-                if (!string.IsNullOrWhiteSpace(conn.ToComponent))
-                    connectionTargets.Add(conn.ToComponent);
-            }
-        }
-        foreach (var comp in components)
-        {
-            if (translatedNames.Contains(comp.Name) || connectionTargets.Contains(comp.Name))
-                sb.AppendLine($"using _module_{comp.Name};");
-        }
-
-        // Using statements for shared types
+        // Collect all shared types across components
         var allSharedTypes = new HashSet<(string Type, string Module)>();
         foreach (var comp in components)
         {
@@ -855,226 +774,292 @@ public sealed class CSharpImplementationPhase : IPhase
             }
         }
 
+        // Generate one Wire.cs per component that has connections + method signatures
+        var componentsWithConnections = components
+            .Where(c => c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0)
+            .ToList();
+
+        foreach (var comp in componentsWithConnections)
+        {
+            var isCli = string.Equals(comp.Name, cliComponent.Name, StringComparison.OrdinalIgnoreCase);
+            var wireFile = GenerateComponentWiring(
+                comp, isCli, cliComponent, components, componentByName, translatedNames);
+            if (wireFile is not null)
+                result.Add(wireFile);
+        }
+
+        Console.Error.WriteLine($"[Posit] Wiring — generated {result.Count} Wire.cs files ({componentsWithConnections.Count} components with connections)");
+        return result;
+    }
+
+    /// <summary>
+    /// Generate a single Wire.cs for one component. If isCli is true, this is the
+    /// program entry point with Run(string[] args). Otherwise it's a wiring class
+    /// that chains this component's connections to its dependencies.
+    /// </summary>
+    private static SourceCodeFile? GenerateComponentWiring(
+        Component comp,
+        bool isCli,
+        Component cliComponent,
+        Component[] allComponents,
+        Dictionary<string, Component> componentByName,
+        HashSet<string> translatedNames)
+    {
+        var hasConnectorSpecs = comp.MethodSignatures?.Length > 0;
+        var hasConnections = comp.Connections?.Length > 0;
+
+        if (!hasConnectorSpecs)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{comp.Name}' has no methodSignatures. Architecture contract should have been rejected at validation.");
+            return null;
+        }
+
+        if (!hasConnections)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{comp.Name}' has methodSignatures but no connections. Cannot wire without connection specs.");
+            return null;
+        }
+
+        Console.Error.WriteLine($"[Posit] Wiring — generating wiring for '{comp.Name}' ({comp.Connections!.Length} connections, isCli={isCli})");
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// Auto-generated wiring file — DETERMINISTIC from carapace connector specs.");
+        sb.AppendLine("// The orchestrator read methodSignatures + connections from the architecture contract");
+        sb.AppendLine("// and generated real C# calls with type conversions. No model judgment.");
+        sb.AppendLine();
+
+        // Using statements for all translated modules + connection targets
+        var connectionTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var conn in comp.Connections!)
+        {
+            if (!string.IsNullOrWhiteSpace(conn.ToComponent))
+                connectionTargets.Add(conn.ToComponent);
+        }
+        foreach (var c in allComponents)
+        {
+            if (translatedNames.Contains(c.Name) || connectionTargets.Contains(c.Name))
+                sb.AppendLine($"using _module_{c.Name};");
+        }
+
         // Dafny runtime types
         sb.AppendLine("using System.Numerics;");
         sb.AppendLine();
 
-        sb.AppendLine($"namespace {cliComponent.Name}");
+        // Namespace is this component's name
+        sb.AppendLine($"namespace {comp.Name}");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Wiring entry point — connects the CLI to the proven logic.");
-        sb.AppendLine($"    /// Calls {entryComponent.Name}'s methods per the carapace connector specs.");
+        sb.AppendLine($"    /// Wiring for {comp.Name} — connects to its dependencies per carapace connector specs.");
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public static class Wire");
         sb.AppendLine("    {");
 
-        // Find the entry method signature
-        var entrySigs = entryComponent.MethodSignatures!;
+        // Find the entry method signature for this component
+        var entrySigs = comp.MethodSignatures!;
         var entrySig = entrySigs.FirstOrDefault() ?? entrySigs[0];
         var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
-
-        sb.AppendLine("        /// <summary>");
-        sb.AppendLine($"        /// Calls {entryComponent.Name}.{entryMethodName}() — the program's main entry point.");
-        sb.AppendLine("        /// </summary>");
-        sb.AppendLine("        public static int Run(string[] args)");
-        sb.AppendLine("        {");
-
-        // Generate arg parsing from CLI args
-        sb.AppendLine("            if (args.Length == 0)");
-        sb.AppendLine("            {");
-        sb.AppendLine($"                System.Console.WriteLine(\"Usage: {cliComponent.Name} <input>\");");
-        sb.AppendLine("                return 1;");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-
-        // Convert CLI args to Dafny types for the entry method call
         var entryParams = entrySig.Params;
-        var paramInitLines = new List<string>();
 
-        for (int i = 0; i < entryParams.Length; i++)
+        if (isCli)
         {
-            var param = entryParams[i];
-            var dafnyType = param.DafnyType ?? param.Type;
+            // CLI Wire.cs — program entry point with Run(string[] args)
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine($"        /// Calls {comp.Name}.{entryMethodName}() — the program's main entry point.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        public static int Run(string[] args)");
+            sb.AppendLine("        {");
 
-            if (dafnyType == "string")
+            // Generate arg parsing from CLI args
+            sb.AppendLine("            if (args.Length == 0)");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                System.Console.WriteLine(\"Usage: {comp.Name} <input>\");");
+            sb.AppendLine("                return 1;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+
+            // Convert CLI args to Dafny types for the entry method call
+            var paramInitLines = new List<string>();
+            for (int i = 0; i < entryParams.Length; i++)
             {
-                // Convert C# string → Dafny.ISequence<Dafny.Rune>
-                paramInitLines.Add($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[{i}]);");
-            }
-            else if (dafnyType == "int")
-            {
-                // Convert C# int → BigInteger
-                paramInitLines.Add($"            var {param.Name} = BigInteger.Parse(args[{i}]);");
-            }
-            else if (dafnyType == "bool")
-            {
-                paramInitLines.Add($"            var {param.Name} = bool.Parse(args[{i}]);");
-            }
-            else
-            {
-                // Unknown type — pass null/default with a comment
-                paramInitLines.Add($"            // TODO: convert args[{i}] to {dafnyType} for parameter '{param.Name}'");
-                paramInitLines.Add($"            var {param.Name} = default({MapDafnyTypeToCSharpWire(dafnyType)});");
-            }
-        }
+                var param = entryParams[i];
+                var dafnyType = param.DafnyType ?? param.Type;
 
-        foreach (var line in paramInitLines)
-            sb.AppendLine(line);
-
-        sb.AppendLine();
-
-        // Generate the entry method call
-        var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
-        var entryClass = $"_module_{entryComponent.Name}.__default";
-
-        sb.AppendLine($"            // Call the proven logic: {entryComponent.Name}.{entryMethodName}({paramNames})");
-        sb.AppendLine($"            var result = {entryClass}.{entryMethodName}({paramNames});");
-        sb.AppendLine();
-
-        // Generate connection calls if we have them
-        // Chain return values: each call's return is stored in a variable,
-        // and subsequent argMappings that reference a source field are resolved
-        // to the producing call's return variable.
-        if (hasConnections)
-        {
-            sb.AppendLine("            // === Connection calls per carapace connector specs ===");
-            
-            // Track return variables: maps source field name → C# variable name
-            // e.g., "content" → "csvreaderResult" (from the call that produced content)
-            var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            // Track prior return variable names IN ORDER (for positional fallback)
-            var priorReturnVarOrder = new List<string>();
-            
-            // Also track CLI input params that are available as sources
-            foreach (var p in entryParams)
-                sourceToReturnVar[p.Name] = p.Name;
-
-            foreach (var conn in entryComponent.Connections!)
-            {
-                var toComp = componentByName.GetValueOrDefault(conn.ToComponent);
-                if (toComp is null)
+                if (dafnyType == "string")
                 {
-                    sb.AppendLine($"            // WARNING: connection to '{conn.ToComponent}' — component not found");
-                    continue;
+                    paramInitLines.Add($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[{i}]);");
                 }
-
-                var toMethod = conn.ToMethod;
-                var toClass = $"_module_{conn.ToComponent}.__default";
-                var connReturnType = conn.ReturnType ?? "var";
-                var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
-
-                // Build argument list from argMappings
-                // argMapping format: "sourceField -> paramName"
-                // The sourceField is either a CLI input param or a previous call's return value
-                var resolvedArgs = new List<string>();
-                if (conn.ArgMappings?.Length > 0)
+                else if (dafnyType == "int")
                 {
-                    foreach (var am in conn.ArgMappings)
-                    {
-                        var arrowIdx = am.IndexOf("->");
-                        string source;
-                        if (arrowIdx > 0)
-                        {
-                            source = am[..arrowIdx].Trim();
-                        }
-                        else
-                        {
-                            source = am.Trim();
-                        }
-
-                        // Try to resolve the source to a known variable
-                        if (sourceToReturnVar.TryGetValue(source, out var resolvedVar))
-                        {
-                            // Found a matching variable — use it
-                            resolvedArgs.Add(resolvedVar);
-                        }
-                        else
-                        {
-                            // Positional fallback: the architect uses semantic
-                            // names (parsedData, validatedData) that don't match
-                            // component names or return types. In a linear chain,
-                            // the MOST RECENT prior call's output IS the next
-                            // call's input. Pick the last return var we registered.
-                            var priorReturnVars = priorReturnVarOrder
-                                .Where(v => !entryParams.Any(p => p.Name == v))
-                                .Distinct()
-                                .ToList();
-                            
-                            if (priorReturnVars.Count >= 1)
-                            {
-                                // Use the most recent prior call's return variable
-                                resolvedArgs.Add(priorReturnVars[^1]);
-                            }
-                            else
-                            {
-                                // No prior calls at all — can't determine source
-                                resolvedArgs.Add($"/* unresolved: {source} */ null");
-                            }
-                        }
-                    }
+                    paramInitLines.Add($"            var {param.Name} = BigInteger.Parse(args[{i}]);");
                 }
-
-                var connArgsStr = string.Join(", ", resolvedArgs);
-                sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgsStr})");
-                sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
-                
-                if (connReturnType != "void")
+                else if (dafnyType == "bool")
                 {
-                    sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethod}({connArgsStr});");
-                    
-                    // Register this return variable so subsequent calls can reference it
-                    // Map both the component name and common field names to this return var
-                    sourceToReturnVar[conn.ToComponent] = returnVarName;
-                    sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
-                    priorReturnVarOrder.Add(returnVarName);
-                    
-                    // Also map the return type name if specified (e.g., "content", "table", "records")
-                    // The architect may use these as source names in subsequent argMappings
-                    if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
-                    {
-                        var simpleName = connReturnType.Split('<', '(', '.')[0].Trim().ToLowerInvariant();
-                        if (!string.IsNullOrEmpty(simpleName) && simpleName != "void")
-                            sourceToReturnVar[simpleName] = returnVarName;
-                    }
+                    paramInitLines.Add($"            var {param.Name} = bool.Parse(args[{i}]);");
                 }
                 else
                 {
-                    sb.AppendLine($"            {toClass}.{toMethod}({connArgsStr});");
+                    paramInitLines.Add($"            // TODO: convert args[{i}] to {dafnyType} for parameter '{param.Name}'");
+                    paramInitLines.Add($"            var {param.Name} = default({MapDafnyTypeToCSharpWire(dafnyType)});");
                 }
-                sb.AppendLine();
             }
-        }
-
-        // Output the result
-        sb.AppendLine("            // Output result");
-        sb.AppendLine("            System.Console.WriteLine(result);");
-        sb.AppendLine("            return 0;");
-
-        sb.AppendLine("        }");
-
-        // Generate a method for each connection that chains calls
-        if (hasConnections)
-        {
+            foreach (var line in paramInitLines)
+                sb.AppendLine(line);
             sb.AppendLine();
+
+            // Generate the entry method call
+            var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+            var entryClass = $"_module_{comp.Name}.__default";
+            sb.AppendLine($"            // Call the proven logic: {comp.Name}.{entryMethodName}({paramNames})");
+            sb.AppendLine($"            var result = {entryClass}.{entryMethodName}({paramNames});");
+            sb.AppendLine();
+
+            // Generate connection calls
+            AppendConnectionCalls(sb, comp, componentByName, entryParams);
+
+            // Output the result
+            sb.AppendLine("            // Output result");
+            sb.AppendLine("            System.Console.WriteLine(result);");
+            sb.AppendLine("            return 0;");
+            sb.AppendLine("        }");
+        }
+        else
+        {
+            // Non-CLI Wire.cs — wiring method that chains this component's connections
+            var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+            var paramDecls = string.Join(", ", entryParams.Select(p => $"{MapDafnyTypeToCSharpWire(p.DafnyType ?? p.Type)} {p.Name}"));
+
             sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Full pipeline execution — chains all connection calls per the carapace.");
+            sb.AppendLine($"        /// Wires {comp.Name}'s connections to its dependencies.");
+            sb.AppendLine($"        /// Chains {comp.Connections!.Length} connection calls per the carapace connector specs.");
             sb.AppendLine("        /// </summary>");
-            sb.AppendLine("        public static void ExecutePipeline(string input)");
+            sb.AppendLine($"        public static void Wire_{comp.Name}({paramDecls})");
             sb.AppendLine("        {");
-            sb.AppendLine($"            // Wire the full chain: {string.Join(" → ", entryComponent.Connections!.Select(c => $"{c.ToComponent}.{c.ToMethod}"))}");
-            sb.AppendLine("            // Each step's output feeds the next per the argMappings.");
-            sb.AppendLine("            // This is the trireme kit assembly — tabs into slots.");
+
+            // Generate the entry call + connection chain
+            var entryClass = $"_module_{comp.Name}.__default";
+            sb.AppendLine($"            // Call {comp.Name}.{entryMethodName}({paramNames})");
+            sb.AppendLine($"            var result = {entryClass}.{entryMethodName}({paramNames});");
+            sb.AppendLine();
+
+            AppendConnectionCalls(sb, comp, componentByName, entryParams);
+
             sb.AppendLine("        }");
         }
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        var wiringPath = $"{cliComponent.Name}/Wire.cs";
+        var wiringPath = $"{comp.Name}/Wire.cs";
         var content = sb.ToString();
-        Console.Error.WriteLine($"[Posit] Wiring — generated {content.Split('\n').Length} lines of wiring code");
+        Console.Error.WriteLine($"[Posit] Wiring — {wiringPath}: {content.Split('\n').Length} lines");
         return new SourceCodeFile(wiringPath, content);
+    }
+
+    /// <summary>
+    /// Append the connection calls for a component, chaining return values
+    /// and using positional fallback for unresolved arg mappings.
+    /// </summary>
+    private static void AppendConnectionCalls(
+        StringBuilder sb,
+        Component comp,
+        Dictionary<string, Component> componentByName,
+        MethodParam[] entryParams)
+    {
+        sb.AppendLine("            // === Connection calls per carapace connector specs ===");
+
+        // Track return variables: maps source field name → C# variable name
+        var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Track prior return variable names IN ORDER (for positional fallback)
+        var priorReturnVarOrder = new List<string>();
+
+        // CLI input params are available as sources
+        foreach (var p in entryParams)
+            sourceToReturnVar[p.Name] = p.Name;
+
+        foreach (var conn in comp.Connections!)
+        {
+            var toComp = componentByName.GetValueOrDefault(conn.ToComponent);
+            if (toComp is null)
+            {
+                sb.AppendLine($"            // WARNING: connection to '{conn.ToComponent}' — component not found");
+                continue;
+            }
+
+            var toMethod = conn.ToMethod;
+            var toClass = $"_module_{conn.ToComponent}.__default";
+            var connReturnType = conn.ReturnType ?? "var";
+            var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
+
+            // Build argument list from argMappings
+            var resolvedArgs = new List<string>();
+            if (conn.ArgMappings?.Length > 0)
+            {
+                foreach (var am in conn.ArgMappings)
+                {
+                    var arrowIdx = am.IndexOf("->");
+                    string source;
+                    if (arrowIdx > 0)
+                    {
+                        source = am[..arrowIdx].Trim();
+                    }
+                    else
+                    {
+                        source = am.Trim();
+                    }
+
+                    // Try to resolve the source to a known variable
+                    if (sourceToReturnVar.TryGetValue(source, out var resolvedVar))
+                    {
+                        resolvedArgs.Add(resolvedVar);
+                    }
+                    else
+                    {
+                        // Positional fallback: use the most recent prior call's return variable
+                        var priorReturnVars = priorReturnVarOrder
+                            .Where(v => !entryParams.Any(p => p.Name == v))
+                            .Distinct()
+                            .ToList();
+
+                        if (priorReturnVars.Count >= 1)
+                        {
+                            resolvedArgs.Add(priorReturnVars[^1]);
+                        }
+                        else
+                        {
+                            resolvedArgs.Add($"/* unresolved: {source} */ null");
+                        }
+                    }
+                }
+            }
+
+            var connArgsStr = string.Join(", ", resolvedArgs);
+            sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgsStr})");
+            sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
+
+            if (connReturnType != "void")
+            {
+                sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethod}({connArgsStr});");
+
+                // Register this return variable for subsequent calls
+                sourceToReturnVar[conn.ToComponent] = returnVarName;
+                sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
+                priorReturnVarOrder.Add(returnVarName);
+
+                // Map the return type name if specified
+                if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
+                {
+                    var simpleName = connReturnType.Split('<', '(', '.')[0].Trim().ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(simpleName) && simpleName != "void")
+                        sourceToReturnVar[simpleName] = returnVarName;
+                }
+            }
+            else
+            {
+                sb.AppendLine($"            {toClass}.{toMethod}({connArgsStr});");
+            }
+            sb.AppendLine();
+        }
     }
 
     /// <summary>
