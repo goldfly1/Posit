@@ -37,5 +37,12 @@ namespace {{ComponentName}}
         {
             return Console.ReadKey(true).KeyChar.ToString();
         }
+
+        // Portal: ReadChar() returns (ch: string)
+        // ensures |ch| <= 1
+        public static string ReadChar()
+        {
+            return Console.ReadKey(true).KeyChar.ToString();
+        }
     }
 }

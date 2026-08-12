@@ -1,9 +1,13 @@
 // {{ComponentName}} — Network I/O portal caps
 // Auto-bound to Dafny stub: network-io
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
+// Requires guards enforce the Dafny contracts at runtime.
 
+using System;
+using System.Collections.Generic;
 using System.Net.Http;
-using System.Threading.Tasks;
+using System.Net.Sockets;
+using System.Text;
 
 namespace {{ComponentName}}
 {
@@ -11,33 +15,113 @@ namespace {{ComponentName}}
     {
         private static readonly HttpClient _client = new();
 
-        // Portal: HttpGet(url) returns (response: string)
+        // Socket pool: socketId → TcpClient
+        private static readonly Dictionary<int, TcpClient> _sockets = new();
+        private static int _nextSocketId = 1;
+
+        // Portal: HttpGet(url: string) returns (response: string)
+        // requires |url| > 0
+        // ensures |response| >= 0
         public static string HttpGet(string url)
         {
-            return _client.GetStringAsync(url).GetAwaiter().GetResult();
+            if (string.IsNullOrEmpty(url))
+                throw new ArgumentException("requires |url| > 0", nameof(url));
+            return _client.GetStringAsync(url).GetAwaiter().GetResult() ?? "";
         }
 
-        // Portal: HttpPost(url, body) returns (response: string)
+        // Portal: HttpPost(url: string, body: string) returns (response: string)
+        // requires |url| > 0
+        // ensures |response| >= 0
         public static string HttpPost(string url, string body)
         {
-            var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            if (string.IsNullOrEmpty(url))
+                throw new ArgumentException("requires |url| > 0", nameof(url));
+            var content = new StringContent(body ?? "", Encoding.UTF8, "application/json");
             var response = _client.PostAsync(url, content).GetAwaiter().GetResult();
-            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
         }
 
-        // Portal: HttpPut(url, body) returns (response: string)
+        // Portal: HttpPut(url: string, body: string) returns (response: string)
+        // requires |url| > 0
+        // ensures |response| >= 0
         public static string HttpPut(string url, string body)
         {
-            var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            if (string.IsNullOrEmpty(url))
+                throw new ArgumentException("requires |url| > 0", nameof(url));
+            var content = new StringContent(body ?? "", Encoding.UTF8, "application/json");
             var response = _client.PutAsync(url, content).GetAwaiter().GetResult();
-            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
         }
 
-        // Portal: HttpDelete(url) returns (response: string)
+        // Portal: HttpDelete(url: string) returns (response: string)
+        // requires |url| > 0
+        // ensures |response| >= 0
         public static string HttpDelete(string url)
         {
+            if (string.IsNullOrEmpty(url))
+                throw new ArgumentException("requires |url| > 0", nameof(url));
             var response = _client.DeleteAsync(url).GetAwaiter().GetResult();
-            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+        }
+
+        // Portal: OpenSocket(host: string, port: int) returns (socketId: int)
+        // requires |host| > 0
+        // requires port > 0
+        // ensures socketId >= 0
+        public static int OpenSocket(string host, int port)
+        {
+            if (string.IsNullOrEmpty(host))
+                throw new ArgumentException("requires |host| > 0", nameof(host));
+            if (port <= 0)
+                throw new ArgumentException("requires port > 0", nameof(port));
+
+            var client = new TcpClient(host, port);
+            var socketId = _nextSocketId++;
+            _sockets[socketId] = client;
+            return socketId;
+        }
+
+        // Portal: SocketSend(socketId: int, data: string)
+        // requires socketId >= 0
+        public static void SocketSend(int socketId, string data)
+        {
+            if (socketId < 0)
+                throw new ArgumentException("requires socketId >= 0", nameof(socketId));
+            if (!_sockets.TryGetValue(socketId, out var client))
+                throw new InvalidOperationException($"Socket {socketId} not found");
+
+            var stream = client.GetStream();
+            var bytes = Encoding.UTF8.GetBytes(data ?? "");
+            stream.Write(bytes, 0, bytes.Length);
+        }
+
+        // Portal: SocketRecv(socketId: int) returns (data: string)
+        // requires socketId >= 0
+        // ensures |data| >= 0
+        public static string SocketRecv(int socketId)
+        {
+            if (socketId < 0)
+                throw new ArgumentException("requires socketId >= 0", nameof(socketId));
+            if (!_sockets.TryGetValue(socketId, out var client))
+                throw new InvalidOperationException($"Socket {socketId} not found");
+
+            var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var bytesRead = stream.Read(buffer, 0, buffer.Length);
+            return bytesRead > 0 ? Encoding.UTF8.GetString(buffer, 0, bytesRead) : "";
+        }
+
+        // Portal: CloseSocket(socketId: int)
+        // requires socketId >= 0
+        public static void CloseSocket(int socketId)
+        {
+            if (socketId < 0)
+                throw new ArgumentException("requires socketId >= 0", nameof(socketId));
+            if (_sockets.TryGetValue(socketId, out var client))
+            {
+                client.Close();
+                _sockets.Remove(socketId);
+            }
         }
     }
 }

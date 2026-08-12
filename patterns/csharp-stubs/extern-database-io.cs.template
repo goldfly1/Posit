@@ -1,8 +1,10 @@
 // {{ComponentName}} — {:extern} database I/O portal implementations
 // Auto-bound to Dafny stub: database-io
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
+// Requires guards enforce the Dafny contracts at runtime.
 
 using System;
+using System.Collections.Generic;
 using System.Data;
 using Microsoft.Data.SqlClient;
 
@@ -10,13 +12,27 @@ namespace _module_{{ComponentName}}
 {
     public partial class {{ComponentName}}
     {
+        // Connection pool: connId → SqlConnection
+        private static readonly Dictionary<int, SqlConnection> _connections = new();
+        private static int _nextConnId = 1;
+
+        // Transaction pool: txId → SqlTransaction
+        private static readonly Dictionary<int, SqlTransaction> _transactions = new();
+        private static int _nextTxId = 1;
+
+        // Portal: QueryDb(sql: string) returns (rows: string)
+        // requires |sql| > 0
+        // ensures |rows| >= 0
         public static string QueryDb(string sql)
         {
+            if (string.IsNullOrEmpty(sql))
+                throw new ArgumentException("requires |sql| > 0", nameof(sql));
+
             using var conn = new SqlConnection(GetConnectionString());
             conn.Open();
             using var cmd = new SqlCommand(sql, conn);
             using var reader = cmd.ExecuteReader();
-            var rows = new System.Collections.Generic.List<string>();
+            var rows = new List<string>();
             while (reader.Read())
             {
                 var values = new object[reader.FieldCount];
@@ -26,40 +42,96 @@ namespace _module_{{ComponentName}}
             return "[" + string.Join(",", rows) + "]";
         }
 
+        // Portal: ExecuteDb(sql: string) returns (rowsAffected: int)
+        // requires |sql| > 0
+        // ensures rowsAffected >= 0
         public static int ExecuteDb(string sql)
         {
+            if (string.IsNullOrEmpty(sql))
+                throw new ArgumentException("requires |sql| > 0", nameof(sql));
+
             using var conn = new SqlConnection(GetConnectionString());
             conn.Open();
             using var cmd = new SqlCommand(sql, conn);
-            return cmd.ExecuteNonQuery();
+            var rowsAffected = cmd.ExecuteNonQuery();
+            return rowsAffected < 0 ? 0 : rowsAffected;
         }
 
+        // Portal: OpenConnection(connectionString: string) returns (connId: int)
+        // requires |connectionString| > 0
+        // ensures connId >= 0
         public static int OpenConnection(string connectionString)
         {
+            if (string.IsNullOrEmpty(connectionString))
+                throw new ArgumentException("requires |connectionString| > 0", nameof(connectionString));
+
             var conn = new SqlConnection(connectionString);
             conn.Open();
-            return conn.GetHashCode();
-        }
-
-        public static void CloseConnection(int connId)
-        {
-            // Simplification: real implementation would track connection pool by id.
-        }
-
-        public static int BeginTransaction(int connId)
-        {
-            // Simplification: real implementation would track transactions per connection.
+            var connId = _nextConnId++;
+            _connections[connId] = conn;
             return connId;
         }
 
-        public static void CommitTransaction(int txId)
+        // Portal: CloseConnection(connId: int)
+        // requires connId >= 0
+        public static void CloseConnection(int connId)
         {
-            // Simplification: real implementation would look up the active transaction.
+            if (connId < 0)
+                throw new ArgumentException("requires connId >= 0", nameof(connId));
+
+            if (_connections.TryGetValue(connId, out var conn))
+            {
+                conn.Close();
+                conn.Dispose();
+                _connections.Remove(connId);
+            }
         }
 
+        // Portal: BeginTransaction(connId: int) returns (txId: int)
+        // requires connId >= 0
+        // ensures txId >= 0
+        public static int BeginTransaction(int connId)
+        {
+            if (connId < 0)
+                throw new ArgumentException("requires connId >= 0", nameof(connId));
+
+            if (!_connections.TryGetValue(connId, out var conn))
+                throw new InvalidOperationException($"Connection {connId} not found");
+
+            var tx = conn.BeginTransaction();
+            var txId = _nextTxId++;
+            _transactions[txId] = tx;
+            return txId;
+        }
+
+        // Portal: CommitTransaction(txId: int)
+        // requires txId >= 0
+        public static void CommitTransaction(int txId)
+        {
+            if (txId < 0)
+                throw new ArgumentException("requires txId >= 0", nameof(txId));
+
+            if (_transactions.TryGetValue(txId, out var tx))
+            {
+                tx.Commit();
+                tx.Dispose();
+                _transactions.Remove(txId);
+            }
+        }
+
+        // Portal: RollbackTransaction(txId: int)
+        // requires txId >= 0
         public static void RollbackTransaction(int txId)
         {
-            // Simplification: real implementation would look up the active transaction.
+            if (txId < 0)
+                throw new ArgumentException("requires txId >= 0", nameof(txId));
+
+            if (_transactions.TryGetValue(txId, out var tx))
+            {
+                tx.Rollback();
+                tx.Dispose();
+                _transactions.Remove(txId);
+            }
         }
 
         private static string GetConnectionString()

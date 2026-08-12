@@ -1,37 +1,59 @@
 // {{ComponentName}} — Stream I/O portal caps
 // Auto-bound to Dafny stub: stream-io
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
+// Requires guards enforce the Dafny contracts at runtime.
 
+using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace {{ComponentName}}
 {
     public static partial class StreamIO
     {
-        private static readonly System.Collections.Generic.Dictionary<int, StreamReader> _streams = new();
+        private static readonly Dictionary<int, StreamReader> _streams = new();
+        private static int _nextStreamId = 1;
 
-        // Portal: OpenStream(path) returns (streamId: int)
+        // Portal: OpenStream(path: string) returns (streamId: int)
+        // requires |path| > 0
+        // ensures streamId >= 0
         public static int OpenStream(string path)
         {
+            if (string.IsNullOrEmpty(path))
+                throw new ArgumentException("requires |path| > 0", nameof(path));
+
             var sr = new StreamReader(path);
-            var id = _streams.Count;
+            var id = _nextStreamId++;
             _streams[id] = sr;
             return id;
         }
 
-        // Portal: ReadChunk(streamId, maxBytes) returns (chunk: string)
+        // Portal: ReadChunk(streamId: int, maxBytes: int) returns (chunk: string)
+        // requires streamId >= 0
+        // requires maxBytes > 0
+        // ensures |chunk| >= 0
         public static string ReadChunk(int streamId, int maxBytes)
         {
+            if (streamId < 0)
+                throw new ArgumentException("requires streamId >= 0", nameof(streamId));
+            if (maxBytes <= 0)
+                throw new ArgumentException("requires maxBytes > 0", nameof(maxBytes));
+
             if (!_streams.TryGetValue(streamId, out var sr))
                 return "";
+
             var buffer = new char[maxBytes];
             var read = sr.Read(buffer, 0, maxBytes);
-            return new string(buffer, 0, read);
+            return read > 0 ? new string(buffer, 0, read) : "";
         }
 
-        // Portal: CloseStream(streamId)
+        // Portal: CloseStream(streamId: int)
+        // requires streamId >= 0
         public static void CloseStream(int streamId)
         {
+            if (streamId < 0)
+                throw new ArgumentException("requires streamId >= 0", nameof(streamId));
+
             if (_streams.TryGetValue(streamId, out var sr))
             {
                 sr.Close();
@@ -39,9 +61,13 @@ namespace {{ComponentName}}
             }
         }
 
-        // Portal: HasMore(streamId) returns (hasMore: bool)
+        // Portal: HasMore(streamId: int) returns (hasMore: bool)
+        // requires streamId >= 0
         public static bool HasMore(int streamId)
         {
+            if (streamId < 0)
+                throw new ArgumentException("requires streamId >= 0", nameof(streamId));
+
             if (!_streams.TryGetValue(streamId, out var sr))
                 return false;
             return !sr.EndOfStream;

@@ -1,6 +1,7 @@
 // {{ComponentName}} — Time and Random portal caps
 // Auto-bound to Dafny stub: time-random
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
+// Requires guards enforce the Dafny contracts at runtime.
 
 using System;
 
@@ -8,23 +9,41 @@ namespace {{ComponentName}}
 {
     public static partial class TimeRandomIO
     {
-        // Portal: GetCurrentTime() returns (timestamp: string)
-        public static string GetCurrentTime()
+        // Portal: GetCurrentTime() returns (timestamp: int)
+        // ensures timestamp > 0
+        public static int GetCurrentTime()
+        {
+            return (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        }
+
+        // Portal: GetIsoTimestamp() returns (timestamp: string)
+        // ensures |timestamp| > 0
+        public static string GetIsoTimestamp()
         {
             return DateTimeOffset.UtcNow.ToString("o");
         }
 
-        // Portal: GetCurrentTimeMillis() returns (millis: int)
+        // Portal: GetCurrentTimeMillis() returns (millis: long)
         public static long GetCurrentTimeMillis()
         {
             return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
 
-        // Portal: RandomInt(min, max) returns (value: int)
+        // Portal: RandomInt(min: int, max: int) returns (value: int)
+        // requires min < max
+        // ensures min <= value < max
         public static int RandomInt(int min, int max)
         {
-            var rng = Random.Shared;
-            return rng.Next(min, max);
+            if (min >= max)
+                throw new ArgumentException("requires min < max", nameof(min));
+            return Random.Shared.Next(min, max);
+        }
+
+        // Portal: RandomBool() returns (value: bool)
+        // ensures true
+        public static bool RandomBool()
+        {
+            return Random.Shared.Next(2) == 1;
         }
 
         // Portal: RandomFloat() returns (value: real)
@@ -33,10 +52,13 @@ namespace {{ComponentName}}
             return Random.Shared.NextDouble();
         }
 
-        // Portal: Sleep(millis)
-        public static void Sleep(int millis)
+        // Portal: Sleep(milliseconds: int)
+        // requires milliseconds >= 0
+        public static void Sleep(int milliseconds)
         {
-            System.Threading.Thread.Sleep(millis);
+            if (milliseconds < 0)
+                throw new ArgumentException("requires milliseconds >= 0", nameof(milliseconds));
+            System.Threading.Thread.Sleep(milliseconds);
         }
 
         // Portal: GetCurrentDate() returns (date: string)
