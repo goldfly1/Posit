@@ -921,9 +921,21 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine();
 
         // Generate connection calls if we have them
+        // Chain return values: each call's return is stored in a variable,
+        // and subsequent argMappings that reference a source field are resolved
+        // to the producing call's return variable.
         if (hasConnections)
         {
             sb.AppendLine("            // === Connection calls per carapace connector specs ===");
+            
+            // Track return variables: maps source field name → C# variable name
+            // e.g., "content" → "csvreaderResult" (from the call that produced content)
+            var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            
+            // Also track CLI input params that are available as sources
+            foreach (var p in entryParams)
+                sourceToReturnVar[p.Name] = p.Name;
+
             foreach (var conn in entryComponent.Connections!)
             {
                 var toComp = componentByName.GetValueOrDefault(conn.ToComponent);
@@ -936,31 +948,67 @@ public sealed class CSharpImplementationPhase : IPhase
                 var toMethod = conn.ToMethod;
                 var toClass = $"_module_{conn.ToComponent}.__default";
                 var connReturnType = conn.ReturnType ?? "var";
+                var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
 
                 // Build argument list from argMappings
-                var connArgs = conn.ArgMappings?.Length > 0
-                    ? string.Join(", ", conn.ArgMappings.Select(am =>
+                // argMapping format: "sourceField -> paramName"
+                // The sourceField is either a CLI input param or a previous call's return value
+                var resolvedArgs = new List<string>();
+                if (conn.ArgMappings?.Length > 0)
+                {
+                    foreach (var am in conn.ArgMappings)
                     {
                         var arrowIdx = am.IndexOf("->");
+                        string source;
                         if (arrowIdx > 0)
                         {
-                            // "sourceField -> paramName" — for now, pass the source field
-                            var source = am[..arrowIdx].Trim();
-                            return ConvertArgToDafny(source);
+                            source = am[..arrowIdx].Trim();
                         }
-                        return ConvertArgToDafny(am.Trim());
-                    }))
-                    : "";
+                        else
+                        {
+                            source = am.Trim();
+                        }
 
-                sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgs})");
+                        // Try to resolve the source to a known variable
+                        if (sourceToReturnVar.TryGetValue(source, out var resolvedVar))
+                        {
+                            // Found a matching variable — use it
+                            resolvedArgs.Add(resolvedVar);
+                        }
+                        else
+                        {
+                            // Unknown source — pass as-is with a comment
+                            // This means the architect referenced something we can't trace
+                            resolvedArgs.Add($"/* unresolved: {source} */ null");
+                        }
+                    }
+                }
+
+                var connArgsStr = string.Join(", ", resolvedArgs);
+                sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgsStr})");
                 sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
+                
                 if (connReturnType != "void")
                 {
-                    sb.AppendLine($"            var {conn.ToComponent.ToLowerInvariant()}Result = {toClass}.{toMethod}({connArgs});");
+                    sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethod}({connArgsStr});");
+                    
+                    // Register this return variable so subsequent calls can reference it
+                    // Map both the component name and common field names to this return var
+                    sourceToReturnVar[conn.ToComponent] = returnVarName;
+                    sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
+                    
+                    // Also map the return type name if specified (e.g., "content", "table", "records")
+                    // The architect may use these as source names in subsequent argMappings
+                    if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
+                    {
+                        var simpleName = connReturnType.Split('<', '(', '.')[0].Trim().ToLowerInvariant();
+                        if (!string.IsNullOrEmpty(simpleName) && simpleName != "void")
+                            sourceToReturnVar[simpleName] = returnVarName;
+                    }
                 }
                 else
                 {
-                    sb.AppendLine($"            {toClass}.{toMethod}({connArgs});");
+                    sb.AppendLine($"            {toClass}.{toMethod}({connArgsStr});");
                 }
                 sb.AppendLine();
             }
