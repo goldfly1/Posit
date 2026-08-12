@@ -828,17 +828,28 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine("// and generated real C# calls with type conversions. No model judgment.");
         sb.AppendLine();
 
-        // Using statements for all translated modules + connection targets
+        // Using statements for connection targets only (not ALL translated modules —
+        // that pulls in unnecessary references like shared type modules)
+        // Dafny modules use _module_{Name} namespace; io-shell modules use {Name} namespace
         var connectionTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var conn in comp.Connections!)
         {
             if (!string.IsNullOrWhiteSpace(conn.ToComponent))
                 connectionTargets.Add(conn.ToComponent);
         }
+        // Also include this component's own namespace (for the entry call)
+        connectionTargets.Add(comp.Name);
+        
         foreach (var c in allComponents)
         {
-            if (translatedNames.Contains(c.Name) || connectionTargets.Contains(c.Name))
-                sb.AppendLine($"using _module_{c.Name};");
+            if (connectionTargets.Contains(c.Name))
+            {
+                // io-shell components use namespace {ComponentName}, not _module_{ComponentName}
+                if (c.Classification == ModuleClassification.IoShell)
+                    sb.AppendLine($"using {c.Name};");
+                else
+                    sb.AppendLine($"using _module_{c.Name};");
+            }
         }
 
         // Dafny runtime types
@@ -997,7 +1008,21 @@ public sealed class CSharpImplementationPhase : IPhase
                 if (targetSig?.PatternMethod is string patternMethod)
                     toMethod = patternMethod;
             }
-            var toClass = $"_module_{conn.ToComponent}.__default";
+            
+            // Build the class reference: dafny modules use _module_X.__default,
+            // io-shell modules use {ComponentName}.{StubClass} (e.g., CsvFileReader.FileIO)
+            string toClass;
+            if (toComp.Classification == ModuleClassification.IoShell)
+            {
+                // io-shell stubs define classes like FileIO, ConsoleIO, StreamIO
+                // Find which stub class contains the target method by checking stub names
+                var stubClassName = ResolveStubClass(toComp, toMethod);
+                toClass = $"{conn.ToComponent}.{stubClassName}";
+            }
+            else
+            {
+                toClass = $"_module_{conn.ToComponent}.__default";
+            }
             var connReturnType = conn.ReturnType ?? "var";
             var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
 
@@ -1084,6 +1109,60 @@ public sealed class CSharpImplementationPhase : IPhase
 
         // If it's a known variable, pass through
         return source;
+    }
+
+    /// <summary>
+    /// Resolve which stub class contains a given method for an io-shell component.
+    /// Stub names like "file-io" map to class names like "FileIO".
+    /// The method name is matched against common method-to-stub associations.
+    /// </summary>
+    private static string ResolveStubClass(Component targetComp, string methodName)
+    {
+        // Map method name patterns to stub class names
+        var methodLower = methodName.ToLowerInvariant();
+        
+        // file-io: ReadFile, WriteFile, AppendFile, ReadAllText, WriteAllText
+        if (methodLower.Contains("file") || methodLower.Contains("read") && !methodLower.Contains("console"))
+            return "FileIO";
+        
+        // console-io: Print, ReadLine, Clear, PrintLine
+        if (methodLower.Contains("print") || methodLower.Contains("console") || methodLower.Contains("readline"))
+            return "ConsoleIO";
+        
+        // stream-io: OpenStream, ReadChunk, CloseStream
+        if (methodLower.Contains("stream") || methodLower.Contains("chunk"))
+            return "StreamIO";
+        
+        // network-io: Get, Post, Put, Delete
+        if (methodLower is "get" or "post" or "put" or "delete" or "http")
+            return "NetworkIO";
+        
+        // database-io: Query, Execute, OpenConnection
+        if (methodLower.Contains("query") || methodLower.Contains("execute") || methodLower.Contains("connection"))
+            return "DatabaseIO";
+        
+        // time-random: GetTimestamp, Sleep, Random
+        if (methodLower.Contains("time") || methodLower.Contains("sleep") || methodLower.Contains("random"))
+            return "TimeRandom";
+        
+        // Fallback: use the first stub name, capitalized
+        if (targetComp.StubNames?.Length > 0)
+        {
+            var stubName = targetComp.StubNames[0];
+            return StubNameToClassName(stubName);
+        }
+        
+        // Ultimate fallback — guess FileIO (most common)
+        return "FileIO";
+    }
+
+    /// <summary>
+    /// Convert a stub name like "file-io" to a class name like "FileIO".
+    /// </summary>
+    private static string StubNameToClassName(string stubName)
+    {
+        var parts = stubName.Split('-');
+        return string.Concat(parts.Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..] : ""));
     }
 
     /// <summary>
