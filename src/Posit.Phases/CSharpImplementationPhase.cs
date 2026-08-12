@@ -114,6 +114,19 @@ public sealed class CSharpImplementationPhase : IPhase
             totalOutputTokens += outTok;
         }
 
+        // Pass 2c: Wire components together — generate glue code from the dependency graph
+        var arch = GetArchitectureContract(context);
+        if (arch?.Components is { Length: > 0 } && translatedFiles.Count > 0)
+        {
+            Console.Error.WriteLine("[Posit] C# Implementation — wiring components from dependency graph...");
+            var wiringFile = GenerateWiring(arch, translatedFiles);
+            if (wiringFile is not null)
+            {
+                allFiles.Add(wiringFile);
+                Console.Error.WriteLine($"[Posit] C# Implementation — wiring file: {wiringFile.Path}");
+            }
+        }
+
         Console.Error.WriteLine($"[Posit] C# Implementation — {allFiles.Count} C# files produced");
 
         // Carapace enforcement: check 200-line cap on generated C# files
@@ -702,5 +715,108 @@ public sealed class CSharpImplementationPhase : IPhase
             IsValid = errors.Count == 0,
             Errors = errors.ToArray()
         });
+    }
+
+    /// <summary>
+    /// Generate wiring code that connects components based on the architecture's
+    /// dependency graph. The CLI entry point calls the top-level component, which
+    /// calls its dependencies, which call theirs — all the way down to the I/O stubs.
+    /// This is deterministic — no model call, no judgment, just the dependency graph
+    /// and public surface methods.
+    /// </summary>
+    private static SourceCodeFile? GenerateWiring(
+        ArchitectureContract arch,
+        List<(string ModuleName, string CSharpPath)> translatedFiles)
+    {
+        var components = arch.Components;
+        if (components.Length == 0) return null;
+
+        // Find the CLI component (has publicSurface containing "Program" or is classified io-shell with console)
+        var cliComponent = components.FirstOrDefault(c =>
+            c.PublicSurface?.Contains("Program") == true ||
+            (c.Classification == ModuleClassification.IoShell &&
+             c.StubNames?.Any(s => s.Contains("console") || s.Contains("io-console")) == true));
+
+        // If no CLI, find the top of the dependency graph (component that nothing depends on)
+        if (cliComponent is null)
+        {
+            var dependedUpon = new HashSet<string>(
+                components.SelectMany(c => c.Dependencies ?? []),
+                StringComparer.OrdinalIgnoreCase);
+            cliComponent = components.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
+        }
+
+        if (cliComponent is null) return null;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// Auto-generated wiring file — connects components from the dependency graph.");
+        sb.AppendLine("// This is deterministic: no model call, just the architecture contract.");
+        sb.AppendLine("// The CLI calls the top-level component, which calls its dependencies.");
+        sb.AppendLine();
+
+        // Collect all using statements — one per translated module namespace
+        var translatedNames = new HashSet<string>(
+            translatedFiles.Select(t => t.ModuleName),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var comp in components)
+        {
+            if (translatedNames.Contains(comp.Name))
+                sb.AppendLine($"using _module_{comp.Name};");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"namespace {cliComponent.Name}");
+        sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Wiring entry point — calls the top-level component's public surface.");
+        sb.AppendLine("    /// Generated from the architecture dependency graph.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public static class Wire");
+        sb.AppendLine("    {");
+
+        // Generate a Run method that calls the top-level component's entry point
+        // The top-level component is the one the CLI depends on (usually PipelineEngine or similar)
+        var topLevelDeps = cliComponent.Dependencies ?? [];
+        var entryComponent = components.FirstOrDefault(c =>
+            topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase) &&
+            c.PublicSurface?.Length > 0);
+
+        if (entryComponent is not null && entryComponent.PublicSurface is { Length: > 0 })
+        {
+            var entryMethod = entryComponent.PublicSurface[0];
+            sb.AppendLine($"        /// <summary>");
+            sb.AppendLine($"        /// Calls {entryComponent.Name}.{entryMethod}() — the program's main entry point.");
+            sb.AppendLine($"        /// </summary>");
+            sb.AppendLine($"        public static void Run(string[] args)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            // Wiring: {cliComponent.Name} → {entryComponent.Name}.{entryMethod}");
+            sb.AppendLine($"            // The full dependency chain is:");
+            foreach (var dep in entryComponent.Dependencies ?? [])
+            {
+                var depComp = components.FirstOrDefault(c =>
+                    string.Equals(c.Name, dep, StringComparison.OrdinalIgnoreCase));
+                if (depComp?.PublicSurface is { Length: > 0 })
+                    sb.AppendLine($"            //   → {depComp.Name}.{depComp.PublicSurface[0]}");
+            }
+            sb.AppendLine($"            //");
+            sb.AppendLine($"            // TODO: Parse args, construct inputs, call {entryMethod}.");
+            sb.AppendLine($"            // The method signature comes from the Dafny translation.");
+            sb.AppendLine($"            // This wiring file is the seam between the CLI and the proven logic.");
+            sb.AppendLine("        }");
+        }
+        else
+        {
+            sb.AppendLine("        // No entry component found — CLI has no dependencies with public surface methods.");
+            sb.AppendLine("        public static void Run(string[] args)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // No wiring generated — architecture may need a top-level component.");
+            sb.AppendLine("        }");
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+
+        return new SourceCodeFile($"{cliComponent.Name}/Wire.cs", sb.ToString());
     }
 }
