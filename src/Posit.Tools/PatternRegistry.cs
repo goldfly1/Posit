@@ -533,24 +533,56 @@ public sealed class PatternRegistry
     public static List<MethodSignature> ExtractMethodSignatures(string dafnySource)
     {
         var signatures = new List<MethodSignature>();
-        var lines = dafnySource.Split(['\r', '\n'], StringSplitOptions.None);
 
-        foreach (var line in lines)
+        // Join continuation lines: if a line starts with method/function but doesn't
+        // contain both '(' and ')' on the same line, join subsequent lines until we
+        // have a complete declaration.
+        var lines = dafnySource.Split(['\r', '\n'], StringSplitOptions.None);
+        var joinedLines = new List<string>();
+        int i = 0;
+        while (i < lines.Length)
         {
-            var trimmed = line.TrimStart();
+            var trimmed = lines[i].TrimStart();
+            if ((trimmed.StartsWith("method ", StringComparison.Ordinal) ||
+                 trimmed.StartsWith("function ", StringComparison.Ordinal)) &&
+                !trimmed.Contains("{:extern}"))
+            {
+                // Collect lines until we have balanced parens and a return type
+                var sb = new StringBuilder(trimmed);
+                int parenDepth = trimmed.Count(c => c == '(') - trimmed.Count(c => c == ')');
+                int j = i + 1;
+                while (j < lines.Length && (parenDepth > 0 || !HasReturnType(sb.ToString())))
+                {
+                    var nextTrimmed = lines[j].Trim();
+                    if (string.IsNullOrWhiteSpace(nextTrimmed)) break;
+                    // Stop if we hit the method body or another declaration
+                    if (nextTrimmed.StartsWith("method ") || nextTrimmed.StartsWith("function ") ||
+                        nextTrimmed.StartsWith("predicate ") || nextTrimmed.StartsWith("datatype "))
+                        break;
+                    sb.Append(' ').Append(nextTrimmed);
+                    parenDepth += nextTrimmed.Count(c => c == '(') - nextTrimmed.Count(c => c == ')');
+                    j++;
+                    // Safety: don't consume more than 20 lines
+                    if (j - i > 20) break;
+                }
+                joinedLines.Add(sb.ToString());
+                i = j;
+            }
+            else
+            {
+                i++;
+            }
+        }
+
+        foreach (var decl in joinedLines)
+        {
 
             // Match: method Name(params) returns (type)
             // Match: function Name(params): type
-            if (!trimmed.StartsWith("method ", StringComparison.Ordinal) &&
-                !trimmed.StartsWith("function ", StringComparison.Ordinal))
-                continue;
+            // (Already filtered in the join phase above — no need to re-check)
 
-            // Skip {:extern} — those are stubs, not pattern methods
-            if (trimmed.Contains("{:extern}"))
-                continue;
-
-            var isFunction = trimmed.StartsWith("function ", StringComparison.Ordinal);
-            var rest = trimmed[(isFunction ? 9 : 7)..].TrimStart();
+            var isFunction = decl.StartsWith("function ", StringComparison.Ordinal);
+            var rest = decl[(isFunction ? 9 : 7)..].TrimStart();
 
             // Extract method name
             var parenStart = rest.IndexOf('(');
@@ -648,6 +680,16 @@ public sealed class PatternRegistry
             sb.AppendLine($"  - {sig.Name}({params_}) → {sig.ReturnDafnyType ?? sig.ReturnType}");
         }
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Check if a declaration string already contains a return type indicator
+    /// (either "returns (" for methods or ":" for functions).
+    /// </summary>
+    private static bool HasReturnType(string decl)
+    {
+        return decl.Contains("returns (") || decl.Contains("returns(") ||
+               (decl.StartsWith("function ", StringComparison.Ordinal) && decl.Contains(": "));
     }
 
     private static int FindMatchingParen(string s, int start)
