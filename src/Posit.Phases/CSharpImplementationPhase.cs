@@ -986,7 +986,17 @@ public sealed class CSharpImplementationPhase : IPhase
                 continue;
             }
 
+            // Use the target component's PatternMethod (actual Dafny method name) if available.
+            // The architect names the method (e.g., "Parse") but the pattern's real method
+            // might be "ParseLine" or "HandleRequest". PatternMethod bridges this gap.
             var toMethod = conn.ToMethod;
+            if (toComp.MethodSignatures is { Length: > 0 })
+            {
+                var targetSig = toComp.MethodSignatures.FirstOrDefault(s =>
+                    string.Equals(s.Name, conn.ToMethod, StringComparison.OrdinalIgnoreCase));
+                if (targetSig?.PatternMethod is string patternMethod)
+                    toMethod = patternMethod;
+            }
             var toClass = $"_module_{conn.ToComponent}.__default";
             var connReturnType = conn.ReturnType ?? "var";
             var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
