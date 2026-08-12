@@ -432,6 +432,7 @@ public sealed class PositOrchestrator
                 // Accepted patterns:
                 //   {ComponentName}Extern.cs           — Dafny extern stub cap
                 //   {ComponentName}.{stubName}.cs     — io-shell stub (dot-separated)
+                //   {ComponentName}/Wire.cs            — auto-generated wiring file
                 // Rejected: {ComponentName}{stubName}.cs — mangled, no separator
                 if (ext == ".cs" && parts.Length == 2)
                 {
@@ -439,10 +440,11 @@ public sealed class PositOrchestrator
                     var isExtern = baseName.EndsWith("Extern", StringComparison.OrdinalIgnoreCase) &&
                                    baseName.StartsWith(firstDir, StringComparison.OrdinalIgnoreCase);
                     var isDotSeparated = baseName.StartsWith(firstDir + ".", StringComparison.OrdinalIgnoreCase);
+                    var isWiring = string.Equals(baseName, "Wire", StringComparison.OrdinalIgnoreCase);
 
-                    if (!isExtern && !isDotSeparated)
+                    if (!isExtern && !isDotSeparated && !isWiring)
                     {
-                        errors.Add($"carapace.mangled_filename: '{rel}' filename '{lastPart}' is not deterministic — expected '{firstDir}Extern.cs' or '{firstDir}.{{stubName}}.cs'");
+                        errors.Add($"carapace.mangled_filename: '{rel}' filename '{lastPart}' is not deterministic — expected '{firstDir}Extern.cs', '{firstDir}.{{stubName}}.cs', or '{firstDir}/Wire.cs'");
                     }
                 }
 

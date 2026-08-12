@@ -765,27 +765,29 @@ public sealed class CSharpImplementationPhase : IPhase
         //
         // Priority:
         // 1. If cliComponent has connections → it IS the entry (CLI orchestrates directly)
-        // 2. Otherwise, find a dependency of cliComponent that has connections (CLI delegates to engine)
-        // 3. Otherwise, find ANY component in the graph that has connections
+        // 2. Otherwise, find the dependency with the MOST connections (the engine)
+        // 3. Otherwise, find ANY component with the most connections
         Component? entryComponent = null;
+
+        // Gather all components that have connector forms, sorted by connection count (desc)
+        var componentsWithConnections = components
+            .Where(c => c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0)
+            .OrderByDescending(c => c.Connections!.Length)
+            .ToList();
 
         if (cliComponent.Connections?.Length > 0 && cliComponent.MethodSignatures?.Length > 0)
         {
             // CLI component itself has the connector forms — it's the orchestrator
             entryComponent = cliComponent;
         }
-        else
+        else if (componentsWithConnections.Count > 0)
         {
-            // Look for a dependency that has connector forms (the engine)
+            // Pick the component with the most connections — that's the orchestrator
+            // First try dependencies of the CLI, then any component
             var topLevelDeps = cliComponent.Dependencies ?? [];
-            entryComponent = components.FirstOrDefault(c =>
-                topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase) &&
-                c.Connections?.Length > 0 &&
-                c.MethodSignatures?.Length > 0);
-
-            // Fallback: any component with connector forms
-            entryComponent ??= components.FirstOrDefault(c =>
-                c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0);
+            entryComponent = componentsWithConnections.FirstOrDefault(c =>
+                topLevelDeps.Contains(c.Name, StringComparer.OrdinalIgnoreCase));
+            entryComponent ??= componentsWithConnections[0];
         }
 
         if (entryComponent is null) return null;
