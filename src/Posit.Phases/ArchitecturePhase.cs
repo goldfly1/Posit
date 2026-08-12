@@ -474,7 +474,7 @@ public sealed class ArchitecturePhase : IPhase
                     errors.Add($"validation.missing.entryPoint: {prefix} '{c.Name}' Web/API io-shell component must list 'Program' in publicSurface");
             }
 
-            if (c.Dependencies is not null)
+            if (c.Dependencies is not null && c.Dependencies.Length > 0)
             {
                 foreach (var dep in c.Dependencies)
                 {
@@ -483,6 +483,65 @@ public sealed class ArchitecturePhase : IPhase
                     {
                         errors.Add($"validation.unresolved.dependency: {prefix} '{c.Name}' depends on unknown '{dep}'");
                     }
+                }
+
+                // Carapace enforcement: connector forms are REQUIRED for any component
+                // with dependencies. No connector specs → reject → send back to the model.
+                // The orchestrator cannot wire without these. Cotton candy prevention.
+                if (c.MethodSignatures is null || c.MethodSignatures.Length == 0)
+                    errors.Add($"validation.missing.methodSignatures: {prefix} '{c.Name}' has dependencies but no methodSignatures — the orchestrator needs these to wire deterministically");
+
+                if (c.Connections is null || c.Connections.Length == 0)
+                    errors.Add($"validation.missing.connections: {prefix} '{c.Name}' has dependencies but no connections — specify how this component calls each dependency");
+
+                // Validate that every dependency has at least one connection spec
+                if (c.Connections is not null)
+                {
+                    var connectedDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var conn in c.Connections)
+                    {
+                        if (!string.IsNullOrWhiteSpace(conn.ToComponent))
+                            connectedDeps.Add(conn.ToComponent);
+
+                        // Validate connection references resolve
+                        if (!string.IsNullOrWhiteSpace(conn.ToComponent) &&
+                            !componentByName.ContainsKey(conn.ToComponent) &&
+                            !contract.Components.Any(x => string.Equals(x.Name, conn.ToComponent, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            errors.Add($"validation.unresolved.connection: {prefix} '{c.Name}' connection references unknown component '{conn.ToComponent}'");
+                        }
+
+                        // Validate fromMethod matches a methodSignature name
+                        if (c.MethodSignatures is not null && !string.IsNullOrWhiteSpace(conn.FromMethod))
+                        {
+                            if (!c.MethodSignatures.Any(ms => string.Equals(ms.Name, conn.FromMethod, StringComparison.OrdinalIgnoreCase)))
+                                errors.Add($"validation.mismatch.connection_fromMethod: {prefix} '{c.Name}' connection fromMethod '{conn.FromMethod}' does not match any methodSignature name");
+                        }
+                    }
+
+                    foreach (var dep in c.Dependencies)
+                    {
+                        if (!connectedDeps.Contains(dep))
+                            errors.Add($"validation.missing.connection_for_dependency: {prefix} '{c.Name}' depends on '{dep}' but no connection spec targets it");
+                    }
+                }
+
+                // Validate sharedTypes if the component has dafny dependencies
+                if (c.SharedTypes is null || c.SharedTypes.Length == 0)
+                {
+                    // Check if any dependency is a dafny component (would need shared types)
+                    var hasDafnyDeps = false;
+                    foreach (var dep in c.Dependencies)
+                    {
+                        if (componentByName.TryGetValue(dep, out var depComp) &&
+                            depComp.Classification is ModuleClassification.Dafny or ModuleClassification.Mixed)
+                        {
+                            hasDafnyDeps = true;
+                            break;
+                        }
+                    }
+                    if (hasDafnyDeps)
+                        errors.Add($"validation.missing.sharedTypes: {prefix} '{c.Name}' depends on dafny components but has no sharedTypes — list types shared via Dafny include");
                 }
             }
         }

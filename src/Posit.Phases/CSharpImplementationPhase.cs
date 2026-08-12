@@ -766,20 +766,27 @@ public sealed class CSharpImplementationPhase : IPhase
 
         if (entryComponent is null) return null;
 
-        // Check if we have connector specs (new style) or just names (old style)
+        // Carapace enforcement: connector specs are REQUIRED. No specs → no wiring.
+        // The architecture validation should have caught this and rejected the contract,
+        // but if we get here anyway, fail hard. No scaffold. No cotton candy.
         var hasConnectorSpecs = entryComponent.MethodSignatures?.Length > 0;
         var hasConnections = entryComponent.Connections?.Length > 0;
 
         if (!hasConnectorSpecs)
         {
-            Console.Error.WriteLine($"[Posit] Wiring — WARNING: '{entryComponent.Name}' has no methodSignatures. Generating scaffold (old-style).");
-            Console.Error.WriteLine($"[Posit] Wiring — The architect must fill out connector forms for deterministic wiring.");
-            return GenerateWiringScaffold(arch, cliComponent, entryComponent, translatedFiles);
+            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{entryComponent.Name}' has no methodSignatures. Architecture contract should have been rejected at validation.");
+            Console.Error.WriteLine($"[Posit] Wiring — No wiring generated. The architect must fill out connector forms.");
+            return null;
+        }
+
+        if (!hasConnections)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{entryComponent.Name}' has methodSignatures but no connections. Cannot wire without connection specs.");
+            return null;
         }
 
         Console.Error.WriteLine($"[Posit] Wiring — generating deterministic wiring from connector specs for '{entryComponent.Name}'");
-        if (hasConnections)
-            Console.Error.WriteLine($"[Posit] Wiring — {entryComponent.Connections!.Length} connection specs found");
+        Console.Error.WriteLine($"[Posit] Wiring — {entryComponent.Connections!.Length} connection specs found");
 
         // === Generate real wiring code from connector specs ===
         var sb = new StringBuilder();
@@ -993,52 +1000,5 @@ public sealed class CSharpImplementationPhase : IPhase
             _ when t.StartsWith("set<") => "Dafny.ISet<" + MapDafnyTypeToCSharpWire(t[4..^1]) + ">",
             _ => t
         };
-    }
-
-    /// <summary>
-    /// Fallback: generate a wiring scaffold when connector specs are missing.
-    /// This is the old-style output — comments and TODOs, no real calls.
-    /// Used when the architecture contract doesn't have methodSignatures/connections.
-    /// </summary>
-    private static SourceCodeFile GenerateWiringScaffold(
-        ArchitectureContract arch,
-        Component cliComponent,
-        Component entryComponent,
-        List<(string ModuleName, string CSharpPath)> translatedFiles)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("// Auto-generated wiring SCAFFOLD — connector specs missing from carapace.");
-        sb.AppendLine("// The architect did not fill out methodSignatures or connections.");
-        sb.AppendLine("// This is a scaffold only — no real wiring is generated.");
-        sb.AppendLine("// To get real wiring, the architect must fill out connector forms.");
-        sb.AppendLine("// See wiki/connector-diagnosis.md for details.");
-        sb.AppendLine();
-
-        var translatedNames = new HashSet<string>(
-            translatedFiles.Select(t => t.ModuleName),
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var comp in arch.Components)
-        {
-            if (translatedNames.Contains(comp.Name))
-                sb.AppendLine($"using _module_{comp.Name};");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine($"namespace {cliComponent.Name}");
-        sb.AppendLine("{");
-        sb.AppendLine("    public static class Wire");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        // SCAFFOLD: {entryComponent.Name}.{entryComponent.PublicSurface?[0] ?? "Run"}");
-        sb.AppendLine("        public static int Run(string[] args)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            // No connector specs — cannot generate wiring.");
-        sb.AppendLine("            // The architect must provide methodSignatures + connections.");
-        sb.AppendLine("            return 0;");
-        sb.AppendLine("        }");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-
-        return new SourceCodeFile($"{cliComponent.Name}/Wire.cs", sb.ToString());
     }
 }
