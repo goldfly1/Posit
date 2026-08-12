@@ -827,9 +827,20 @@ public sealed class CSharpImplementationPhase : IPhase
             StringComparer.OrdinalIgnoreCase);
 
         // Using statements for all translated modules (namespaces are _module_<Name>)
+        // Also include components referenced in connections (they may be io-shell
+        // components that aren't in translatedFiles but still need a using)
+        var connectionTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (entryComponent.Connections is not null)
+        {
+            foreach (var conn in entryComponent.Connections)
+            {
+                if (!string.IsNullOrWhiteSpace(conn.ToComponent))
+                    connectionTargets.Add(conn.ToComponent);
+            }
+        }
         foreach (var comp in components)
         {
-            if (translatedNames.Contains(comp.Name))
+            if (translatedNames.Contains(comp.Name) || connectionTargets.Contains(comp.Name))
                 sb.AppendLine($"using _module_{comp.Name};");
         }
 
