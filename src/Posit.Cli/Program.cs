@@ -23,6 +23,7 @@ if (cliArgs.Length == 0)
     Console.Error.WriteLine("  posit resume <session-id>                           Resume a failed/unfinished session");
     Console.Error.WriteLine("  posit artifacts <session-id>                        List artifacts");
     Console.Error.WriteLine("  posit verify <session-id>                           Verify C# output in Docker");
+    Console.Error.WriteLine("  posit harness <session-id>                          Run bot harness (build + test CLI)");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Phases: architecture, dafny-contracts, dafny-implementation,");
     Console.Error.WriteLine("        csharp-implementation, qa");
@@ -44,6 +45,7 @@ try
         "resume" => await ResumeCommand(args.Skip(1).ToArray()),
         "artifacts" => await ArtifactsCommand(args.Skip(1).ToArray()),
         "verify" => await VerifyCommand(args.Skip(1).ToArray()),
+        "harness" => await HarnessCommand(args.Skip(1).ToArray()),
         _ => UnknownCommand(command)
     };
 }
@@ -229,6 +231,40 @@ static async Task<int> VerifyCommand(string[] args)
         ? "[Posit] Docker verification succeeded."
         : "[Posit] Docker verification failed.");
     return success ? 0 : 1;
+}
+
+static async Task<int> HarnessCommand(string[] args)
+{
+    if (args.Length < 1)
+    {
+        Console.Error.WriteLine("Usage: posit harness <session-id>");
+        return 1;
+    }
+
+    var sessionId = new SessionId(args[0]);
+    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
+    var repo = new ArtifactRepository(dataSource);
+    var harness = new BotHarness(repo);
+
+    Console.Error.WriteLine($"[Posit] Bot Harness — testing session {sessionId.Value}...");
+    var result = await harness.RunAsync(sessionId);
+
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"=== Bot Harness Result ===");
+    Console.Error.WriteLine($"  Success: {result.Success}");
+    Console.Error.WriteLine($"  Summary: {result.Summary}");
+    Console.Error.WriteLine($"  CLI Component: {result.CliComponent}");
+    Console.Error.WriteLine($"  Tests: {result.TestResults.Count}");
+
+    foreach (var tc in result.TestResults)
+    {
+        var status = tc.Passed ? "PASS" : "FAIL";
+        Console.Error.WriteLine($"  [{status}] {tc.Name} (exit={tc.ExitCode}, {tc.ElapsedMs}ms)");
+        if (!tc.Passed && !string.IsNullOrEmpty(tc.Error))
+            Console.Error.WriteLine($"         error: {tc.Error[..Math.Min(tc.Error.Length, 200)]}");
+    }
+
+    return result.Success ? 0 : 1;
 }
 
 static async Task<int> RunCommand(string[] args)

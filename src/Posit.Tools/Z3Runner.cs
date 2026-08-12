@@ -142,6 +142,26 @@ public sealed class Z3Runner
                 await File.WriteAllTextAsync(outputPath, stdout, ct);
             }
 
+            // Post-process: rename `namespace _module` to `namespace _module_{moduleName}`
+            // so that Wire.cs can use `using _module_{moduleName};` to reference the
+            // correct module. Without this, every Dafny module produces `namespace _module`
+            // and they collide when referenced from C#.
+            // Also update internal fully-qualified references from `_module.` to `_module_{moduleName}.`
+            if (File.Exists(outputPath))
+            {
+                var csharpContent = await File.ReadAllTextAsync(outputPath, ct);
+                // Rename the namespace declaration
+                var renamed = csharpContent.Replace("namespace _module {", $"namespace _module_{moduleName} {{");
+                // Rename internal fully-qualified references to _module.X → _module_{moduleName}.X
+                // Be careful: only replace `_module.` (with the dot), not `_module_` or `_module{`
+                renamed = renamed.Replace("_module.", $"_module_{moduleName}.");
+                if (renamed != csharpContent)
+                {
+                    await File.WriteAllTextAsync(outputPath, renamed, ct);
+                    Console.Error.WriteLine($"[Posit] dafny translate cs — renamed namespace _module → _module_{moduleName} in {Path.GetFileName(outputPath)}");
+                }
+            }
+
             return outputPath;
         }
         catch (Exception ex)
