@@ -168,7 +168,7 @@ static async Task<int> ResumeCommand(string[] args)
         new DafnyContractsPhase(z3Runner),
         new DafnyImplementationPhase(gateway, z3Runner),
         new CSharpImplementationPhase(gateway),
-        new QaPhase(gateway)
+        new QaPhase()
     };
 
     var orchestrator = new PositOrchestrator(reducer, graphEngine, phaseController, phases_impl, artifactRepo, stateStore);
@@ -355,7 +355,7 @@ static async Task<int> RunCommand(string[] args)
         new DafnyContractsPhase(z3Runner),
         new DafnyImplementationPhase(gateway, z3Runner),
         new CSharpImplementationPhase(gateway),
-        new QaPhase(gateway)
+        new QaPhase()
     };
 
     var orchestrator = new PositOrchestrator(reducer, graphEngine, phaseController, phases_impl, artifactRepo, stateStore);

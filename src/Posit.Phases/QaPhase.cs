@@ -1,41 +1,24 @@
-using System.Text;
 using System.Text.Json;
-using Posit.AI.Models;
-using Posit.Data.Repositories;
 using Posit.Contracts.Serialization;
 using static Posit.Contracts.Serialization.PositJson;
 
 namespace Posit.Phases;
 
 /// <summary>
-/// QA phase — compiles translated C# (verified modules) and generates
-/// tests for unverified (io-shell) modules.
+/// QA phase — DETERMINISTIC. No model call.
 ///
-/// For verified (Dafny) modules: compile only. The proof IS the test.
-/// For unverified (io-shell) modules: full test generation via model.
+/// For verified (Dafny) modules: records that the proof IS the test.
+/// For unverified (io-shell) modules: records that the bot harness will test them.
 ///
-/// If a test fails and Imp appeals, the orchestrator routes the appeal
-/// to kimi-2.7-code:cloud (independent reviewer). This phase does not
-/// handle appeals directly.
-///
-/// Model: glm-5.2:cloud
+/// The bot harness (BotHarness.cs) IS the test — it pushes data through the CLI,
+/// captures output, and compares to spec. No model judgment in the test phase.
+/// This phase just records metadata. The actual testing happens in the harness.
 /// </summary>
 public sealed class QaPhase : IPhase
 {
     private static readonly JsonSerializerOptions JsonOptions = Options;
 
-    private readonly IModelGateway _gateway;
-
-    /// <summary>
-    /// The QA phase needs more output tokens than other phases because it must
-    /// generate complete test files as JSON. Default cap is 64K; QA gets 64K.
-    /// </summary>
-    private const int QaMaxOutputTokens = 64000;
-
-    public QaPhase(IModelGateway gateway)
-    {
-        _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
-    }
+    public QaPhase() { }
 
     public PhaseId Id => new("qa");
     public PhaseName Name => new("QA");
@@ -50,7 +33,7 @@ public sealed class QaPhase : IPhase
 
     public Task InitializeAsync(PhaseContext context, CancellationToken ct) => Task.CompletedTask;
 
-    public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct)
+    public Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct)
     {
         // Extract source code bundle from Pass 2 + verification results from Pass 1
         var (sourceFiles, moduleVerification) = ExtractInputs(context);
@@ -58,32 +41,29 @@ public sealed class QaPhase : IPhase
         if (sourceFiles.Count == 0 && moduleVerification.Count == 0)
         {
             Console.Error.WriteLine("[Posit] QA — no source files or verification results found");
-            return new PhaseResult
+            return Task.FromResult(new PhaseResult
             {
                 PhaseId = Id,
                 Status = PhaseStatus.Success,
                 Artifacts = CreateEmptyBundle(context),
                 Costs = CostSnapshot.Zero,
                 AttemptNumber = context.AttemptNumber
-            };
+            });
         }
 
-        // Split modules into verified (compile only) and unverified (generate tests)
+        // Split modules into verified (Dafny) and unverified (io-shell)
         var verifiedModules = moduleVerification.Where(m => m.Value).Select(m => m.Key).ToHashSet();
         var unverifiedFiles = sourceFiles
             .Where(f => !IsVerifiedFile(f.path, verifiedModules))
             .ToList();
 
         Console.Error.WriteLine(
-            $"[Posit] QA — {verifiedModules.Count} verified (compile only), " +
-            $"{unverifiedFiles.Count} unverified files (test generation)");
+            $"[Posit] QA — {verifiedModules.Count} verified (proof IS the test), " +
+            $"{unverifiedFiles.Count} unverified (bot harness will test)");
 
-        var testFiles = new List<SourceCodeFile>();
         var moduleResults = new List<QaModuleResult>();
-        var totalInputTokens = 0;
-        var totalOutputTokens = 0;
 
-        // Verified modules: no tests, just record metadata
+        // Verified modules: proof IS the test
         foreach (var moduleName in verifiedModules)
         {
             moduleResults.Add(new QaModuleResult
@@ -91,40 +71,33 @@ public sealed class QaPhase : IPhase
                 ModuleName = moduleName,
                 IsVerified = true,
                 TestCount = 0,
-                Notes = "Verified by Z3 — no tests generated (proof IS the test)"
+                Notes = "Verified by Z3 — proof IS the test"
             });
         }
 
-        // Unverified modules: generate tests
-        if (unverifiedFiles.Count > 0)
+        // Unverified modules: bot harness will test
+        foreach (var file in unverifiedFiles)
         {
-            var (generatedTests, inTok, outTok) = await GenerateTestsAsync(context, unverifiedFiles, ct);
-            testFiles.AddRange(generatedTests);
-            totalInputTokens += inTok;
-            totalOutputTokens += outTok;
-
-            // Record module results for unverified modules
-            foreach (var file in unverifiedFiles)
+            var moduleName = ExtractModuleName(file.path);
+            if (!string.IsNullOrEmpty(moduleName))
             {
-                var moduleName = ExtractModuleName(file.path);
-                if (!string.IsNullOrEmpty(moduleName))
+                moduleResults.Add(new QaModuleResult
                 {
-                    moduleResults.Add(new QaModuleResult
-                    {
-                        ModuleName = moduleName,
-                        IsVerified = false,
-                        TestCount = generatedTests.Count(t => t.Path.Contains(moduleName, StringComparison.OrdinalIgnoreCase)),
-                        Notes = "Test suite generated"
-                    });
-                }
+                    ModuleName = moduleName,
+                    IsVerified = false,
+                    TestCount = 0,
+                    Notes = "Bot harness will test (deterministic — push data, compare output)"
+                });
             }
         }
 
+        // No test files generated — the bot harness IS the test.
+        // It pushes data through the CLI, captures output, compares to spec.
         var testSuite = new TestSuite
         {
-            TestFiles = [.. testFiles],
+            TestFiles = [],
             ModuleResults = [.. moduleResults],
-            Summary = $"{verifiedModules.Count} verified (compile only), {testFiles.Count} test files for unverified modules"
+            Summary = $"{verifiedModules.Count} verified (proof IS the test), {unverifiedFiles.Count} unverified (bot harness)"
         };
 
         var payloadJson = JsonSerializer.SerializeToUtf8Bytes(testSuite, JsonOptions);
@@ -142,25 +115,16 @@ public sealed class QaPhase : IPhase
                 .ToArray()
         };
 
-        return new PhaseResult
+        return Task.FromResult(new PhaseResult
         {
             PhaseId = Id,
             Status = PhaseStatus.Success,
             Artifacts = bundle,
-            Costs = new CostSnapshot
-            {
-                InputTokens = totalInputTokens,
-                OutputTokens = totalOutputTokens,
-                ModelTier = context.ModelRoute.Tier
-            },
+            Costs = CostSnapshot.Zero,
             AttemptNumber = context.AttemptNumber
-        };
+        });
     }
 
-    /// <summary>
-    /// Extract source files from C# Implementation (Pass 2) and
-    /// verification results from Dafny Implementation (Pass 1).
-    /// </summary>
     private static (List<(string path, string content)> Files, Dictionary<string, bool> Verification) ExtractInputs(PhaseContext context)
     {
         var files = new List<(string, string)>();
@@ -212,152 +176,6 @@ public sealed class QaPhase : IPhase
 
     private static string ExtractModuleName(string path)
         => Path.GetFileNameWithoutExtension(path);
-
-    private async Task<(List<SourceCodeFile>, int, int)> GenerateTestsAsync(
-        PhaseContext context, List<(string path, string content)> unverifiedFiles, CancellationToken ct)
-    {
-        var systemPrompt = BuildQaPrompt(unverifiedFiles);
-        var prompt = context.Prompt with { SystemPrompt = systemPrompt };
-
-        Console.Error.WriteLine($"[Posit] QA — calling model for test generation...");
-
-        // QA needs a larger output budget than other phases
-        var route = context.ModelRoute with { MaxOutputTokens = QaMaxOutputTokens };
-        var generation = await _gateway.GenerateAsync(route, prompt, context, ct);
-
-        // Capture the prompt→response pair
-        await PromptLogger.LogPromptAsync(
-            context.SessionId.Value, Id.Value, context.AttemptNumber,
-            null, "generate",
-            context.ModelRoute.ProviderId, context.ModelRoute.ModelId,
-            systemPrompt, null,
-            generation.Text,
-            generation.InputTokens, generation.OutputTokens,
-            generation.CostUsd, (long)generation.Latency.TotalMilliseconds,
-            null, null, ct);
-
-        var testFiles = ParseTestOutput(generation.Text);
-        Console.Error.WriteLine($"[Posit] QA — model returned {testFiles.Count} test files");
-
-        return (testFiles, generation.InputTokens, generation.OutputTokens);
-    }
-
-    private static string BuildQaPrompt(List<(string path, string content)> unverifiedFiles)
-    {
-        var sb = new StringBuilder();
-
-        // Load prompt template
-        var promptPath = Path.Combine(AppContext.BaseDirectory, "prompts", "qa", "1.0.0.md");
-        if (!File.Exists(promptPath))
-            promptPath = Path.Combine(Directory.GetCurrentDirectory(), "prompts", "qa", "1.0.0.md");
-
-        if (File.Exists(promptPath))
-            sb.AppendLine(File.ReadAllText(promptPath));
-        else
-            sb.AppendLine("You are the QA phase. Generate xUnit tests for the unverified C# modules. Respond with JSON: {testFiles: [{path, content}], moduleResults: [{moduleName, isVerified, testCount, notes}], summary}.");
-
-        sb.AppendLine();
-        sb.AppendLine("--- UNVERIFIED MODULES (generate tests for these) ---");
-
-        foreach (var (path, content) in unverifiedFiles)
-        {
-            sb.AppendLine($"File: {path}");
-            sb.AppendLine(content);
-            sb.AppendLine();
-        }
-
-        sb.AppendLine("Generate xUnit tests for each module above. Respond with valid JSON.");
-
-        return sb.ToString();
-    }
-
-    private static List<SourceCodeFile> ParseTestOutput(string text)
-    {
-        var files = new List<SourceCodeFile>();
-
-        if (string.IsNullOrWhiteSpace(text))
-            return files;
-
-        try
-        {
-            var cleaned = OllamaModelGateway.StripReasoningTags(text);
-            var json = OllamaModelGateway.ExtractJson(cleaned);
-            json = SanitizeJson(json);
-
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("testFiles", out var testFilesEl))
-            {
-                foreach (var element in testFilesEl.EnumerateArray())
-                {
-                    var path = element.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "";
-                    var content = element.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
-                    if (!string.IsNullOrWhiteSpace(content))
-                        files.Add(new SourceCodeFile(path, content));
-                }
-            }
-            else if (root.ValueKind == JsonValueKind.Array)
-            {
-                // Fallback: bare array of files
-                foreach (var element in root.EnumerateArray())
-                {
-                    var path = element.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "";
-                    var content = element.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
-                    if (!string.IsNullOrWhiteSpace(content))
-                        files.Add(new SourceCodeFile(path, content));
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[Posit] QA — failed to parse test output: {ex.Message}");
-        }
-
-        return files;
-    }
-
-    /// <summary>
-    /// Sanitizes JSON returned by models that may include invalid escape sequences
-    /// or other malformations that cause JsonDocument.Parse to fail.
-    /// </summary>
-    private static string SanitizeJson(string json)
-    {
-        // Remove stray backslashes that aren't valid JSON escape sequences
-        // (e.g., \S, \T, \n in C# code strings that the model didn't escape properly)
-        var sb = new StringBuilder(json.Length);
-        var i = 0;
-        while (i < json.Length)
-        {
-            if (json[i] == '\\' && i + 1 < json.Length)
-            {
-                var next = json[i + 1];
-                // Valid JSON escape characters: " \ / b f n r t u
-                if (next == '"' || next == '\\' || next == '/' || next == 'b' || next == 'f'
-                    || next == 'n' || next == 'r' || next == 't' || next == 'u')
-                {
-                    if (next == 'u' && i + 5 < json.Length)
-                    {
-                        // Copy \uXXXX as-is
-                        sb.Append(json, i, 6);
-                        i += 6;
-                        continue;
-                    }
-                    sb.Append(json[i]);
-                    sb.Append(next);
-                    i += 2;
-                    continue;
-                }
-                // Invalid escape — replace with double backslash
-                sb.Append("\\\\");
-                i++;
-                continue;
-            }
-            sb.Append(json[i]);
-            i++;
-        }
-        return sb.ToString();
-    }
 
     private static ArtifactBundle CreateEmptyBundle(PhaseContext context)
     {
