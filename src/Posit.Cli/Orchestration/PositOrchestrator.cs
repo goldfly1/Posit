@@ -430,6 +430,7 @@ public sealed class PositOrchestrator
 
                 // Filename must be deterministic and traceable to the component.
                 // Accepted patterns:
+                //   {ComponentName}.cs                — translated Dafny C# source
                 //   {ComponentName}Extern.cs           — Dafny extern stub cap
                 //   {ComponentName}.{stubName}.cs     — io-shell stub (dot-separated)
                 //   {ComponentName}/Wire.cs            — auto-generated wiring file
@@ -437,14 +438,15 @@ public sealed class PositOrchestrator
                 if (ext == ".cs" && parts.Length == 2)
                 {
                     var baseName = Path.GetFileNameWithoutExtension(lastPart);
+                    var isTranslated = string.Equals(baseName, firstDir, StringComparison.OrdinalIgnoreCase);
                     var isExtern = baseName.EndsWith("Extern", StringComparison.OrdinalIgnoreCase) &&
                                    baseName.StartsWith(firstDir, StringComparison.OrdinalIgnoreCase);
                     var isDotSeparated = baseName.StartsWith(firstDir + ".", StringComparison.OrdinalIgnoreCase);
                     var isWiring = string.Equals(baseName, "Wire", StringComparison.OrdinalIgnoreCase);
 
-                    if (!isExtern && !isDotSeparated && !isWiring)
+                    if (!isTranslated && !isExtern && !isDotSeparated && !isWiring)
                     {
-                        errors.Add($"carapace.mangled_filename: '{rel}' filename '{lastPart}' is not deterministic — expected '{firstDir}Extern.cs', '{firstDir}.{{stubName}}.cs', or '{firstDir}/Wire.cs'");
+                        errors.Add($"carapace.mangled_filename: '{rel}' filename '{lastPart}' is not deterministic — expected '{firstDir}.cs', '{firstDir}Extern.cs', '{firstDir}.{{stubName}}.cs', or '{firstDir}/Wire.cs'");
                     }
                 }
 

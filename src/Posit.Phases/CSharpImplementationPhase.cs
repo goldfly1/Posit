@@ -263,12 +263,13 @@ public sealed class CSharpImplementationPhase : IPhase
             // Include the translated Dafny C# file in the source bundle.
             // This contains __default (or Frame, etc.) with the actual method bodies.
             // Without it, the Docker build can't find the Dafny types.
+            // Rename from staging name (skeleton-*.cs) to carapace-compliant name ({Module}.cs).
             if (File.Exists(csharpPath))
             {
                 var content = File.ReadAllText(csharpPath);
-                var fileName = Path.GetFileName(csharpPath);
-                files.Add(new SourceCodeFile($"{moduleName}/{fileName}", content));
-                Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' translated C# -> {fileName}");
+                var carapaceName = $"{moduleName}.cs";  // carapace-compliant filename
+                files.Add(new SourceCodeFile($"{moduleName}/{carapaceName}", content));
+                Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' translated C# -> {carapaceName}");
             }
 
             var component = arch?.Components?.FirstOrDefault(c => string.Equals(c.Name, moduleName, StringComparison.OrdinalIgnoreCase));
