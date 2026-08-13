@@ -1,7 +1,5 @@
 # The Carapace Doctrine
 
-> **"Computers should know what I MEANT to say."**
-
 The skeleton is the carapace — the source of truth for everything that is contractual. The orchestrator's job is to be the enforcer that compels every component to comply with it. Nothing leaves the door unless it matches what the skeleton says.
 
 The orchestrator needs to know and hold every detail of the skeleton and use it as a contract checklist at every phase boundary. Not just "does a directory exist with this component name" but:

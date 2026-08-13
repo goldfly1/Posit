@@ -220,6 +220,6 @@ Dafny can emit runtime contract checks for `{:extern}` methods in the translated
 ## See Also
 
 - `wiki/proof-methodology.md` — seed → assemble → test → prove → carve flow
-- `wiki/carapace-doctrine.md` — "Computers should know what I MEANT to say"
+- `wiki/carapace-doctrine.md` — the skeleton as the deterministic contract
 - `wiki/current-abilities.md` — 17 patterns, 6 stubs, trial scorecard
 - `wiki/handoff-2026-08-12.md` — Bluejohn discovery, wiring scaffold, session handoff

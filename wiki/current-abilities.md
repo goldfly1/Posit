@@ -128,6 +128,6 @@ Dafny can emit runtime contract checks for `{:extern}` methods. Status: hopeful 
 
 - `wiki/connector-diagnosis.md` — the data flow trace, the shrunk pipeline, the closed loop
 - `wiki/proof-methodology.md` — the seed → assemble → test → prove → carve flow
-- `wiki/carapace-doctrine.md` — "Computers should know what I MEANT to say"
+- `wiki/carapace-doctrine.md` — the skeleton as the deterministic contract
 - `AGENTS.md` — project context and locked decisions
 - `wiki/handoff-2026-08-12.md` — Bluejohn discovery, wiring scaffold, session handoff

@@ -138,10 +138,23 @@ public sealed class OllamaModelGateway : IModelGateway
             sb.AppendLine();
         }
 
-        if (!string.IsNullOrWhiteSpace(prompt.OutputFormatSpec))
+        // ── Correction Signal — feed validation errors back to the model ──
+        // When a phase fails validation, the orchestrator stores the errors as
+        // CorrectionSignal in the session state. On retry, BuildContext passes them
+        // into PhaseContext. The gateway injects them here so the model sees exactly
+        // what was wrong and what's available to fix it. This is the carapace closing
+        // the loop: reject → send back with listing → model fixes → re-scan → repeat.
+        if (context.CorrectionSignal is { Length: > 0 })
         {
-            sb.AppendLine("Output format specification:");
-            sb.AppendLine(prompt.OutputFormatSpec);
+            sb.AppendLine("═══ CORRECTION SIGNAL — your previous output had these errors ═══");
+            sb.AppendLine("Fix ALL of the following before resubmitting:");
+            sb.AppendLine();
+            foreach (var signal in context.CorrectionSignal)
+            {
+                sb.AppendLine($"• {signal}");
+            }
+            sb.AppendLine();
+            sb.AppendLine("═══ END CORRECTION SIGNAL ═══");
             sb.AppendLine();
         }
 
@@ -149,6 +162,13 @@ public sealed class OllamaModelGateway : IModelGateway
         {
             sb.AppendLine("Inherited decisions from previous phases:");
             sb.AppendLine(context.InheritedDecisions);
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt.OutputFormatSpec))
+        {
+            sb.AppendLine("Output format specification:");
+            sb.AppendLine(prompt.OutputFormatSpec);
             sb.AppendLine();
         }
 

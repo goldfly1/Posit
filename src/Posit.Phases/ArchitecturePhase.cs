@@ -24,11 +24,13 @@ public sealed class ArchitecturePhase : IPhase
 
     private readonly IModelGateway _gateway;
     private readonly PatternRegistry _registry;
+    private readonly ContractScanner _scanner;
 
     public ArchitecturePhase(IModelGateway gateway, PatternRegistry? registry = null)
     {
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _registry = registry ?? new PatternRegistry(GetDefaultPatternsDirectory());
+        _scanner = new ContractScanner(_registry);
     }
 
     private static string GetDefaultPatternsDirectory()
@@ -573,35 +575,13 @@ public sealed class ArchitecturePhase : IPhase
                                 errors.Add($"validation.mismatch.connection_fromMethod: {prefix} '{c.Name}' connection fromMethod '{conn.FromMethod}' does not match any methodSignature name");
                         }
 
-                        // Carapace enforcement: toMethod must exist on the target component's pattern.
-                        // The architect invents method names (e.g., "Parse") but the pattern provides
-                        // real methods (e.g., "ParseLine"). Reject if toMethod doesn't match any
-                        // real pattern method on the target component.
-                        if (!string.IsNullOrWhiteSpace(conn.ToMethod) &&
-                            !string.IsNullOrWhiteSpace(conn.ToComponent) &&
-                            componentByName.TryGetValue(conn.ToComponent, out var targetComp) &&
-                            !string.IsNullOrWhiteSpace(targetComp.PatternName))
-                        {
-                            var patternSigs = _registry.GetPatternSignatures(targetComp.PatternName);
-                            if (patternSigs.Count > 0)
-                            {
-                                // Check toMethod against both the pattern's real method names
-                                // and the target component's MethodSignatures (which may include PatternMethod mappings)
-                                var patternMethodNames = patternSigs.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                                var targetSigNames = targetComp.MethodSignatures?
-                                    .Select(s => s.PatternMethod ?? s.Name)
-                                    .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                                // The toMethod should match either a real pattern method or a declared method signature
-                                if (!patternMethodNames.Contains(conn.ToMethod) &&
-                                    !targetSigNames.Contains(conn.ToMethod) &&
-                                    !targetComp.MethodSignatures?.Any(ms => string.Equals(ms.Name, conn.ToMethod, StringComparison.OrdinalIgnoreCase)) == true)
-                                {
-                                    var realMethods = string.Join(", ", patternMethodNames);
-                                    errors.Add($"validation.mismatch.connection_toMethod: {prefix} '{c.Name}' connection toMethod '{conn.ToMethod}' does not exist on target '{conn.ToComponent}' (pattern '{targetComp.PatternName}'). Real methods: {realMethods}");
-                                }
-                            }
-                        }
+                        // Carapace enforcement: toMethod validation is now handled
+                        // by the ContractScanner, which comprehensively scans ALL names
+                        // (patterns, stubs, dependencies, fromMethod, toMethod) against
+                        // the pattern registry. See ValidateContract → _scanner.Scan().
+                        // The old per-connection validation here was buggy (double-negation
+                        // on nullable bool at line 598 — always false) and incomplete
+                        // (didn't check patternName, stubName, or dependency names).
                     }
 
                     foreach (var dep in methodCallDeps)
@@ -693,5 +673,32 @@ public sealed class ArchitecturePhase : IPhase
             errors.Add("validation.null.section: qualityAttributes");
         if (contract.Decisions is null)
             errors.Add("validation.null.section: decisions");
+
+        // ── Contract Scanner — the carapace enforcing at the design boundary ──
+        // Scan ALL names in the contract against the pattern registry: patternName,
+        // stubName, dependency, fromMethod, toMethod. Reject hallucinated names up
+        // front with a listing of what's actually available. The correction listing
+        // is fed back to the model via CorrectionSignal so it can fix and retry.
+        var scanErrors = _scanner.Scan(contract);
+        foreach (var se in scanErrors)
+        {
+            var available = se.Available is { Length: > 0 }
+                ? $" Available {se.Field}s: {string.Join(", ", se.Available)}"
+                : "";
+            errors.Add($"scan.{se.Field}: component '{se.Component}' — {se.Message}{available}");
+        }
+
+        // Stash the formatted listing for the orchestrator to pick up as CorrectionSignal.
+        // The gateway reads CorrectionSignal from PhaseContext and injects it into the prompt.
+        if (scanErrors.Count > 0)
+        {
+            _lastScanListing = ContractScanner.FormatCorrectionListing(scanErrors);
+        }
     }
+
+    // Held between ValidateOutputAsync (which calls ValidateContract) and the next
+    // ExecuteAsync call (which reads CorrectionSignal from context). The orchestrator
+    // stores the warnings → CorrectionSignal in the FSM, and BuildContext passes it
+    // into PhaseContext. But we also keep the formatted listing here for the gateway.
+    private string? _lastScanListing;
 }
