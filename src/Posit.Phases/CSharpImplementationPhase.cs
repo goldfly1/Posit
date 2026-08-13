@@ -299,8 +299,21 @@ public sealed class CSharpImplementationPhase : IPhase
                 continue;
             }
 
+            // The CLI component is the one with connections (it has a Wire.cs).
+            // Only the CLI gets io-console-program.cs — it defines Program.Main,
+            // an entry point. Non-CLI components with console stubs (e.g. ConsoleOutput)
+            // must NOT get it, or the build fails with CS0017 (multiple entry points).
+            var isCli = shell.Connections is { Length: > 0 };
+
             foreach (var stub in stubs)
             {
+                // Skip entry-point template for non-CLI components
+                if (!isCli && stub.Name == "io-console-program")
+                {
+                    Console.Error.WriteLine($"[Posit] C# Implementation — skipping io-console-program for non-CLI io-shell '{shell.Name}'");
+                    continue;
+                }
+
                 var rendered = PatternRegistry.RenderCSharpStub(stub, shell.Name);
                 var fileName = $"{shell.Name}.{stub.Name}.cs";
                 files.Add(new SourceCodeFile($"{shell.Name}/{fileName}", rendered));
