@@ -782,7 +782,9 @@ public sealed class BotHarness
 
         var argsStr = string.Join(" ", testCase.Args.Select(a => $"\"{a}\""));
 
-        // Dockerfile that builds, then runs the CLI with the test args
+        // Dockerfile that builds, then runs the CLI with the test args.
+        // The build output is in per-project directories, not the solution root.
+        // Copy the CLI project's output to /app.
         var runDockerfile = $"""
             FROM mcr.microsoft.com/dotnet/sdk:{sdkTag} AS build
             WORKDIR /src
@@ -791,7 +793,8 @@ public sealed class BotHarness
 
             FROM mcr.microsoft.com/dotnet/runtime:{sdkTag}
             WORKDIR /app
-            COPY --from=build /src/bin/Release/{targetFramework}/ ./
+            COPY --from=build /src/{cliComponent.Name}/bin/Release/{targetFramework}/ ./
+            COPY --from=build /src/Posit.DafnyRuntime/bin/Release/{targetFramework}/DafnyRuntime.dll ./
             ENTRYPOINT ["dotnet", "{cliComponent.Name}.dll"]
             """;
 
