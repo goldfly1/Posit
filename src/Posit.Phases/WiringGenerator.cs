@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Posit.Contracts.Artifacts;
 using Posit.Tools;
 
@@ -8,6 +9,11 @@ namespace Posit.Phases;
 /// Generates Wire.cs files — one per component with connections.
 /// Uses TranslatedCSharpScanner to read the actual translated C# and wire
 /// against real method signatures — no guessing from pattern files.
+///
+/// TYPE TRACKING: every variable is tracked with its actual C# type (from the
+/// scanner). When a call crosses the Dafny/io-shell boundary (ISequence of Rune
+/// vs string), the conversion is emitted inline. No Dafny-type-space mapping,
+/// no boundary detection pass, no patches.
 ///
 /// This is DETERMINISTIC — no model call, no judgment.
 /// </summary>
@@ -23,19 +29,18 @@ public sealed class WiringGenerator
         _scanner = new TranslatedCSharpScanner();
     }
 
-    /// <summary>
-    /// Generate wiring files for all components with connections.
-    /// Scans the actual translated C# files first, then wires against reality.
-    /// </summary>
+    // ── A tracked variable: name + actual C# type ──
+    private record VarInfo(string Name, string CsType);
+
+    // ── C# type aliases for Dafny types ──
+    private const string DafnyString = "Dafny.ISequence<Dafny.Rune>";
+    private const string CsString = "string";
+
     public List<SourceCodeFile> Generate(
         ArchitectureContract arch,
         List<(string ModuleName, string CSharpPath)> translatedFiles)
     {
-        // Scan the actual translated C# — this is the key change.
-        // We see what Dafny actually emitted, not what we guess from patterns.
         _scannedMethods = _scanner.ScanAll(translatedFiles);
-
-        // Also scan io-shell stub files from the patterns directory
         ScanIoShellStubs(arch);
         var result = new List<SourceCodeFile>();
         var components = arch.Components;
@@ -48,10 +53,6 @@ public sealed class WiringGenerator
         var cliComponent = FindCliComponent(components);
         if (cliComponent is null) return result;
 
-        var translatedNames = new HashSet<string>(
-            translatedFiles.Select(t => t.ModuleName),
-            StringComparer.OrdinalIgnoreCase);
-
         var componentsWithConnections = components
             .Where(c => c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0)
             .ToList();
@@ -59,8 +60,7 @@ public sealed class WiringGenerator
         foreach (var comp in componentsWithConnections)
         {
             var isCli = string.Equals(comp.Name, cliComponent.Name, StringComparison.OrdinalIgnoreCase);
-            var wireFile = GenerateComponentWiring(
-                comp, isCli, components, componentByName);
+            var wireFile = GenerateComponentWiring(comp, isCli, components, componentByName);
             if (wireFile is not null)
                 result.Add(wireFile);
         }
@@ -71,57 +71,36 @@ public sealed class WiringGenerator
 
     private static Component? FindCliComponent(Component[] components)
     {
-        // The CLI component is the one with connections (it has a Wire.cs).
-        // Prefer the one with "Program" in publicSurface or console stubs,
-        // but only among components that have connections.
         var withConnections = components.Where(c => c.Connections is { Length: > 0 }).ToList();
-
-        if (withConnections.Count == 1)
-            return withConnections[0];
-
+        if (withConnections.Count == 1) return withConnections[0];
         if (withConnections.Count > 1)
         {
             var prog = withConnections.FirstOrDefault(c =>
                 c.PublicSurface?.Contains("Program", StringComparer.OrdinalIgnoreCase) == true);
             if (prog is not null) return prog;
-
             var dependedUpon = new HashSet<string>(
                 components.SelectMany(c => c.Dependencies ?? []),
                 StringComparer.OrdinalIgnoreCase);
             var topOfChain = withConnections.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
             if (topOfChain is not null) return topOfChain;
-
             return withConnections[0];
         }
-
-        // Fallback: no components with connections
         var cli = components.FirstOrDefault(c =>
             c.PublicSurface?.Contains("Program") == true ||
             (c.Classification == ModuleClassification.IoShell &&
              c.StubNames?.Any(s => s.Contains("console") || s.Contains("io-console")) == true));
-
         cli ??= components.FirstOrDefault(c =>
             !components.Any(other => (other.Dependencies ?? []).Contains(c.Name, StringComparer.OrdinalIgnoreCase)));
-
         return cli;
     }
 
     private SourceCodeFile? GenerateComponentWiring(
-        Component comp,
-        bool isCli,
+        Component comp, bool isCli,
         Component[] allComponents,
         Dictionary<string, Component> componentByName)
     {
-        if (comp.MethodSignatures is null || comp.MethodSignatures.Length == 0)
-        {
-            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{comp.Name}' has no methodSignatures.");
-            return null;
-        }
-        if (comp.Connections is null || comp.Connections.Length == 0)
-        {
-            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{comp.Name}' has no connections.");
-            return null;
-        }
+        if (comp.MethodSignatures is null || comp.MethodSignatures.Length == 0) return null;
+        if (comp.Connections is null || comp.Connections.Length == 0) return null;
 
         Console.Error.WriteLine($"[Posit] Wiring — generating wiring for '{comp.Name}' ({comp.Connections.Length} connections, isCli={isCli})");
 
@@ -142,12 +121,10 @@ public sealed class WiringGenerator
         sb.AppendLine("    public static class Wire");
         sb.AppendLine("    {");
 
-        var (entryMethodName, entryParams) = ResolveEntryMethod(comp);
-
         if (isCli)
-            EmitCliWiring(sb, comp, entryMethodName, entryParams, componentByName);
+            EmitCliWiring(sb, comp, componentByName);
         else
-            EmitNonCliWiring(sb, comp, entryMethodName, entryParams, componentByName);
+            EmitNonCliWiring(sb, comp, componentByName);
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -162,10 +139,8 @@ public sealed class WiringGenerator
     {
         var connectionTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var conn in comp.Connections!)
-        {
             if (!string.IsNullOrWhiteSpace(conn.ToComponent))
                 connectionTargets.Add(conn.ToComponent);
-        }
         connectionTargets.Add(comp.Name);
 
         foreach (var c in allComponents)
@@ -180,52 +155,17 @@ public sealed class WiringGenerator
         }
     }
 
-    private (string MethodName, MethodParam[] Params) ResolveEntryMethod(Component comp)
-    {
-        var entrySigs = comp.MethodSignatures!;
-        var entrySig = entrySigs.FirstOrDefault() ?? entrySigs[0];
-        var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
-        var entryParams = entrySig.Params;
-
-        // 1. Check scanned methods first — what's actually in the translated C#
-        if (_scannedMethods.TryGetValue(comp.Name, out var scanned) && scanned.Count > 0)
-        {
-            var match = scanned.FirstOrDefault(m =>
-                string.Equals(m.Name, entryMethodName, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-            {
-                entryMethodName = match.Name;
-                entryParams = match.ParamTypes.Select((t, i) =>
-                    new MethodParam(
-                        match.ParamNames.Length > i ? match.ParamNames[i] : $"arg{i}",
-                        CsTypeToDafnyType(t), CsTypeToDafnyType(t))).ToArray();
-                return (entryMethodName, entryParams);
-            }
-        }
-
-        // 2. Fall back to pattern registry
-        var patternFullSigs = GetPatternSignaturesForComponent(comp);
-        if (patternFullSigs is { Count: > 0 })
-        {
-            var patternSig = patternFullSigs.FirstOrDefault(s =>
-                string.Equals(s.Name, entryMethodName, StringComparison.OrdinalIgnoreCase))
-                ?? patternFullSigs[0];
-            entryParams = patternSig.Params;
-            if (entrySig.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
-                entryMethodName = pm;
-            else
-                entryMethodName = patternSig.Name;
-        }
-
-        return (entryMethodName, entryParams);
-    }
+    // ════════════════════════════════════════════════════════════════════════
+    // CLI WIRING — Run(string[] args) entry point
+    // ════════════════════════════════════════════════════════════════════════
 
     private void EmitCliWiring(StringBuilder sb, Component comp,
-        string entryMethodName, MethodParam[] entryParams,
         Dictionary<string, Component> componentByName)
     {
+        var (entryMethod, entryVars) = ResolveEntry(comp);
+
         sb.AppendLine("        /// <summary>");
-        sb.AppendLine($"        /// Calls {comp.Name}.{entryMethodName}() — the program's main entry point.");
+        sb.AppendLine($"        /// Calls {comp.Name}.{entryMethod}() — the program's main entry point.");
         sb.AppendLine("        /// </summary>");
         sb.AppendLine("        public static int Run(string[] args)");
         sb.AppendLine("        {");
@@ -236,79 +176,67 @@ public sealed class WiringGenerator
         sb.AppendLine("            }");
         sb.AppendLine();
 
-        for (int i = 0; i < entryParams.Length; i++)
+        // Emit entry param variables with correct C# types
+        var callerIsIoShell = comp.Classification == ModuleClassification.IoShell;
+        for (int i = 0; i < entryVars.Count; i++)
         {
-            var param = entryParams[i];
-            var dafnyType = param.DafnyType ?? param.Type;
-            var paramName = EscapeReservedKeyword(param.Name);  // avoid 'args' collision with Run(string[] args)
-            // io-shell CLI: entry params are C# strings (args[0] directly).
-            // Dafny CLI: entry params are Dafny strings (ISequence<Rune> via UnicodeFromString).
-            var callerIsIoShell = comp.Classification == ModuleClassification.IoShell;
+            var v = entryVars[i];
+            var safeName = SafeName(v.Name);
             if (i == 0)
             {
-                if (dafnyType == "string")
-                {
-                    if (callerIsIoShell)
-                        sb.AppendLine($"            var {paramName} = args[0];");
-                    else
-                        sb.AppendLine($"            var {paramName} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
-                }
-                else if (dafnyType == "int")
-                    sb.AppendLine($"            var {paramName} = BigInteger.Parse(args[0]);");
-                else if (dafnyType == "bool")
-                    sb.AppendLine($"            var {paramName} = bool.Parse(args[0]);");
+                if (v.CsType == DafnyString)
+                    sb.AppendLine($"            var {safeName} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
+                else if (v.CsType == CsString)
+                    sb.AppendLine($"            var {safeName} = args[0];");
+                else if (v.CsType.Contains("BigInteger"))
+                    sb.AppendLine($"            var {safeName} = BigInteger.Parse(args[0]);");
+                else if (v.CsType == "bool")
+                    sb.AppendLine($"            var {safeName} = bool.Parse(args[0]);");
                 else
-                    sb.AppendLine($"            var {paramName} = default({MapDafnyTypeToCSharp(dafnyType)});");
+                    sb.AppendLine($"            var {safeName} = {DefaultForCsType(v.CsType)};");
             }
             else
             {
-                sb.AppendLine($"            var {paramName} = {DefaultForDafnyType(dafnyType)}; // default for {dafnyType}");
+                sb.AppendLine($"            var {safeName} = {DefaultForCsType(v.CsType)};");
             }
+            entryVars[i] = v with { Name = safeName };
         }
         sb.AppendLine();
 
-        var paramNames = string.Join(", ", entryParams.Select(p => EscapeReservedKeyword(p.Name)));
-
-        // For Dafny components, call the entry method on __default.
-        // For io-shell CLI components, there's no __default — skip the entry call
-        // and go straight to connection calls (the CLI delegates to its logic deps).
+        // Entry call (Dafny only — io-shell has no __default)
         if (comp.Classification != ModuleClassification.IoShell)
         {
-            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
-            sb.AppendLine();
+            var argList = string.Join(", ", entryVars.Select(v => v.Name));
+            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethod}({argList});");
         }
         else
         {
-            sb.AppendLine("            // io-shell CLI — no entry call, delegate to connections");
-            sb.AppendLine("            var result = 0;");  // placeholder
-            sb.AppendLine();
+            sb.AppendLine("            // io-shell CLI — no __default, delegate to connections");
+            sb.AppendLine("            var result = 0;");
         }
+        sb.AppendLine();
 
-        AppendConnectionCalls(sb, comp, componentByName, entryParams);
-
+        AppendConnectionCalls(sb, comp, componentByName, entryVars);
         sb.AppendLine("            System.Console.WriteLine(result);");
         sb.AppendLine("            return 0;");
         sb.AppendLine("        }");
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // NON-CLI WIRING — Wire_{ComponentName}(params) method
+    // ════════════════════════════════════════════════════════════════════════
+
     private void EmitNonCliWiring(StringBuilder sb, Component comp,
-        string entryMethodName, MethodParam[] entryParams,
         Dictionary<string, Component> componentByName)
     {
-        var paramNames = string.Join(", ", entryParams.Select(p => EscapeReservedKeyword(p.Name)));
-        // Qualify types with the component's namespace to avoid ambiguity
-        // when multiple modules define the same type (e.g. _IEntity)
-        // For io-shell components, string params are C# string, not ISequence<Rune>.
+        var (entryMethod, entryVars) = ResolveEntry(comp);
         var callerIsIoShell = comp.Classification == ModuleClassification.IoShell;
-        var paramDecls = string.Join(", ", entryParams.Select(p =>
+
+        // Param declarations with correct C# types
+        var paramDecls = string.Join(", ", entryVars.Select(v =>
         {
-            var dafnyType = p.DafnyType ?? p.Type;
-            // io-shell callers use C# types (string), Dafny callers use Dafny types (ISequence<Rune>)
-            var csType = (callerIsIoShell && dafnyType == "string")
-                ? "string"
-                : QualifyType(MapDafnyTypeToCSharp(dafnyType), comp.Name);
-            var name = EscapeReservedKeyword(p.Name);
-            return $"{csType} {name}";
+            var csType = (callerIsIoShell && v.CsType == DafnyString) ? CsString : QualifyType(v.CsType, comp.Name);
+            return $"{csType} {SafeName(v.Name)}";
         }));
 
         sb.AppendLine("        /// <summary>");
@@ -318,37 +246,46 @@ public sealed class WiringGenerator
         sb.AppendLine($"        public static void Wire_{comp.Name}({paramDecls})");
         sb.AppendLine("        {");
 
-        // For Dafny components, call the entry method on __default.
-        // For io-shell components, there's no __default — skip the entry call
-        // and go straight to connection calls (the component delegates to its deps).
+        // Fix var names after declaring them
+        for (int i = 0; i < entryVars.Count; i++)
+            entryVars[i] = entryVars[i] with { Name = SafeName(entryVars[i].Name) };
+
         if (comp.Classification != ModuleClassification.IoShell)
         {
-            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
+            var argList = string.Join(", ", entryVars.Select(v => v.Name));
+            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethod}({argList});");
         }
         else
         {
-            sb.AppendLine("            // io-shell — no __default entry call, delegate to connections");
+            sb.AppendLine("            // io-shell — no __default, delegate to connections");
             sb.AppendLine("            var result = 0;");
         }
         sb.AppendLine();
 
-        AppendConnectionCalls(sb, comp, componentByName, entryParams);
-
+        AppendConnectionCalls(sb, comp, componentByName, entryVars);
         sb.AppendLine("        }");
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CONNECTION CALLS — the core wiring logic with C# type tracking
+    // ════════════════════════════════════════════════════════════════════════
 
     private void AppendConnectionCalls(
         StringBuilder sb, Component comp,
         Dictionary<string, Component> componentByName,
-        MethodParam[] entryParams)
+        List<VarInfo> entryVars)
     {
         sb.AppendLine("            // === Connection calls per carapace connector specs ===");
 
-        var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var priorReturnVarOrder = new List<(string VarName, string ReturnType, string CsReturnType, bool FromDafny)>();
+        // Variable registry: maps source names → VarInfo (name + actual C# type)
+        var vars = new Dictionary<string, VarInfo>(StringComparer.OrdinalIgnoreCase);
+        var varOrder = new List<VarInfo>();  // ordered list for positional fallback
 
-        foreach (var p in entryParams)
-            sourceToReturnVar[p.Name] = p.Name;
+        foreach (var v in entryVars)
+        {
+            vars[v.Name] = v;
+            varOrder.Add(v);
+        }
 
         foreach (var conn in comp.Connections!)
         {
@@ -360,110 +297,294 @@ public sealed class WiringGenerator
             }
 
             var toMethod = ResolveToMethod(toComp, conn.ToMethod);
-            // Strip generic type params from the call — C# infers them from arguments.
-            // e.g. "UnwrapOr<__T>" → "UnwrapOr"
             var toMethodCallName = toMethod;
             var genIdx = toMethodCallName.IndexOf('<');
-            if (genIdx > 0)
-                toMethodCallName = toMethodCallName[..genIdx];
+            if (genIdx > 0) toMethodCallName = toMethodCallName[..genIdx];
 
             string toClass = toComp.Classification == ModuleClassification.IoShell
                 ? $"{conn.ToComponent}.{ResolveStubClass(toComp, toMethod)}"
                 : $"_module_{conn.ToComponent}.__default";
 
-            var connReturnType = conn.ReturnType ?? "var";
-            var targetFullSig = ResolveTargetSignature(toComp, toMethod);
+            // Get target method's actual C# param types from scanner
+            var targetParams = GetTargetCsParams(toComp, toMethod);
+            var targetReturnType = GetTargetCsReturn(toComp, toMethod);
 
-            if (targetFullSig is not null && (
-                string.IsNullOrWhiteSpace(targetFullSig.ReturnType) ||
-                targetFullSig.ReturnType.Equals("void", StringComparison.OrdinalIgnoreCase)))
-            {
-                connReturnType = "void";
-            }
-            else if (toComp.Classification == ModuleClassification.IoShell)
-            {
-                var methodLower = toMethod.ToLowerInvariant();
-                if (methodLower.Contains("print") || methodLower.Contains("write")
-                    || methodLower == "clear" || methodLower.Contains("log"))
-                    connReturnType = "void";
-            }
+            // Determine if void return
+            var isVoid = targetReturnType == "void" ||
+                         (toComp.Classification == ModuleClassification.IoShell &&
+                          (toMethod.ToLowerInvariant().Contains("print") ||
+                           toMethod.ToLowerInvariant().Contains("write") ||
+                           toMethod.ToLowerInvariant() == "clear" ||
+                           toMethod.ToLowerInvariant().Contains("log")));
 
-            var resolvedArgs = BuildFullArgList(targetFullSig, conn.ArgMappings,
-                sourceToReturnVar, priorReturnVarOrder, entryParams);
+            // Build args with type conversion
+            var args = BuildArgs(targetParams, conn.ArgMappings, vars, varOrder, entryVars);
 
-            // ── Type conversion at Dafny/io-shell boundary ──
-            // Dafny strings are ISequence<Rune>, io-shell strings are C# string.
-            // When passing a value from one domain to the other, convert.
-            var convertedArgs = new List<string>(resolvedArgs.Count);
-            for (int ai = 0; ai < resolvedArgs.Count; ai++)
-            {
-                var arg = resolvedArgs[ai];
-                if (ai < targetFullSig?.Params.Length)
-                {
-                    var targetParamType = targetFullSig.Params[ai].DafnyType ?? targetFullSig.Params[ai].Type;
-                    var targetIsIoShell = toComp.Classification == ModuleClassification.IoShell;
-                    var argConverted = ConvertDafnyIoShellBoundary(arg, targetParamType, targetIsIoShell,
-                        sourceToReturnVar, priorReturnVarOrder, entryParams, comp);
-                    convertedArgs.Add(argConverted);
-                }
-                else
-                {
-                    convertedArgs.Add(arg);
-                }
-            }
-            var connArgsStr = string.Join(", ", convertedArgs);
-
-            // Use unique variable name per connection (append index to avoid duplicates)
             var connIdx = Array.IndexOf(comp.Connections!, conn);
             var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result_{connIdx}";
 
-            sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethodCallName}({connArgsStr})");
+            sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethodCallName}({string.Join(", ", args)})");
             sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
 
-            if (connReturnType != "void")
+            if (!isVoid)
             {
-                sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethodCallName}({connArgsStr});");
-                sourceToReturnVar[conn.ToComponent] = returnVarName;
-                sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
+                sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethodCallName}({string.Join(", ", args)});");
 
-                // Track the raw C# return type for Dafny/io-shell boundary conversion
-                var rawCsReturn = connReturnType;
-                var fromDafny = toComp.Classification != ModuleClassification.IoShell;
-                if (targetFullSig is not null && _scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
-                {
-                    var csMethod = scanned.FirstOrDefault(m => string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
-                    if (csMethod is not null)
-                        rawCsReturn = csMethod.ReturnType;
-                }
-                priorReturnVarOrder.Add((returnVarName, connReturnType, rawCsReturn, fromDafny));
-
-                if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
-                {
-                    var simpleName = connReturnType.Split('<', '(', '.')[0].Trim().ToLowerInvariant();
-                    if (!string.IsNullOrEmpty(simpleName) && simpleName != "void")
-                        sourceToReturnVar[simpleName] = returnVarName;
-                }
+                // Track the return var with its actual C# type
+                var returnVar = new VarInfo(returnVarName, targetReturnType);
+                vars[conn.ToComponent] = returnVar;
+                vars[conn.ToComponent.ToLowerInvariant()] = returnVar;
+                varOrder.Add(returnVar);
             }
             else
             {
-                sb.AppendLine($"            {toClass}.{toMethodCallName}({connArgsStr});");
+                sb.AppendLine($"            {toClass}.{toMethodCallName}({string.Join(", ", args)});");
             }
             sb.AppendLine();
         }
     }
 
-    private string ResolveToMethod(Component toComp, string connToMethod)
+    /// <summary>
+    /// Build the argument list for a connection call.
+    /// For each target param: resolve the source variable, convert types if needed.
+    /// </summary>
+    private List<string> BuildArgs(
+        List<(string Name, string CsType)> targetParams,
+        string[]? argMappings,
+        Dictionary<string, VarInfo> vars,
+        List<VarInfo> varOrder,
+        List<VarInfo> entryVars)
     {
-        // 1. Check scanned methods — what's actually in the translated C#
+        var result = new List<string>(targetParams.Count);
+
+        for (int i = 0; i < targetParams.Count; i++)
+        {
+            var (paramName, paramCsType) = targetParams[i];
+            string? resolved = null;
+
+            // 1. Try arg mapping (positional)
+            if (argMappings is { Length: > 0 } && i < argMappings.Length)
+            {
+                var am = argMappings[i];
+                var arrow = am.IndexOf("->");
+                string src = arrow > 0 ? am[..arrow].Trim() : am.Trim();
+                if (vars.TryGetValue(src, out var v))
+                    resolved = ConvertType(v, paramCsType);
+            }
+
+            // 2. Try param-name match
+            if (resolved is null && vars.TryGetValue(paramName, out var v2))
+                resolved = ConvertType(v2, paramCsType);
+
+            // 3. Positional fallback — most recent non-entry var with compatible type
+            if (resolved is null)
+            {
+                var candidates = varOrder
+                    .Where(v => !entryVars.Any(e => e.Name == v.Name))
+                    .Where(v => CanConvert(v.CsType, paramCsType))
+                    .ToList();
+                if (candidates.Count > 0)
+                    resolved = ConvertType(candidates[^1], paramCsType);
+            }
+
+            // 4. Default
+            resolved ??= DefaultForCsType(paramCsType);
+            result.Add(resolved);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Convert a variable from its C# type to the target C# type.
+    /// Only handles the Dafny/io-shell string boundary:
+    ///   ISequence<Rune> → string: Dafny.Helpers.SequenceToString(var)
+    ///   string → ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(var)
+    /// </summary>
+    private static string ConvertType(VarInfo source, string targetCsType)
+    {
+        var src = source.CsType;
+        var tgt = targetCsType;
+
+        // Same type — pass directly
+        if (TypesMatch(src, tgt))
+            return source.Name;
+
+        // Dafny string → C# string
+        if (IsDafnyString(src) && tgt == CsString)
+            return $"Dafny.Helpers.SequenceToString({source.Name})";
+
+        // C# string → Dafny string
+        if (src == CsString && IsDafnyString(tgt))
+            return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({source.Name})";
+
+        // Dafny default (UnicodeFromString("")) → C# string
+        if (tgt == CsString && source.Name.Contains("UnicodeFromString"))
+            return "\"\"";
+
+        // Can't convert — pass as-is (will fail at compile, which is correct)
+        return source.Name;
+    }
+
+    /// <summary>
+    /// Can a value of sourceType be converted to targetType?
+    /// </summary>
+    private static bool CanConvert(string sourceType, string targetType)
+    {
+        if (TypesMatch(sourceType, targetType)) return true;
+        if (IsDafnyString(sourceType) && targetType == CsString) return true;
+        if (sourceType == CsString && IsDafnyString(targetType)) return true;
+        return false;
+    }
+
+    private static bool TypesMatch(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+        // BigInteger and int are interchangeable in Dafny C#
+        if ((a.Contains("BigInteger") || a == "int") && (b.Contains("BigInteger") || b == "int")) return true;
+        // var matches anything
+        if (a == "var" || b == "var") return true;
+        return false;
+    }
+
+    private static bool IsDafnyString(string csType)
+        => csType.Contains("ISequence") && csType.Contains("Rune");
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ENTRY METHOD RESOLUTION — returns method name + C# typed params
+    // ════════════════════════════════════════════════════════════════════════
+
+    private (string MethodName, List<VarInfo> Params) ResolveEntry(Component comp)
+    {
+        var entrySig = comp.MethodSignatures!.FirstOrDefault() ?? comp.MethodSignatures![0];
+        var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
+
+        // 1. Check scanned methods — actual C# signatures
+        if (_scannedMethods.TryGetValue(comp.Name, out var scanned) && scanned.Count > 0)
+        {
+            var match = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, entryMethodName, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                var vars = match.ParamTypes.Select((t, i) =>
+                    new VarInfo(match.ParamNames.Length > i ? match.ParamNames[i] : $"arg{i}", t)).ToList();
+                return (match.Name, vars);
+            }
+        }
+
+        // 2. Fall back to pattern registry
+        var patternSigs = GetPatternSignaturesForComponent(comp);
+        if (patternSigs is { Count: > 0 })
+        {
+            var patternSig = patternSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, entryMethodName, StringComparison.OrdinalIgnoreCase))
+                ?? patternSigs[0];
+            // Pattern sigs use Dafny types — convert to C# types
+            var vars = patternSig.Params.Select(p =>
+                new VarInfo(p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
+            if (entrySig.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
+                return (pm, vars);
+            return (patternSig.Name, vars);
+        }
+
+        // 3. Fall back to component's MethodSignatures
+        var vars3 = entrySig.Params.Select(p =>
+            new VarInfo(p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
+        return (entryMethodName, vars3);
+    }
+
+    /// <summary>
+    /// Map a Dafny type string to its C# equivalent.
+    /// </summary>
+    private static string DafnyTypeToCsType(string dafnyType)
+    {
+        var t = dafnyType.Trim();
+        return t switch
+        {
+            "int" => "BigInteger",
+            "bool" => "bool",
+            "string" => DafnyString,  // Dafny string → ISequence<Rune> in C#
+            _ when t.StartsWith("seq<") => $"Dafny.ISequence<{DafnyTypeToCsType(t[4..^1].Trim())}>",
+            _ when t.StartsWith("set<") => $"Dafny.ISet<{DafnyTypeToCsType(t[4..^1].Trim())}>",
+            _ => t
+        };
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TARGET METHOD RESOLUTION — get actual C# param/return types from scanner
+    // ════════════════════════════════════════════════════════════════════════
+
+    private List<(string Name, string CsType)> GetTargetCsParams(Component toComp, string toMethod)
+    {
         if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
         {
             var match = scanned.FirstOrDefault(m =>
-                string.Equals(m.Name, connToMethod, StringComparison.OrdinalIgnoreCase)
-                && m.GenericParams.Length == 0);  // skip generic utility methods
+                string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
-                return match.Name;
+                return match.ParamTypes.Select((t, i) =>
+                    (match.ParamNames.Length > i ? match.ParamNames[i] : $"arg{i}", t)).ToList();
+        }
 
-            // Check PatternMethod mapping (also non-generic)
+        // Fall back to pattern registry
+        var patternSigs = GetPatternSignaturesForComponent(toComp);
+        if (patternSigs is { Count: > 0 })
+        {
+            var sig = patternSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase))
+                ?? patternSigs[0];
+            return sig.Params.Select(p => (p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
+        }
+
+        // Fall back to component MethodSignatures
+        if (toComp.MethodSignatures is { Length: > 0 })
+        {
+            var sig = toComp.MethodSignatures.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(s.PatternMethod, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (sig is not null)
+                return sig.Params.Select(p => (p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
+        }
+
+        return new List<(string, string)>();
+    }
+
+    private string GetTargetCsReturn(Component toComp, string toMethod)
+    {
+        if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
+        {
+            var match = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return match.ReturnType;
+        }
+
+        var patternSigs = GetPatternSignaturesForComponent(toComp);
+        if (patternSigs is { Count: > 0 })
+        {
+            var sig = patternSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (sig is not null)
+                return DafnyTypeToCsType(sig.ReturnType);
+        }
+
+        return "var";
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // METHOD NAME RESOLUTION — find the real method name from scanner
+    // ════════════════════════════════════════════════════════════════════════
+
+    private string ResolveToMethod(Component toComp, string connToMethod)
+    {
+        if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
+        {
+            // Exact match (non-generic)
+            var match = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, connToMethod, StringComparison.OrdinalIgnoreCase)
+                && m.GenericParams.Length == 0);
+            if (match is not null) return match.Name;
+
+            // PatternMethod mapping
             if (toComp.MethodSignatures is { Length: > 0 })
             {
                 var targetSig = toComp.MethodSignatures.FirstOrDefault(s =>
@@ -477,24 +598,23 @@ public sealed class WiringGenerator
                 }
             }
 
-            // Fuzzy match — non-generic only
+            // Fuzzy match
             var fuzzy = scanned.FirstOrDefault(m =>
-                m.GenericParams.Length == 0  // skip generic utility methods
+                m.GenericParams.Length == 0
                 && (m.Name.Contains(connToMethod, StringComparison.OrdinalIgnoreCase)
                     || connToMethod.Contains(m.Name, StringComparison.OrdinalIgnoreCase)));
             if (fuzzy is not null) return fuzzy.Name;
 
-            // If still no match, and there's only one non-runtime, non-generic method, use it
+            // Single logic method fallback
             var logicMethods = scanned.Where(m =>
                 !m.Name.StartsWith("create_") && !m.Name.StartsWith("Default")
                 && !m.Name.StartsWith("_TypeDescriptor") && m.GenericParams.Length == 0
                 && m.Name != "IsSuccess" && m.Name != "IsFailure"
                 && m.Name != "UnwrapOr" && m.Name != "MapResult").ToList();
-            if (logicMethods.Count == 1)
-                return logicMethods[0].Name;
+            if (logicMethods.Count == 1) return logicMethods[0].Name;
         }
 
-        // 2. Fall back to pattern registry (old behavior)
+        // Fall back to pattern registry
         var toMethod = connToMethod;
         if (toComp.MethodSignatures is { Length: > 0 })
         {
@@ -503,7 +623,6 @@ public sealed class WiringGenerator
             if (targetSig?.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
                 toMethod = pm;
         }
-
         if (toMethod == connToMethod && !string.IsNullOrWhiteSpace(toComp.PatternName))
         {
             var patternSigs = GetPatternSignaturesForComponent(toComp);
@@ -528,103 +647,10 @@ public sealed class WiringGenerator
         }
     }
 
-    private MethodSignature? ResolveTargetSignature(Component toComp, string toMethod)
-    {
-        // 1. Check scanned methods — build a MethodSignature from the real C#
-        if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
-        {
-            var csMethod = scanned.FirstOrDefault(m =>
-                string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
-            if (csMethod is not null)
-            {
-                // Convert C# types back to Dafny-ish types for the wiring helpers
-                var dafnyParams = csMethod.ParamTypes.Select(CsTypeToDafnyType).ToArray();
-                var dafnyReturn = CsTypeToDafnyType(csMethod.ReturnType);
-                return new MethodSignature(
-                    csMethod.Name,
-                    dafnyParams.Select((t, i) =>
-                        new MethodParam(csMethod.ParamNames.Length > i ? csMethod.ParamNames[i] : $"arg{i}", t, t)).ToArray(),
-                    dafnyReturn,
-                    dafnyReturn);
-            }
-        }
+    // ════════════════════════════════════════════════════════════════════════
+    // IO-SHELL STUB SCANNING
+    // ════════════════════════════════════════════════════════════════════════
 
-        // 2. Fall back to pattern registry
-        var patternSigs = GetPatternSignaturesForComponent(toComp);
-        if (patternSigs is { Count: > 0 })
-        {
-            var sig = patternSigs.FirstOrDefault(s =>
-                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase));
-            if (sig is not null) return sig;
-        }
-
-        // 3. Fall back to component MethodSignatures
-        if (toComp.MethodSignatures is { Length: > 0 })
-        {
-            var sig = toComp.MethodSignatures.FirstOrDefault(s =>
-                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(s.PatternMethod, toMethod, StringComparison.OrdinalIgnoreCase));
-            if (sig is not null) return sig;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Convert a C# type from the scanned output to a Dafny-ish type string
-    /// for use with the wiring helpers (IsTypeCompatible, DefaultForDafnyType, etc.)
-    /// </summary>
-    private static string CsTypeToDafnyType(string csType)
-    {
-        var t = csType.Trim();
-        if (t == "void") return "void";
-        if (t == "bool") return "bool";
-        if (t == "BigInteger") return "int";
-        if (t == "string") return "string";  // C# string (io-shell) vs Dafny string
-
-        // Count nesting depth of ISequence — if >1 level, it's seq<seq<X>>
-        var seqCount = CountOccurrences(t, "ISequence<");
-        if (seqCount >= 2)
-        {
-            // Nested: extract outermost inner type and recurse
-            var inner = ExtractInner(t, "ISequence<", ">");
-            return $"seq<{CsTypeToDafnyType(inner)}>";
-        }
-        if (seqCount == 1)
-        {
-            // Single level — check if inner is Rune (Dafny string) or something else
-            var inner = ExtractInner(t, "ISequence<", ">");
-            if (inner.Contains("Rune")) return "string";
-            return $"seq<{CsTypeToDafnyType(inner)}>";
-        }
-        if (t.Contains("ISet<"))
-        {
-            var inner = ExtractInner(t, "ISet<", ">");
-            return $"set<{CsTypeToDafnyType(inner)}>";
-        }
-        return t;
-    }
-
-    private static int CountOccurrences(string source, string pattern)
-    {
-        int count = 0, idx = 0;
-        while ((idx = source.IndexOf(pattern, idx)) >= 0) { count++; idx += pattern.Length; }
-        return count;
-    }
-
-    private static string ExtractInner(string type, string open, string close)
-    {
-        var start = type.IndexOf(open);
-        if (start < 0) return type;
-        start += open.Length;
-        var end = type.LastIndexOf(close);
-        if (end < start) return type;
-        return type[start..end].Trim();
-    }
-
-    /// <summary>
-    /// Scan io-shell stub template files and add their methods to the scanned map.
-    /// The stubs are in patterns/csharp-stubs/*.cs.template with {{ComponentName}} placeholders.
-    /// </summary>
     private void ScanIoShellStubs(ArchitectureContract arch)
     {
         var stubsDir = Path.Combine(_registry.PatternsDirectory, "csharp-stubs");
@@ -650,201 +676,75 @@ public sealed class WiringGenerator
         }
     }
 
-    private static List<string> BuildFullArgList(
-        MethodSignature? targetSig, string[]? argMappings,
-        Dictionary<string, string> sourceToReturnVar,
-        List<(string VarName, string ReturnType, string CsReturnType, bool FromDafny)> priorReturnVarOrder,
-        MethodParam[] entryParams)
-    {
-        if (targetSig is null || targetSig.Params.Length == 0)
-        {
-            var fallback = new List<string>();
-            if (argMappings?.Length > 0)
-            {
-                foreach (var am in argMappings)
-                {
-                    var arrow = am.IndexOf("->");
-                    string src = arrow > 0 ? am[..arrow].Trim() : am.Trim();
-                    fallback.Add(sourceToReturnVar.TryGetValue(src, out var v) ? v : $"/* unresolved: {src} */ null");
-                }
-            }
-            return fallback;
-        }
-
-        var fullParams = targetSig.Params;
-        var result = new List<string>(fullParams.Length);
-
-        for (int i = 0; i < fullParams.Length; i++)
-        {
-            var param = fullParams[i];
-            string? resolved = null;
-
-            if (argMappings is { Length: > 0 } && i < argMappings.Length)
-            {
-                var am = argMappings[i];
-                var arrow = am.IndexOf("->");
-                string src = arrow > 0 ? am[..arrow].Trim() : am.Trim();
-                if (sourceToReturnVar.TryGetValue(src, out var v))
-                {
-                    var pType = param.DafnyType ?? param.Type;
-                    var sInfo = priorReturnVarOrder.FirstOrDefault(x => x.VarName == v);
-                    var sType = sInfo != default ? sInfo.ReturnType : "string";
-                    if (IsTypeCompatible(sType, pType)) resolved = v;
-                }
-            }
-
-            if (resolved is null && sourceToReturnVar.TryGetValue(param.Name, out var nm))
-            {
-                var pType = param.DafnyType ?? param.Type;
-                var sInfo = priorReturnVarOrder.FirstOrDefault(x => x.VarName == nm);
-                var sType = sInfo != default ? sInfo.ReturnType : "string";
-                if (IsTypeCompatible(sType, pType)) resolved = nm;
-            }
-
-            if (resolved is null)
-            {
-                var pType = param.DafnyType ?? param.Type;
-                var priors = priorReturnVarOrder
-                    .Where(v => !entryParams.Any(p => p.Name == v.VarName))
-                    .Distinct().ToList();
-                var match = priors.FirstOrDefault(v => IsTypeCompatible(v.ReturnType, pType));
-                if (match != default) resolved = match.VarName;
-            }
-
-            resolved ??= DefaultForDafnyType(param.DafnyType ?? param.Type);
-            result.Add(resolved);
-        }
-        return result;
-    }
-
-    // === Type helpers ===
+    // ════════════════════════════════════════════════════════════════════════
+    // HELPERS
+    // ════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Convert a value at the Dafny/io-shell boundary.
-    /// Dafny strings are ISequence&lt;Rune&gt;; io-shell strings are C# string.
-    /// When a value crosses the boundary, we need to convert:
-    ///   - ISequence&lt;Rune&gt; → string: Dafny.Helpers.SequenceToString(seq)
-    ///   - string → ISequence&lt;Rune&gt;: Dafny.Sequence&lt;Dafny.Rune&gt;.UnicodeFromString(s)
-    ///
-    /// We detect the source type by checking whether the variable came from a
-    /// Dafny-translated method (ISequence&lt;Rune&gt;) or an io-shell/entry param (string).
+    /// Safe variable name — rename "args" to avoid collision with Run(string[] args).
+    /// @args doesn't work because @ is just a prefix, the name is still "args".
     /// </summary>
-    private static string ConvertDafnyIoShellBoundary(
-        string arg,
-        string targetParamType,
-        bool targetIsIoShell,
-        Dictionary<string, string> sourceToReturnVar,
-        List<(string VarName, string ReturnType, string CsReturnType, bool FromDafny)> priorReturnVarOrder,
-        MethodParam[] entryParams,
-        Component callerComp)
+    private static string SafeName(string name)
     {
-        if (string.IsNullOrEmpty(arg) || arg.StartsWith("/*") || arg == "null!")
-            return arg;
-
-        // Only convert string-type params
-        var targetIsString = targetParamType == "string";
-        if (!targetIsString) return arg;
-
-        // Dafny string defaults (UnicodeFromString) → C# string "" when target is io-shell
-        if (targetIsIoShell && arg.Contains("UnicodeFromString"))
-            return "\"\"";
-
-        // C# string literals → Dafny ISequence<Rune> when target is Dafny
-        if (!targetIsIoShell && arg == "\"\"")
-            return "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")";
-
-        // Skip other literals and defaults — they're already in the right form
-        if (arg.StartsWith("Dafny.") || arg.StartsWith("BigInteger") || arg.StartsWith("bool.")
-            || arg.StartsWith("default(") || arg == "false" || arg == "true")
-            return arg;
-
-        // 1. Entry params: check the caller's domain
-        var isEntryParam = entryParams.Any(p => EscapeReservedKeyword(p.Name) == arg || p.Name == arg);
-        if (isEntryParam)
-        {
-            var callerIsDafny = callerComp.Classification != ModuleClassification.IoShell;
-            if (callerIsDafny && targetIsIoShell)
-            {
-                // Entry param is ISequence<Rune> (Dafny), target wants C# string
-                return $"Dafny.Helpers.SequenceToString({arg})";
-            }
-            if (!callerIsDafny && !targetIsIoShell)
-            {
-                // Entry param is string (io-shell), target wants ISequence<Rune> (Dafny)
-                return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({arg})";
-            }
-            return arg;
-        }
-
-        // 2. Prior return vars: use the tracked CsReturnType and FromDafny flag
-        var priorMatch = priorReturnVarOrder.FirstOrDefault(v => v.VarName == arg);
-        if (priorMatch != default)
-        {
-            var sourceFromDafny = priorMatch.FromDafny;
-            var sourceCsReturn = priorMatch.CsReturnType;
-
-            // Source is Dafny (returns ISequence<Rune>), target is io-shell (wants string)
-            if (sourceFromDafny && targetIsIoShell
-                && (sourceCsReturn.Contains("ISequence") || sourceCsReturn.Contains("Rune")))
-            {
-                return $"Dafny.Helpers.SequenceToString({arg})";
-            }
-
-            // Source is io-shell (returns string), target is Dafny (wants ISequence<Rune>)
-            if (!sourceFromDafny && !targetIsIoShell
-                && (sourceCsReturn == "string" || sourceCsReturn.Contains("string")))
-            {
-                return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({arg})";
-            }
-        }
-
-        return arg;
-    }
-
-    /// <summary>
-    /// Prefix C# reserved keywords with @ to use them as identifiers.
-    /// e.g. "event" → "@event", "result" → "@result"
-    /// </summary>
-    private static string EscapeReservedKeyword(string name)
-    {
+        if (string.IsNullOrWhiteSpace(name)) return "arg0";
+        if (name == "args") return "inputArgs";
+        // Prefix C# reserved keywords
         var reserved = new HashSet<string>(StringComparer.Ordinal)
-        { "event", "object", "string", "int", "bool", "class",
-          "static", "void", "return", "new", "var", "if", "else", "for",
-          "while", "switch", "case", "break", "continue", "default", "null",
-          "true", "false", "this", "base", "out", "ref", "in", "params",
-          "using", "namespace", "public", "private", "protected", "internal",
-          "abstract", "virtual", "override", "sealed", "readonly", "const",
-          "async", "await", "yield", "lock", "try", "catch", "finally",
-          "throw", "typeof", "sizeof", "is", "as", "delegate", "enum",
+        { "event", "object", "string", "int", "bool", "class", "static", "void",
+          "return", "new", "var", "if", "else", "for", "while", "switch", "case",
+          "break", "continue", "default", "null", "true", "false", "this", "base",
+          "out", "ref", "in", "params", "using", "namespace", "public", "private",
+          "protected", "internal", "abstract", "virtual", "override", "sealed",
+          "readonly", "const", "async", "await", "yield", "lock", "try", "catch",
+          "finally", "throw", "typeof", "sizeof", "is", "as", "delegate", "enum",
           "struct", "interface", "get", "set", "value", "operator", "explicit",
           "implicit", "partial", "where", "select", "from", "group", "into",
-          "orderby", "join", "let", "on", "equals", "by", "ascending",
-          "descending", "global", "stackalloc", "fixed", "unchecked", "checked",
-          "unsafe",
-          // Not C# keywords but collide with CLI wiring's Run(string[] args)
-          "args" };
-
-        if (reserved.Contains(name))
-            return $"@{name}";
+          "orderby", "join", "let", "on", "equals", "by", "ascending", "descending",
+          "global", "stackalloc", "fixed", "unchecked", "checked", "unsafe" };
+        if (reserved.Contains(name)) return $"@{name}";
         return name;
+    }
+
+    /// <summary>
+    /// Default value for a C# type.
+    /// </summary>
+    private static string DefaultForCsType(string csType)
+    {
+        var t = csType.Trim();
+        if (t == "void") return "";
+        if (t.Contains("BigInteger")) return "BigInteger.Zero";
+        if (t == "bool") return "false";
+        if (t == CsString) return "\"\"";
+        if (t == DafnyString) return "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")";
+        if (t.Contains("ISequence")) return $"Dafny.Sequence<{ExtractInner(t, "ISequence<", ">")}>.Empty";
+        if (t.Contains("ISet")) return $"Dafny.Set<{ExtractInner(t, "ISet<", ">")}>.Empty";
+        if (t.Length <= 3 && (t == "T" || t.StartsWith("__") || t.StartsWith("T_"))) return "null!";
+        if (t.Contains("<T>") || t.Contains("<__T>")) return "null!";
+        return $"default({t})";
+    }
+
+    private static string ExtractInner(string type, string open, string close)
+    {
+        var start = type.IndexOf(open);
+        if (start < 0) return type;
+        start += open.Length;
+        var end = type.LastIndexOf(close);
+        if (end < start) return type;
+        return type[start..end].Trim();
     }
 
     /// <summary>
     /// Qualify a C# type with the component's namespace if it's a Dafny interface
     /// type (starts with _) that could be ambiguous across modules.
-    /// e.g. _IEntity → _module_CalcEngine._IEntity
     /// </summary>
     private static string QualifyType(string csType, string componentName)
     {
-        // Only qualify bare interface types (start with _ and no namespace)
         if (csType.StartsWith("_") && !csType.Contains("."))
         {
-            // Check if it's inside a generic (e.g. Dafny.ISequence<_IEntity>)
             if (csType.Contains("<"))
                 return QualifyGenericType(csType, componentName);
             return $"_module_{componentName}.{csType}";
         }
-        // Handle types containing unqualified Dafny interfaces in generics
         if (csType.Contains("<_") && !csType.Contains("."))
             return QualifyGenericType(csType, componentName);
         return csType;
@@ -852,71 +752,7 @@ public sealed class WiringGenerator
 
     private static string QualifyGenericType(string csType, string componentName)
     {
-        // Replace bare _TypeName with _module_Component._TypeName inside generics
-        // e.g. Dafny.ISequence<_IEntity> → Dafny.ISequence<_module_CalcEngine._IEntity>
-        return System.Text.RegularExpressions.Regex.Replace(csType,
-            @"(?<![\w.])(_\w+)",
-            m => $"_module_{componentName}.{m.Value}");
-    }
-
-    public static bool IsValidationType(string returnType)
-    {
-        if (string.IsNullOrWhiteSpace(returnType)) return false;
-        var l = returnType.ToLowerInvariant().Trim();
-        return l.Contains("validation") || l.Contains("result") || l == "bool"
-            || l.Contains("success") || l.Contains("failure");
-    }
-
-    public static bool IsTypeCompatible(string returnType, string paramType)
-    {
-        if (string.IsNullOrWhiteSpace(returnType) || string.IsNullOrWhiteSpace(paramType)) return false;
-        var r = returnType.ToLowerInvariant().Trim();
-        var p = paramType.ToLowerInvariant().Trim();
-        if (r == p) return true;
-        if (r.StartsWith("seq<") && r.EndsWith('>') && p.StartsWith("seq<") && p.EndsWith('>'))
-            return IsTypeCompatible(r[4..^1].Trim(), p[4..^1].Trim());
-        if (r.StartsWith("set<") && r.EndsWith('>') && p.StartsWith("set<") && p.EndsWith('>'))
-            return IsTypeCompatible(r[4..^1].Trim(), p[4..^1].Trim());
-        if (r == "string" && p == "string") return true;
-        if ((r == "int" || r == "bigint") && (p == "int" || p == "bigint")) return true;
-        if (r == "var") return true;
-        return false;
-    }
-
-    public static string DefaultForDafnyType(string dafnyType)
-    {
-        var t = dafnyType.Trim();
-        // Handle generic type params (T, __T, __U) — can't emit default(T) in wiring
-        // because T isn't declared. Use null! cast to the return type.
-        if (t.Length <= 3 && (t == "T" || t.StartsWith("__") || t.StartsWith("T_")))
-            return "null!";
-        if (t.Contains("<T>") || t.Contains("<__T>") || t.Contains("<__U>"))
-            return "null!";
-        if (t.StartsWith("seq<", StringComparison.Ordinal) && t.EndsWith('>'))
-            return $"Dafny.Sequence<{MapDafnyTypeToCSharp(t[4..^1].Trim())}>.Empty";
-        if (t.StartsWith("set<", StringComparison.Ordinal) && t.EndsWith('>'))
-            return $"Dafny.Set<{MapDafnyTypeToCSharp(t[4..^1].Trim())}>.Empty";
-        return t switch
-        {
-            "int" => "BigInteger.Zero",
-            "bool" => "false",
-            "string" => "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")",
-            _ => $"default({MapDafnyTypeToCSharp(t)})"
-        };
-    }
-
-    public static string MapDafnyTypeToCSharp(string dafnyType)
-    {
-        var t = dafnyType.Trim();
-        return t switch
-        {
-            "int" => "BigInteger",
-            "bool" => "bool",
-            "string" => "Dafny.ISequence<Dafny.Rune>",
-            _ when t.StartsWith("seq<") => "Dafny.ISequence<" + MapDafnyTypeToCSharp(t[4..^1]) + ">",
-            _ when t.StartsWith("set<") => "Dafny.ISet<" + MapDafnyTypeToCSharp(t[4..^1]) + ">",
-            _ => t
-        };
+        return Regex.Replace(csType, @"(?<![\w.])(_\w+)", m => $"_module_{componentName}.{m.Value}");
     }
 
     private static string ResolveStubClass(Component targetComp, string methodName)
