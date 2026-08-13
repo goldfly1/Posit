@@ -459,8 +459,12 @@ public sealed class WiringGenerator
         var entrySig = comp.MethodSignatures!.FirstOrDefault() ?? comp.MethodSignatures![0];
         var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
 
-        // 1. Check scanned methods — actual C# signatures
-        if (_scannedMethods.TryGetValue(comp.Name, out var scanned) && scanned.Count > 0)
+        // 1. Check scanned methods — but ONLY for Dafny components.
+        //    io-shell scanned methods are stub templates (FileIO, ConsoleIO),
+        //    not the component's entry method. io-shell entry comes from
+        //    MethodSignatures (declared by the architect).
+        if (comp.Classification != ModuleClassification.IoShell &&
+            _scannedMethods.TryGetValue(comp.Name, out var scanned) && scanned.Count > 0)
         {
             var match = scanned.FirstOrDefault(m =>
                 string.Equals(m.Name, entryMethodName, StringComparison.OrdinalIgnoreCase));
@@ -472,24 +476,32 @@ public sealed class WiringGenerator
             }
         }
 
-        // 2. Fall back to pattern registry
-        var patternSigs = GetPatternSignaturesForComponent(comp);
-        if (patternSigs is { Count: > 0 })
+        // 2. Fall back to pattern registry (Dafny components only — io-shell has no pattern)
+        if (comp.Classification != ModuleClassification.IoShell)
         {
-            var patternSig = patternSigs.FirstOrDefault(s =>
-                string.Equals(s.Name, entryMethodName, StringComparison.OrdinalIgnoreCase))
-                ?? patternSigs[0];
-            // Pattern sigs use Dafny types — convert to C# types
-            var vars = patternSig.Params.Select(p =>
-                new VarInfo(p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
-            if (entrySig.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
-                return (pm, vars);
-            return (patternSig.Name, vars);
+            var patternSigs = GetPatternSignaturesForComponent(comp);
+            if (patternSigs is { Count: > 0 })
+            {
+                var patternSig = patternSigs.FirstOrDefault(s =>
+                    string.Equals(s.Name, entryMethodName, StringComparison.OrdinalIgnoreCase))
+                    ?? patternSigs[0];
+                var vars = patternSig.Params.Select(p =>
+                    new VarInfo(p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
+                if (entrySig.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
+                    return (pm, vars);
+                return (patternSig.Name, vars);
+            }
         }
 
         // 3. Fall back to component's MethodSignatures
+        //    io-shell: string → C# string. Dafny: string → ISequence<Rune>.
+        var callerIsIoShell = comp.Classification == ModuleClassification.IoShell;
         var vars3 = entrySig.Params.Select(p =>
-            new VarInfo(p.Name, DafnyTypeToCsType(p.DafnyType ?? p.Type))).ToList();
+        {
+            var dafnyType = p.DafnyType ?? p.Type;
+            var csType = (callerIsIoShell && dafnyType == "string") ? CsString : DafnyTypeToCsType(dafnyType);
+            return new VarInfo(p.Name, csType);
+        }).ToList();
         return (entryMethodName, vars3);
     }
 
