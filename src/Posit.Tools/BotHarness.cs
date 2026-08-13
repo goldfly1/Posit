@@ -38,6 +38,10 @@ public sealed class BotHarness
     public async Task<BotHarnessResult> RunAsync(SessionId sessionId, CancellationToken ct = default)
     {
         var contextDir = Path.Combine(Path.GetTempPath(), $"posit-harness-{sessionId.Value}");
+        // Clean any stale files from a previous harness run on this session.
+        // Old skeleton-*.cs files would cause duplicate definition errors.
+        if (Directory.Exists(contextDir))
+            Directory.Delete(contextDir, true);
         Directory.CreateDirectory(contextDir);
 
         try
