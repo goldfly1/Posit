@@ -222,10 +222,11 @@ public sealed class Z3Runner
     /// </summary>
     private static string StripDafnyRuntimeHelpers(string content)
     {
-        // Strip the DafnyAssembly attribute (may span multiple lines)
+        // Strip the DafnyAssembly attribute — it uses a verbatim string @"..." that
+        // can span many lines and contain parens. Match up to the closing ")].
         content = System.Text.RegularExpressions.Regex.Replace(content,
-            @"\[assembly:\s+DafnyAssembly\.DafnySourceAttribute\([^)]*\)\]",
-            "// [DafnyAssembly attribute stripped — provided by DafnyRuntime.dll]",
+            @"\[assembly:\s+DafnyAssembly\.DafnySourceAttribute\(@"".*?""\)\]",
+            "// [assembly attribute stripped — provided by DafnyRuntime.dll]",
             System.Text.RegularExpressions.RegexOptions.Singleline);
 
         // Strip the FuncExtensions class (internal static class FuncExtensions { ... })
@@ -260,7 +261,7 @@ public sealed class Z3Runner
                 // Include the line before (comment) and the closing brace line
                 var lineStart = content.LastIndexOf('\n', idx);
                 lineStart = lineStart < 0 ? 0 : lineStart + 1;
-                return content[..lineStart] + "// [stripped: " + declarationMarker + " — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
+                return content[..lineStart] + "// [stripped — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
             }
         }
         return content;
@@ -293,7 +294,7 @@ public sealed class Z3Runner
             {
                 var lineStart = content.LastIndexOf('\n', idx);
                 lineStart = lineStart < 0 ? 0 : lineStart + 1;
-                return content[..lineStart] + "// [stripped: namespace " + nsName + " — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
+                return content[..lineStart] + "// [stripped — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
             }
         }
         return content;
