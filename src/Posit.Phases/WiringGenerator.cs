@@ -237,8 +237,21 @@ public sealed class WiringGenerator
         sb.AppendLine();
 
         var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
-        sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
-        sb.AppendLine();
+
+        // For Dafny components, call the entry method on __default.
+        // For io-shell CLI components, there's no __default — skip the entry call
+        // and go straight to connection calls (the CLI delegates to its logic deps).
+        if (comp.Classification != ModuleClassification.IoShell)
+        {
+            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine("            // io-shell CLI — no entry call, delegate to connections");
+            sb.AppendLine("            var result = 0;");  // placeholder
+            sb.AppendLine();
+        }
 
         AppendConnectionCalls(sb, comp, componentByName, entryParams);
 
@@ -358,11 +371,12 @@ public sealed class WiringGenerator
         if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
         {
             var match = scanned.FirstOrDefault(m =>
-                string.Equals(m.Name, connToMethod, StringComparison.OrdinalIgnoreCase));
+                string.Equals(m.Name, connToMethod, StringComparison.OrdinalIgnoreCase)
+                && m.GenericParams.Length == 0);  // skip generic utility methods
             if (match is not null)
                 return match.Name;
 
-            // If exact match not found, check PatternMethod mapping from the component
+            // Check PatternMethod mapping (also non-generic)
             if (toComp.MethodSignatures is { Length: > 0 })
             {
                 var targetSig = toComp.MethodSignatures.FirstOrDefault(s =>
@@ -370,16 +384,17 @@ public sealed class WiringGenerator
                 if (targetSig?.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
                 {
                     var pmMatch = scanned.FirstOrDefault(m =>
-                        string.Equals(m.Name, pm, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(m.Name, pm, StringComparison.OrdinalIgnoreCase)
+                        && m.GenericParams.Length == 0);
                     if (pmMatch is not null) return pmMatch.Name;
                 }
             }
 
-            // If the architect's name doesn't match any real method, find the
-            // method with the most similar name (contains match)
+            // Fuzzy match — non-generic only
             var fuzzy = scanned.FirstOrDefault(m =>
-                m.Name.Contains(connToMethod, StringComparison.OrdinalIgnoreCase)
-                || connToMethod.Contains(m.Name, StringComparison.OrdinalIgnoreCase));
+                m.GenericParams.Length == 0  // skip generic utility methods
+                && (m.Name.Contains(connToMethod, StringComparison.OrdinalIgnoreCase)
+                    || connToMethod.Contains(m.Name, StringComparison.OrdinalIgnoreCase)));
             if (fuzzy is not null) return fuzzy.Name;
 
             // If still no match, and there's only one non-runtime, non-generic method, use it
