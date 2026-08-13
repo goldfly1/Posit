@@ -260,6 +260,17 @@ public sealed class CSharpImplementationPhase : IPhase
 
         foreach (var (moduleName, csharpPath) in translatedFiles)
         {
+            // Include the translated Dafny C# file in the source bundle.
+            // This contains __default (or Frame, etc.) with the actual method bodies.
+            // Without it, the Docker build can't find the Dafny types.
+            if (File.Exists(csharpPath))
+            {
+                var content = File.ReadAllText(csharpPath);
+                var fileName = Path.GetFileName(csharpPath);
+                files.Add(new SourceCodeFile($"{moduleName}/{fileName}", content));
+                Console.Error.WriteLine($"[Posit] C# Implementation — '{moduleName}' translated C# -> {fileName}");
+            }
+
             var component = arch?.Components?.FirstOrDefault(c => string.Equals(c.Name, moduleName, StringComparison.OrdinalIgnoreCase));
             var stubs = component is not null ? _registry.SelectCSharpStubs(component) : [];
 
