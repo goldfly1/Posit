@@ -397,11 +397,12 @@ public sealed class WiringGenerator
 
     /// <summary>
     /// Convert a variable from its C# type to the target C# type.
+    /// Returns null if conversion is not possible.
     /// Only handles the Dafny/io-shell string boundary:
     ///   ISequence<Rune> → string: Dafny.Helpers.SequenceToString(var)
     ///   string → ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(var)
     /// </summary>
-    private static string ConvertType(VarInfo source, string targetCsType)
+    private static string? ConvertType(VarInfo source, string targetCsType)
     {
         var src = source.CsType;
         var tgt = targetCsType;
@@ -422,8 +423,8 @@ public sealed class WiringGenerator
         if (tgt == CsString && source.Name.Contains("UnicodeFromString"))
             return "\"\"";
 
-        // Can't convert — pass as-is (will fail at compile, which is correct)
-        return source.Name;
+        // Can't convert — return null so caller falls through to default
+        return null;
     }
 
     /// <summary>
