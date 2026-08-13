@@ -219,10 +219,18 @@ public sealed class WiringGenerator
             var param = entryParams[i];
             var dafnyType = param.DafnyType ?? param.Type;
             var paramName = EscapeReservedKeyword(param.Name);  // avoid 'args' collision with Run(string[] args)
+            // io-shell CLI: entry params are C# strings (args[0] directly).
+            // Dafny CLI: entry params are Dafny strings (ISequence<Rune> via UnicodeFromString).
+            var callerIsIoShell = comp.Classification == ModuleClassification.IoShell;
             if (i == 0)
             {
                 if (dafnyType == "string")
-                    sb.AppendLine($"            var {paramName} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
+                {
+                    if (callerIsIoShell)
+                        sb.AppendLine($"            var {paramName} = args[0];");
+                    else
+                        sb.AppendLine($"            var {paramName} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
+                }
                 else if (dafnyType == "int")
                     sb.AppendLine($"            var {paramName} = BigInteger.Parse(args[0]);");
                 else if (dafnyType == "bool")
