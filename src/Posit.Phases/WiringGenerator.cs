@@ -71,17 +71,39 @@ public sealed class WiringGenerator
 
     private static Component? FindCliComponent(Component[] components)
     {
+        // The CLI component is the one with connections (it has a Wire.cs).
+        // Prefer the one with "Program" in publicSurface or console stubs,
+        // but only among components that have connections.
+        var withConnections = components.Where(c => c.Connections is { Length: > 0 }).ToList();
+
+        if (withConnections.Count == 1)
+            return withConnections[0];
+
+        if (withConnections.Count > 1)
+        {
+            var prog = withConnections.FirstOrDefault(c =>
+                c.PublicSurface?.Contains("Program", StringComparer.OrdinalIgnoreCase) == true);
+            if (prog is not null) return prog;
+
+            var dependedUpon = new HashSet<string>(
+                components.SelectMany(c => c.Dependencies ?? []),
+                StringComparer.OrdinalIgnoreCase);
+            var topOfChain = withConnections.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
+            if (topOfChain is not null) return topOfChain;
+
+            return withConnections[0];
+        }
+
+        // Fallback: no components with connections
         var cli = components.FirstOrDefault(c =>
             c.PublicSurface?.Contains("Program") == true ||
             (c.Classification == ModuleClassification.IoShell &&
              c.StubNames?.Any(s => s.Contains("console") || s.Contains("io-console")) == true));
 
-        if (cli is not null) return cli;
+        cli ??= components.FirstOrDefault(c =>
+            !components.Any(other => (other.Dependencies ?? []).Contains(c.Name, StringComparer.OrdinalIgnoreCase)));
 
-        var dependedUpon = new HashSet<string>(
-            components.SelectMany(c => c.Dependencies ?? []),
-            StringComparer.OrdinalIgnoreCase);
-        return components.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
+        return cli;
     }
 
     private SourceCodeFile? GenerateComponentWiring(
