@@ -165,6 +165,23 @@ public sealed class WiringGenerator
         var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
         var entryParams = entrySig.Params;
 
+        // 1. Check scanned methods first — what's actually in the translated C#
+        if (_scannedMethods.TryGetValue(comp.Name, out var scanned) && scanned.Count > 0)
+        {
+            var match = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, entryMethodName, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                entryMethodName = match.Name;
+                entryParams = match.ParamTypes.Select((t, i) =>
+                    new MethodParam(
+                        match.ParamNames.Length > i ? match.ParamNames[i] : $"arg{i}",
+                        CsTypeToDafnyType(t), CsTypeToDafnyType(t))).ToArray();
+                return (entryMethodName, entryParams);
+            }
+        }
+
+        // 2. Fall back to pattern registry
         var patternFullSigs = GetPatternSignaturesForComponent(comp);
         if (patternFullSigs is { Count: > 0 })
         {
@@ -274,6 +291,12 @@ public sealed class WiringGenerator
             }
 
             var toMethod = ResolveToMethod(toComp, conn.ToMethod);
+            // Strip generic type params from the call — C# infers them from arguments.
+            // e.g. "UnwrapOr<__T>" → "UnwrapOr"
+            var toMethodCallName = toMethod;
+            var genIdx = toMethodCallName.IndexOf('<');
+            if (genIdx > 0)
+                toMethodCallName = toMethodCallName[..genIdx];
 
             string toClass = toComp.Classification == ModuleClassification.IoShell
                 ? $"{conn.ToComponent}.{ResolveStubClass(toComp, toMethod)}"
@@ -300,13 +323,16 @@ public sealed class WiringGenerator
                 sourceToReturnVar, priorReturnVarOrder, entryParams);
             var connArgsStr = string.Join(", ", resolvedArgs);
 
-            sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgsStr})");
+            // Use unique variable name per connection (append index to avoid duplicates)
+            var connIdx = Array.IndexOf(comp.Connections!, conn);
+            var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result_{connIdx}";
+
+            sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethodCallName}({connArgsStr})");
             sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
 
             if (connReturnType != "void")
             {
-                var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
-                sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethod}({connArgsStr});");
+                sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethodCallName}({connArgsStr});");
                 sourceToReturnVar[conn.ToComponent] = returnVarName;
                 sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
                 priorReturnVarOrder.Add((returnVarName, connReturnType));
@@ -320,7 +346,7 @@ public sealed class WiringGenerator
             }
             else
             {
-                sb.AppendLine($"            {toClass}.{toMethod}({connArgsStr});");
+                sb.AppendLine($"            {toClass}.{toMethodCallName}({connArgsStr});");
             }
             sb.AppendLine();
         }
@@ -356,7 +382,7 @@ public sealed class WiringGenerator
                 || connToMethod.Contains(m.Name, StringComparison.OrdinalIgnoreCase));
             if (fuzzy is not null) return fuzzy.Name;
 
-            // If still no match, and there's only one non-runtime method, use it
+            // If still no match, and there's only one non-runtime, non-generic method, use it
             var logicMethods = scanned.Where(m =>
                 !m.Name.StartsWith("create_") && !m.Name.StartsWith("Default")
                 && !m.Name.StartsWith("_TypeDescriptor") && m.GenericParams.Length == 0
@@ -602,6 +628,12 @@ public sealed class WiringGenerator
     public static string DefaultForDafnyType(string dafnyType)
     {
         var t = dafnyType.Trim();
+        // Handle generic type params (T, __T, __U) — can't emit default(T) in wiring
+        // because T isn't declared. Use null! cast to the return type.
+        if (t.Length <= 3 && (t == "T" || t.StartsWith("__") || t.StartsWith("T_")))
+            return "null!";
+        if (t.Contains("<T>") || t.Contains("<__T>") || t.Contains("<__U>"))
+            return "null!";
         if (t.StartsWith("seq<", StringComparison.Ordinal) && t.EndsWith('>'))
             return $"Dafny.Sequence<{MapDafnyTypeToCSharp(t[4..^1].Trim())}>.Empty";
         if (t.StartsWith("set<", StringComparison.Ordinal) && t.EndsWith('>'))
