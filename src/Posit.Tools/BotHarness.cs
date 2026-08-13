@@ -794,7 +794,7 @@ public sealed class BotHarness
             FROM mcr.microsoft.com/dotnet/runtime:{sdkTag}
             WORKDIR /app
             COPY --from=build /src/{cliComponent.Name}/bin/Release/{targetFramework}/ ./
-            COPY DafnyRuntime.dll ./
+            COPY DafnyRuntime/DafnyRuntime.dll ./
             ENTRYPOINT ["dotnet", "{cliComponent.Name}.dll"]
             """;
 
