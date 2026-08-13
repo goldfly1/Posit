@@ -478,11 +478,20 @@ public sealed class WiringGenerator
         if (t == "bool") return "bool";
         if (t == "BigInteger") return "int";
         if (t == "string") return "string";  // C# string (io-shell) vs Dafny string
-        if (t.Contains("ISequence<Rune>") || t.Contains("ISequence<Dafny.Rune>")) return "string";  // Dafny string
-        if (t.Contains("ISequence<"))
+
+        // Count nesting depth of ISequence — if >1 level, it's seq<seq<X>>
+        var seqCount = CountOccurrences(t, "ISequence<");
+        if (seqCount >= 2)
         {
-            // seq<X> — extract inner type
+            // Nested: extract outermost inner type and recurse
             var inner = ExtractInner(t, "ISequence<", ">");
+            return $"seq<{CsTypeToDafnyType(inner)}>";
+        }
+        if (seqCount == 1)
+        {
+            // Single level — check if inner is Rune (Dafny string) or something else
+            var inner = ExtractInner(t, "ISequence<", ">");
+            if (inner.Contains("Rune")) return "string";
             return $"seq<{CsTypeToDafnyType(inner)}>";
         }
         if (t.Contains("ISet<"))
@@ -491,6 +500,13 @@ public sealed class WiringGenerator
             return $"set<{CsTypeToDafnyType(inner)}>";
         }
         return t;
+    }
+
+    private static int CountOccurrences(string source, string pattern)
+    {
+        int count = 0, idx = 0;
+        while ((idx = source.IndexOf(pattern, idx)) >= 0) { count++; idx += pattern.Length; }
+        return count;
     }
 
     private static string ExtractInner(string type, string open, string close)
