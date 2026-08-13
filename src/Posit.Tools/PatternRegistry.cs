@@ -24,6 +24,9 @@ public sealed class PatternRegistry
     private readonly string _patternsDirectory;
     private readonly string _stubsDirectory;
     private readonly Dictionary<string, PatternEntry> _patterns = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Path to the patterns directory (e.g. C:\Users\goldf\Posit\patterns).</summary>
+    public string PatternsDirectory => _patternsDirectory;
     private readonly Dictionary<string, StubEntry> _stubs = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _csharpStubsDirectory;

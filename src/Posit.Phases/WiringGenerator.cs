@@ -6,27 +6,37 @@ namespace Posit.Phases;
 
 /// <summary>
 /// Generates Wire.cs files — one per component with connections.
-/// Reads the carapace connector specs (methodSignatures + connections) and
-/// generates real C# wiring code with actual method calls.
+/// Uses TranslatedCSharpScanner to read the actual translated C# and wire
+/// against real method signatures — no guessing from pattern files.
 ///
 /// This is DETERMINISTIC — no model call, no judgment.
 /// </summary>
 public sealed class WiringGenerator
 {
     private readonly PatternRegistry _registry;
+    private readonly TranslatedCSharpScanner _scanner;
+    private Dictionary<string, List<TranslatedCSharpScanner.CsMethod>> _scannedMethods = new(StringComparer.OrdinalIgnoreCase);
 
     public WiringGenerator(PatternRegistry registry)
     {
         _registry = registry;
+        _scanner = new TranslatedCSharpScanner();
     }
 
     /// <summary>
     /// Generate wiring files for all components with connections.
+    /// Scans the actual translated C# files first, then wires against reality.
     /// </summary>
     public List<SourceCodeFile> Generate(
         ArchitectureContract arch,
         List<(string ModuleName, string CSharpPath)> translatedFiles)
     {
+        // Scan the actual translated C# — this is the key change.
+        // We see what Dafny actually emitted, not what we guess from patterns.
+        _scannedMethods = _scanner.ScanAll(translatedFiles);
+
+        // Also scan io-shell stub files from the patterns directory
+        ScanIoShellStubs(arch);
         var result = new List<SourceCodeFile>();
         var components = arch.Components;
         if (components.Length == 0) return result;
@@ -318,6 +328,45 @@ public sealed class WiringGenerator
 
     private string ResolveToMethod(Component toComp, string connToMethod)
     {
+        // 1. Check scanned methods — what's actually in the translated C#
+        if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
+        {
+            var match = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, connToMethod, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return match.Name;
+
+            // If exact match not found, check PatternMethod mapping from the component
+            if (toComp.MethodSignatures is { Length: > 0 })
+            {
+                var targetSig = toComp.MethodSignatures.FirstOrDefault(s =>
+                    string.Equals(s.Name, connToMethod, StringComparison.OrdinalIgnoreCase));
+                if (targetSig?.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
+                {
+                    var pmMatch = scanned.FirstOrDefault(m =>
+                        string.Equals(m.Name, pm, StringComparison.OrdinalIgnoreCase));
+                    if (pmMatch is not null) return pmMatch.Name;
+                }
+            }
+
+            // If the architect's name doesn't match any real method, find the
+            // method with the most similar name (contains match)
+            var fuzzy = scanned.FirstOrDefault(m =>
+                m.Name.Contains(connToMethod, StringComparison.OrdinalIgnoreCase)
+                || connToMethod.Contains(m.Name, StringComparison.OrdinalIgnoreCase));
+            if (fuzzy is not null) return fuzzy.Name;
+
+            // If still no match, and there's only one non-runtime method, use it
+            var logicMethods = scanned.Where(m =>
+                !m.Name.StartsWith("create_") && !m.Name.StartsWith("Default")
+                && !m.Name.StartsWith("_TypeDescriptor") && m.GenericParams.Length == 0
+                && m.Name != "IsSuccess" && m.Name != "IsFailure"
+                && m.Name != "UnwrapOr" && m.Name != "MapResult").ToList();
+            if (logicMethods.Count == 1)
+                return logicMethods[0].Name;
+        }
+
+        // 2. Fall back to pattern registry (old behavior)
         var toMethod = connToMethod;
         if (toComp.MethodSignatures is { Length: > 0 })
         {
@@ -353,6 +402,26 @@ public sealed class WiringGenerator
 
     private MethodSignature? ResolveTargetSignature(Component toComp, string toMethod)
     {
+        // 1. Check scanned methods — build a MethodSignature from the real C#
+        if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
+        {
+            var csMethod = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (csMethod is not null)
+            {
+                // Convert C# types back to Dafny-ish types for the wiring helpers
+                var dafnyParams = csMethod.ParamTypes.Select(CsTypeToDafnyType).ToArray();
+                var dafnyReturn = CsTypeToDafnyType(csMethod.ReturnType);
+                return new MethodSignature(
+                    csMethod.Name,
+                    dafnyParams.Select((t, i) =>
+                        new MethodParam(csMethod.ParamNames.Length > i ? csMethod.ParamNames[i] : $"arg{i}", t, t)).ToArray(),
+                    dafnyReturn,
+                    dafnyReturn);
+            }
+        }
+
+        // 2. Fall back to pattern registry
         var patternSigs = GetPatternSignaturesForComponent(toComp);
         if (patternSigs is { Count: > 0 })
         {
@@ -361,6 +430,7 @@ public sealed class WiringGenerator
             if (sig is not null) return sig;
         }
 
+        // 3. Fall back to component MethodSignatures
         if (toComp.MethodSignatures is { Length: > 0 })
         {
             var sig = toComp.MethodSignatures.FirstOrDefault(s =>
@@ -369,6 +439,71 @@ public sealed class WiringGenerator
             if (sig is not null) return sig;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Convert a C# type from the scanned output to a Dafny-ish type string
+    /// for use with the wiring helpers (IsTypeCompatible, DefaultForDafnyType, etc.)
+    /// </summary>
+    private static string CsTypeToDafnyType(string csType)
+    {
+        var t = csType.Trim();
+        if (t == "void") return "void";
+        if (t == "bool") return "bool";
+        if (t == "BigInteger") return "int";
+        if (t == "string") return "string";  // C# string (io-shell) vs Dafny string
+        if (t.Contains("ISequence<Rune>") || t.Contains("ISequence<Dafny.Rune>")) return "string";  // Dafny string
+        if (t.Contains("ISequence<"))
+        {
+            // seq<X> — extract inner type
+            var inner = ExtractInner(t, "ISequence<", ">");
+            return $"seq<{CsTypeToDafnyType(inner)}>";
+        }
+        if (t.Contains("ISet<"))
+        {
+            var inner = ExtractInner(t, "ISet<", ">");
+            return $"set<{CsTypeToDafnyType(inner)}>";
+        }
+        return t;
+    }
+
+    private static string ExtractInner(string type, string open, string close)
+    {
+        var start = type.IndexOf(open);
+        if (start < 0) return type;
+        start += open.Length;
+        var end = type.LastIndexOf(close);
+        if (end < start) return type;
+        return type[start..end].Trim();
+    }
+
+    /// <summary>
+    /// Scan io-shell stub template files and add their methods to the scanned map.
+    /// The stubs are in patterns/csharp-stubs/*.cs.template with {{ComponentName}} placeholders.
+    /// </summary>
+    private void ScanIoShellStubs(ArchitectureContract arch)
+    {
+        var stubsDir = Path.Combine(_registry.PatternsDirectory, "csharp-stubs");
+        if (!Directory.Exists(stubsDir)) return;
+
+        foreach (var comp in arch.Components)
+        {
+            if (comp.Classification != ModuleClassification.IoShell) continue;
+            if (comp.StubNames is null || comp.StubNames.Length == 0) continue;
+
+            foreach (var stubName in comp.StubNames)
+            {
+                var templatePath = Path.Combine(stubsDir, $"{stubName}.cs.template");
+                if (!File.Exists(templatePath)) continue;
+
+                var content = File.ReadAllText(templatePath)
+                    .Replace("{{ComponentName}}", comp.Name)
+                    .Replace("{{componentName}}", comp.Name);
+                var methods = _scanner.ScanContent(content);
+                _scannedMethods[comp.Name] = methods;
+                Console.Error.WriteLine($"[Posit] Scanner — io-shell '{comp.Name}' ({stubName}): {methods.Count} methods");
+            }
+        }
     }
 
     private static List<string> BuildFullArgList(
