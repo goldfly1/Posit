@@ -218,25 +218,26 @@ public sealed class WiringGenerator
         {
             var param = entryParams[i];
             var dafnyType = param.DafnyType ?? param.Type;
+            var paramName = EscapeReservedKeyword(param.Name);  // avoid 'args' collision with Run(string[] args)
             if (i == 0)
             {
                 if (dafnyType == "string")
-                    sb.AppendLine($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
+                    sb.AppendLine($"            var {paramName} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
                 else if (dafnyType == "int")
-                    sb.AppendLine($"            var {param.Name} = BigInteger.Parse(args[0]);");
+                    sb.AppendLine($"            var {paramName} = BigInteger.Parse(args[0]);");
                 else if (dafnyType == "bool")
-                    sb.AppendLine($"            var {param.Name} = bool.Parse(args[0]);");
+                    sb.AppendLine($"            var {paramName} = bool.Parse(args[0]);");
                 else
-                    sb.AppendLine($"            var {param.Name} = default({MapDafnyTypeToCSharp(dafnyType)});");
+                    sb.AppendLine($"            var {paramName} = default({MapDafnyTypeToCSharp(dafnyType)});");
             }
             else
             {
-                sb.AppendLine($"            var {param.Name} = {DefaultForDafnyType(dafnyType)}; // default for {dafnyType}");
+                sb.AppendLine($"            var {paramName} = {DefaultForDafnyType(dafnyType)}; // default for {dafnyType}");
             }
         }
         sb.AppendLine();
 
-        var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+        var paramNames = string.Join(", ", entryParams.Select(p => EscapeReservedKeyword(p.Name)));
 
         // For Dafny components, call the entry method on __default.
         // For io-shell CLI components, there's no __default — skip the entry call
@@ -296,7 +297,7 @@ public sealed class WiringGenerator
         sb.AppendLine("            // === Connection calls per carapace connector specs ===");
 
         var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var priorReturnVarOrder = new List<(string VarName, string ReturnType)>();
+        var priorReturnVarOrder = new List<(string VarName, string ReturnType, string CsReturnType, bool FromDafny)>();
 
         foreach (var p in entryParams)
             sourceToReturnVar[p.Name] = p.Name;
@@ -341,7 +342,28 @@ public sealed class WiringGenerator
 
             var resolvedArgs = BuildFullArgList(targetFullSig, conn.ArgMappings,
                 sourceToReturnVar, priorReturnVarOrder, entryParams);
-            var connArgsStr = string.Join(", ", resolvedArgs);
+
+            // ── Type conversion at Dafny/io-shell boundary ──
+            // Dafny strings are ISequence<Rune>, io-shell strings are C# string.
+            // When passing a value from one domain to the other, convert.
+            var convertedArgs = new List<string>(resolvedArgs.Count);
+            for (int ai = 0; ai < resolvedArgs.Count; ai++)
+            {
+                var arg = resolvedArgs[ai];
+                if (ai < targetFullSig?.Params.Length)
+                {
+                    var targetParamType = targetFullSig.Params[ai].DafnyType ?? targetFullSig.Params[ai].Type;
+                    var targetIsIoShell = toComp.Classification == ModuleClassification.IoShell;
+                    var argConverted = ConvertDafnyIoShellBoundary(arg, targetParamType, targetIsIoShell,
+                        sourceToReturnVar, priorReturnVarOrder, entryParams, comp);
+                    convertedArgs.Add(argConverted);
+                }
+                else
+                {
+                    convertedArgs.Add(arg);
+                }
+            }
+            var connArgsStr = string.Join(", ", convertedArgs);
 
             // Use unique variable name per connection (append index to avoid duplicates)
             var connIdx = Array.IndexOf(comp.Connections!, conn);
@@ -355,7 +377,17 @@ public sealed class WiringGenerator
                 sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethodCallName}({connArgsStr});");
                 sourceToReturnVar[conn.ToComponent] = returnVarName;
                 sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
-                priorReturnVarOrder.Add((returnVarName, connReturnType));
+
+                // Track the raw C# return type for Dafny/io-shell boundary conversion
+                var rawCsReturn = connReturnType;
+                var fromDafny = toComp.Classification != ModuleClassification.IoShell;
+                if (targetFullSig is not null && _scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
+                {
+                    var csMethod = scanned.FirstOrDefault(m => string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+                    if (csMethod is not null)
+                        rawCsReturn = csMethod.ReturnType;
+                }
+                priorReturnVarOrder.Add((returnVarName, connReturnType, rawCsReturn, fromDafny));
 
                 if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
                 {
@@ -573,7 +605,7 @@ public sealed class WiringGenerator
     private static List<string> BuildFullArgList(
         MethodSignature? targetSig, string[]? argMappings,
         Dictionary<string, string> sourceToReturnVar,
-        List<(string VarName, string ReturnType)> priorReturnVarOrder,
+        List<(string VarName, string ReturnType, string CsReturnType, bool FromDafny)> priorReturnVarOrder,
         MethodParam[] entryParams)
     {
         if (targetSig is null || targetSig.Params.Length == 0)
@@ -640,6 +672,80 @@ public sealed class WiringGenerator
     // === Type helpers ===
 
     /// <summary>
+    /// Convert a value at the Dafny/io-shell boundary.
+    /// Dafny strings are ISequence&lt;Rune&gt;; io-shell strings are C# string.
+    /// When a value crosses the boundary, we need to convert:
+    ///   - ISequence&lt;Rune&gt; → string: Dafny.Helpers.SequenceToString(seq)
+    ///   - string → ISequence&lt;Rune&gt;: Dafny.Sequence&lt;Dafny.Rune&gt;.UnicodeFromString(s)
+    ///
+    /// We detect the source type by checking whether the variable came from a
+    /// Dafny-translated method (ISequence&lt;Rune&gt;) or an io-shell/entry param (string).
+    /// </summary>
+    private static string ConvertDafnyIoShellBoundary(
+        string arg,
+        string targetParamType,
+        bool targetIsIoShell,
+        Dictionary<string, string> sourceToReturnVar,
+        List<(string VarName, string ReturnType, string CsReturnType, bool FromDafny)> priorReturnVarOrder,
+        MethodParam[] entryParams,
+        Component callerComp)
+    {
+        if (string.IsNullOrEmpty(arg) || arg.StartsWith("/*") || arg == "null!")
+            return arg;
+
+        // Only convert string-type params
+        var targetIsString = targetParamType == "string";
+        if (!targetIsString) return arg;
+
+        // Skip literals and defaults — they're already in the right form
+        if (arg.StartsWith("Dafny.") || arg.StartsWith("BigInteger") || arg.StartsWith("bool.")
+            || arg.StartsWith("default(") || arg == "false" || arg == "true")
+            return arg;
+
+        // 1. Entry params: check the caller's domain
+        var isEntryParam = entryParams.Any(p => EscapeReservedKeyword(p.Name) == arg || p.Name == arg);
+        if (isEntryParam)
+        {
+            var callerIsDafny = callerComp.Classification != ModuleClassification.IoShell;
+            if (callerIsDafny && targetIsIoShell)
+            {
+                // Entry param is ISequence<Rune> (Dafny), target wants C# string
+                return $"Dafny.Helpers.SequenceToString({arg})";
+            }
+            if (!callerIsDafny && !targetIsIoShell)
+            {
+                // Entry param is string (io-shell), target wants ISequence<Rune> (Dafny)
+                return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({arg})";
+            }
+            return arg;
+        }
+
+        // 2. Prior return vars: use the tracked CsReturnType and FromDafny flag
+        var priorMatch = priorReturnVarOrder.FirstOrDefault(v => v.VarName == arg);
+        if (priorMatch != default)
+        {
+            var sourceFromDafny = priorMatch.FromDafny;
+            var sourceCsReturn = priorMatch.CsReturnType;
+
+            // Source is Dafny (returns ISequence<Rune>), target is io-shell (wants string)
+            if (sourceFromDafny && targetIsIoShell
+                && (sourceCsReturn.Contains("ISequence") || sourceCsReturn.Contains("Rune")))
+            {
+                return $"Dafny.Helpers.SequenceToString({arg})";
+            }
+
+            // Source is io-shell (returns string), target is Dafny (wants ISequence<Rune>)
+            if (!sourceFromDafny && !targetIsIoShell
+                && (sourceCsReturn == "string" || sourceCsReturn.Contains("string")))
+            {
+                return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({arg})";
+            }
+        }
+
+        return arg;
+    }
+
+    /// <summary>
     /// Prefix C# reserved keywords with @ to use them as identifiers.
     /// e.g. "event" → "@event", "result" → "@result"
     /// </summary>
@@ -658,7 +764,9 @@ public sealed class WiringGenerator
           "implicit", "partial", "where", "select", "from", "group", "into",
           "orderby", "join", "let", "on", "equals", "by", "ascending",
           "descending", "global", "stackalloc", "fixed", "unchecked", "checked",
-          "unsafe" };
+          "unsafe",
+          // Not C# keywords but collide with CLI wiring's Run(string[] args)
+          "args" };
 
         if (reserved.Contains(name))
             return $"@{name}";

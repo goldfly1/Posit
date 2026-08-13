@@ -63,7 +63,7 @@ public sealed class BotHarness
 
             // 4. Generate project files and solution
             var targetFramework = DetectTargetFramework(filesByRelPath.Values) ?? "net10.0";
-            GenerateProjects(contextDir, arch, filesByRelPath, targetFramework);
+            GenerateProjects(contextDir, arch, filesByRelPath, targetFramework, cliComponent.Name);
 
             // 5. Build in Docker
             Console.Error.WriteLine("[Posit] Bot Harness — building in Docker...");
@@ -150,6 +150,34 @@ public sealed class BotHarness
 
     private static Component? FindCliComponent(Component[] components)
     {
+        // The CLI component is the one with connections (it has a Wire.cs).
+        // If multiple have connections, prefer the one with "Program" in publicSurface
+        // or the one that nothing depends on (it's the top of the call chain).
+        var withConnections = components
+            .Where(c => c.Connections is { Length: > 0 })
+            .ToList();
+
+        if (withConnections.Count == 1)
+            return withConnections[0];
+
+        if (withConnections.Count > 1)
+        {
+            // Prefer the one with "Program" in publicSurface
+            var prog = withConnections.FirstOrDefault(c =>
+                c.PublicSurface?.Contains("Program", StringComparer.OrdinalIgnoreCase) == true);
+            if (prog is not null) return prog;
+
+            // Prefer the one that nothing depends on (top of chain)
+            var dependedUpon = new HashSet<string>(
+                components.SelectMany(c => c.Dependencies ?? []),
+                StringComparer.OrdinalIgnoreCase);
+            var topOfChain = withConnections.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
+            if (topOfChain is not null) return topOfChain;
+
+            return withConnections[0];
+        }
+
+        // Fallback: no components with connections — look for Program in publicSurface
         var cli = components.FirstOrDefault(c =>
             c.PublicSurface?.Contains("Program") == true ||
             (c.Classification == ModuleClassification.IoShell &&
@@ -365,7 +393,8 @@ public sealed class BotHarness
         string contextDir,
         ArchitectureContract? arch,
         Dictionary<string, SourceCodeFile> filesByRelPath,
-        string targetFramework)
+        string targetFramework,
+        string cliComponentName)
     {
         var archRefs = arch?.Components?.DistinctBy(c => c.Name, StringComparer.OrdinalIgnoreCase)?.ToDictionary(
             c => c.Name,
@@ -400,9 +429,12 @@ public sealed class BotHarness
                 continue;
 
             var csprojPath = Path.Combine(projectDir, $"{projectName}.csproj");
-            var isExe = File.Exists(Path.Combine(projectDir, "Program.cs")) ||
-                        filesByRelPath.Any(f => f.Key.StartsWith($"{projectName}/", StringComparison.OrdinalIgnoreCase) &&
-                                               f.Value.Content.Contains("public static int Run("));
+            // Only the CLI component gets OutputType=Exe. Other components with
+            // io-console-program.cs or Wire.cs Run() are libraries, not entry points.
+            var isExe = string.Equals(projectName, cliComponentName, StringComparison.OrdinalIgnoreCase) &&
+                        (File.Exists(Path.Combine(projectDir, "Program.cs")) ||
+                         filesByRelPath.Any(f => f.Key.StartsWith($"{projectName}/", StringComparison.OrdinalIgnoreCase) &&
+                                                f.Value.Content.Contains("public static int Run(")));
             var isTest = IsTestProjectDirectory(projectDir, projectName);
             var refs = new HashSet<string>(archRefs.GetValueOrDefault(projectName) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
