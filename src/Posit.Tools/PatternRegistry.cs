@@ -61,12 +61,17 @@ public sealed class PatternRegistry
                 if (HasCSharpStub("extern-database-io"))
                     selected.Add(GetCSharpStub("extern-database-io"));
 
+            // Console I/O: console-io provides PrintLine, ReadLine, etc.
+            // NOTE: io-console-program is NOT a stub — it's a CLI entry point template
+            // that defines Program.Main. The entry point comes from Wire.cs → the harness
+            // generates Program.cs that calls Wire.Run(args). io-console-program must never
+            // be selected as a stub.
             if (component.StubNames?.Any(s => s.Contains("console", StringComparison.OrdinalIgnoreCase)) == true ||
                 responsibility.Contains("console") || responsibility.Contains("cli") || responsibility.Contains("command-line") ||
                 name.Contains("CLI", StringComparison.OrdinalIgnoreCase) ||
                 name.Contains("Console", StringComparison.OrdinalIgnoreCase))
-                if (HasCSharpStub("io-console-program"))
-                    selected.Add(GetCSharpStub("io-console-program"));
+                if (HasCSharpStub("console-io"))
+                    selected.Add(GetCSharpStub("console-io"));
 
             if (component.StubNames?.Any(s => s.Contains("file", StringComparison.OrdinalIgnoreCase)) == true ||
                 responsibility.Contains("file") || responsibility.Contains("read") || responsibility.Contains("write") ||
@@ -84,12 +89,13 @@ public sealed class PatternRegistry
                 if (HasCSharpStub("network-io"))
                     selected.Add(GetCSharpStub("network-io"));
 
-            // Generic fallback: if no specific stub matched, give it a console-program shell
-            // so the carapace enforcement doesn't abort. The architect can refine later.
+            // Generic fallback: if no specific stub matched, give it console-io
+            // (PrintLine, ReadLine) so the carapace enforcement doesn't abort.
+            // Never use io-console-program — it's an entry point, not a stub.
             if (selected.Count == 0)
             {
-                if (HasCSharpStub("io-console-program"))
-                    selected.Add(GetCSharpStub("io-console-program"));
+                if (HasCSharpStub("console-io"))
+                    selected.Add(GetCSharpStub("console-io"));
                 else if (HasCSharpStub("file-io"))
                     selected.Add(GetCSharpStub("file-io"));
             }
