@@ -265,7 +265,10 @@ public sealed class WiringGenerator
         Dictionary<string, Component> componentByName)
     {
         var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
-        var paramDecls = string.Join(", ", entryParams.Select(p => $"{MapDafnyTypeToCSharp(p.DafnyType ?? p.Type)} {p.Name}"));
+        // Qualify types with the component's namespace to avoid ambiguity
+        // when multiple modules define the same type (e.g. _IEntity)
+        var paramDecls = string.Join(", ", entryParams.Select(p =>
+            $"{QualifyType(MapDafnyTypeToCSharp(p.DafnyType ?? p.Type), comp.Name)} {p.Name}"));
 
         sb.AppendLine("        /// <summary>");
         sb.AppendLine($"        /// Wires {comp.Name}'s connections to its dependencies.");
@@ -631,6 +634,36 @@ public sealed class WiringGenerator
     }
 
     // === Type helpers ===
+
+    /// <summary>
+    /// Qualify a C# type with the component's namespace if it's a Dafny interface
+    /// type (starts with _) that could be ambiguous across modules.
+    /// e.g. _IEntity → _module_CalcEngine._IEntity
+    /// </summary>
+    private static string QualifyType(string csType, string componentName)
+    {
+        // Only qualify bare interface types (start with _ and no namespace)
+        if (csType.StartsWith("_") && !csType.Contains("."))
+        {
+            // Check if it's inside a generic (e.g. Dafny.ISequence<_IEntity>)
+            if (csType.Contains("<"))
+                return QualifyGenericType(csType, componentName);
+            return $"_module_{componentName}.{csType}";
+        }
+        // Handle types containing unqualified Dafny interfaces in generics
+        if (csType.Contains("<_") && !csType.Contains("."))
+            return QualifyGenericType(csType, componentName);
+        return csType;
+    }
+
+    private static string QualifyGenericType(string csType, string componentName)
+    {
+        // Replace bare _TypeName with _module_Component._TypeName inside generics
+        // e.g. Dafny.ISequence<_IEntity> → Dafny.ISequence<_module_CalcEngine._IEntity>
+        return System.Text.RegularExpressions.Regex.Replace(csType,
+            @"(?<![\w.])(_\w+)",
+            m => $"_module_{componentName}.{m.Value}");
+    }
 
     public static bool IsValidationType(string returnType)
     {
