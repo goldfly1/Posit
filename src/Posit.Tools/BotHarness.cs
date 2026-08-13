@@ -820,10 +820,12 @@ public sealed class BotHarness
     private async Task<(bool Success, string Output)> RunDockerBuildAsync(
         string contextDir, string dockerfileName, string tag, CancellationToken ct)
     {
+        // Use full path for -f so Docker finds the file regardless of working directory
+        var dockerfilePath = Path.Combine(contextDir, dockerfileName);
         var psi = new ProcessStartInfo
         {
             FileName = _dockerPath,
-            Arguments = $"build --no-cache -f \"{dockerfileName}\" --tag {tag} \"{contextDir}\"",
+            Arguments = $"build --no-cache -f \"{dockerfilePath}\" --tag {tag} \"{contextDir}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
