@@ -273,12 +273,18 @@ public sealed class WiringGenerator
         string entryMethodName, MethodParam[] entryParams,
         Dictionary<string, Component> componentByName)
     {
-        var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+        var paramNames = string.Join(", ", entryParams.Select(p => EscapeReservedKeyword(p.Name)));
         // Qualify types with the component's namespace to avoid ambiguity
         // when multiple modules define the same type (e.g. _IEntity)
+        // For io-shell components, string params are C# string, not ISequence<Rune>.
+        var callerIsIoShell = comp.Classification == ModuleClassification.IoShell;
         var paramDecls = string.Join(", ", entryParams.Select(p =>
         {
-            var csType = QualifyType(MapDafnyTypeToCSharp(p.DafnyType ?? p.Type), comp.Name);
+            var dafnyType = p.DafnyType ?? p.Type;
+            // io-shell callers use C# types (string), Dafny callers use Dafny types (ISequence<Rune>)
+            var csType = (callerIsIoShell && dafnyType == "string")
+                ? "string"
+                : QualifyType(MapDafnyTypeToCSharp(dafnyType), comp.Name);
             var name = EscapeReservedKeyword(p.Name);
             return $"{csType} {name}";
         }));
