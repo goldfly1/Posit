@@ -1,0 +1,521 @@
+using System.Text;
+using Posit.Contracts.Artifacts;
+using Posit.Tools;
+
+namespace Posit.Phases;
+
+/// <summary>
+/// Generates Wire.cs files — one per component with connections.
+/// Reads the carapace connector specs (methodSignatures + connections) and
+/// generates real C# wiring code with actual method calls.
+///
+/// This is DETERMINISTIC — no model call, no judgment.
+/// </summary>
+public sealed class WiringGenerator
+{
+    private readonly PatternRegistry _registry;
+
+    public WiringGenerator(PatternRegistry registry)
+    {
+        _registry = registry;
+    }
+
+    /// <summary>
+    /// Generate wiring files for all components with connections.
+    /// </summary>
+    public List<SourceCodeFile> Generate(
+        ArchitectureContract arch,
+        List<(string ModuleName, string CSharpPath)> translatedFiles)
+    {
+        var result = new List<SourceCodeFile>();
+        var components = arch.Components;
+        if (components.Length == 0) return result;
+
+        var componentByName = new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in components)
+            componentByName[c.Name] = c;
+
+        var cliComponent = FindCliComponent(components);
+        if (cliComponent is null) return result;
+
+        var translatedNames = new HashSet<string>(
+            translatedFiles.Select(t => t.ModuleName),
+            StringComparer.OrdinalIgnoreCase);
+
+        var componentsWithConnections = components
+            .Where(c => c.Connections?.Length > 0 && c.MethodSignatures?.Length > 0)
+            .ToList();
+
+        foreach (var comp in componentsWithConnections)
+        {
+            var isCli = string.Equals(comp.Name, cliComponent.Name, StringComparison.OrdinalIgnoreCase);
+            var wireFile = GenerateComponentWiring(
+                comp, isCli, components, componentByName);
+            if (wireFile is not null)
+                result.Add(wireFile);
+        }
+
+        Console.Error.WriteLine($"[Posit] Wiring — generated {result.Count} Wire.cs files ({componentsWithConnections.Count} components with connections)");
+        return result;
+    }
+
+    private static Component? FindCliComponent(Component[] components)
+    {
+        var cli = components.FirstOrDefault(c =>
+            c.PublicSurface?.Contains("Program") == true ||
+            (c.Classification == ModuleClassification.IoShell &&
+             c.StubNames?.Any(s => s.Contains("console") || s.Contains("io-console")) == true));
+
+        if (cli is not null) return cli;
+
+        var dependedUpon = new HashSet<string>(
+            components.SelectMany(c => c.Dependencies ?? []),
+            StringComparer.OrdinalIgnoreCase);
+        return components.FirstOrDefault(c => !dependedUpon.Contains(c.Name));
+    }
+
+    private SourceCodeFile? GenerateComponentWiring(
+        Component comp,
+        bool isCli,
+        Component[] allComponents,
+        Dictionary<string, Component> componentByName)
+    {
+        if (comp.MethodSignatures is null || comp.MethodSignatures.Length == 0)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{comp.Name}' has no methodSignatures.");
+            return null;
+        }
+        if (comp.Connections is null || comp.Connections.Length == 0)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — REJECT: '{comp.Name}' has no connections.");
+            return null;
+        }
+
+        Console.Error.WriteLine($"[Posit] Wiring — generating wiring for '{comp.Name}' ({comp.Connections.Length} connections, isCli={isCli})");
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// Auto-generated wiring file — DETERMINISTIC from carapace connector specs.");
+        sb.AppendLine("// The orchestrator read methodSignatures + connections from the architecture contract");
+        sb.AppendLine("// and generated real C# calls with type conversions. No model judgment.");
+        sb.AppendLine();
+
+        EmitUsingStatements(sb, comp, allComponents);
+        sb.AppendLine("using System.Numerics;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {comp.Name}");
+        sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine($"    /// Wiring for {comp.Name} — connects to its dependencies per carapace connector specs.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public static class Wire");
+        sb.AppendLine("    {");
+
+        var (entryMethodName, entryParams) = ResolveEntryMethod(comp);
+
+        if (isCli)
+            EmitCliWiring(sb, comp, entryMethodName, entryParams, componentByName);
+        else
+            EmitNonCliWiring(sb, comp, entryMethodName, entryParams, componentByName);
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+
+        var wiringPath = $"{comp.Name}/Wire.cs";
+        var content = sb.ToString();
+        Console.Error.WriteLine($"[Posit] Wiring — {wiringPath}: {content.Split('\n').Length} lines");
+        return new SourceCodeFile(wiringPath, content);
+    }
+
+    private static void EmitUsingStatements(StringBuilder sb, Component comp, Component[] allComponents)
+    {
+        var connectionTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var conn in comp.Connections!)
+        {
+            if (!string.IsNullOrWhiteSpace(conn.ToComponent))
+                connectionTargets.Add(conn.ToComponent);
+        }
+        connectionTargets.Add(comp.Name);
+
+        foreach (var c in allComponents)
+        {
+            if (connectionTargets.Contains(c.Name))
+            {
+                if (c.Classification == ModuleClassification.IoShell)
+                    sb.AppendLine($"using {c.Name};");
+                else
+                    sb.AppendLine($"using _module_{c.Name};");
+            }
+        }
+    }
+
+    private (string MethodName, MethodParam[] Params) ResolveEntryMethod(Component comp)
+    {
+        var entrySigs = comp.MethodSignatures!;
+        var entrySig = entrySigs.FirstOrDefault() ?? entrySigs[0];
+        var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
+        var entryParams = entrySig.Params;
+
+        var patternFullSigs = GetPatternSignaturesForComponent(comp);
+        if (patternFullSigs is { Count: > 0 })
+        {
+            var patternSig = patternFullSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, entryMethodName, StringComparison.OrdinalIgnoreCase))
+                ?? patternFullSigs[0];
+            entryParams = patternSig.Params;
+            if (entrySig.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
+                entryMethodName = pm;
+            else
+                entryMethodName = patternSig.Name;
+        }
+
+        return (entryMethodName, entryParams);
+    }
+
+    private void EmitCliWiring(StringBuilder sb, Component comp,
+        string entryMethodName, MethodParam[] entryParams,
+        Dictionary<string, Component> componentByName)
+    {
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine($"        /// Calls {comp.Name}.{entryMethodName}() — the program's main entry point.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine("        public static int Run(string[] args)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (args.Length == 0)");
+        sb.AppendLine("            {");
+        sb.AppendLine($"                System.Console.WriteLine(\"Usage: {comp.Name} <input>\");");
+        sb.AppendLine("                return 1;");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+
+        for (int i = 0; i < entryParams.Length; i++)
+        {
+            var param = entryParams[i];
+            var dafnyType = param.DafnyType ?? param.Type;
+            if (i == 0)
+            {
+                if (dafnyType == "string")
+                    sb.AppendLine($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
+                else if (dafnyType == "int")
+                    sb.AppendLine($"            var {param.Name} = BigInteger.Parse(args[0]);");
+                else if (dafnyType == "bool")
+                    sb.AppendLine($"            var {param.Name} = bool.Parse(args[0]);");
+                else
+                    sb.AppendLine($"            var {param.Name} = default({MapDafnyTypeToCSharp(dafnyType)});");
+            }
+            else
+            {
+                sb.AppendLine($"            var {param.Name} = {DefaultForDafnyType(dafnyType)}; // default for {dafnyType}");
+            }
+        }
+        sb.AppendLine();
+
+        var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+        sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
+        sb.AppendLine();
+
+        AppendConnectionCalls(sb, comp, componentByName, entryParams);
+
+        sb.AppendLine("            System.Console.WriteLine(result);");
+        sb.AppendLine("            return 0;");
+        sb.AppendLine("        }");
+    }
+
+    private void EmitNonCliWiring(StringBuilder sb, Component comp,
+        string entryMethodName, MethodParam[] entryParams,
+        Dictionary<string, Component> componentByName)
+    {
+        var paramNames = string.Join(", ", entryParams.Select(p => p.Name));
+        var paramDecls = string.Join(", ", entryParams.Select(p => $"{MapDafnyTypeToCSharp(p.DafnyType ?? p.Type)} {p.Name}"));
+
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine($"        /// Wires {comp.Name}'s connections to its dependencies.");
+        sb.AppendLine($"        /// Chains {comp.Connections!.Length} connection calls per the carapace connector specs.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine($"        public static void Wire_{comp.Name}({paramDecls})");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
+        sb.AppendLine();
+
+        AppendConnectionCalls(sb, comp, componentByName, entryParams);
+
+        sb.AppendLine("        }");
+    }
+
+    private void AppendConnectionCalls(
+        StringBuilder sb, Component comp,
+        Dictionary<string, Component> componentByName,
+        MethodParam[] entryParams)
+    {
+        sb.AppendLine("            // === Connection calls per carapace connector specs ===");
+
+        var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var priorReturnVarOrder = new List<(string VarName, string ReturnType)>();
+
+        foreach (var p in entryParams)
+            sourceToReturnVar[p.Name] = p.Name;
+
+        foreach (var conn in comp.Connections!)
+        {
+            var toComp = componentByName.GetValueOrDefault(conn.ToComponent);
+            if (toComp is null)
+            {
+                sb.AppendLine($"            // WARNING: connection to '{conn.ToComponent}' — component not found");
+                continue;
+            }
+
+            var toMethod = ResolveToMethod(toComp, conn.ToMethod);
+
+            string toClass = toComp.Classification == ModuleClassification.IoShell
+                ? $"{conn.ToComponent}.{ResolveStubClass(toComp, toMethod)}"
+                : $"_module_{conn.ToComponent}.__default";
+
+            var connReturnType = conn.ReturnType ?? "var";
+            var targetFullSig = ResolveTargetSignature(toComp, toMethod);
+
+            if (targetFullSig is not null && (
+                string.IsNullOrWhiteSpace(targetFullSig.ReturnType) ||
+                targetFullSig.ReturnType.Equals("void", StringComparison.OrdinalIgnoreCase)))
+            {
+                connReturnType = "void";
+            }
+            else if (toComp.Classification == ModuleClassification.IoShell)
+            {
+                var methodLower = toMethod.ToLowerInvariant();
+                if (methodLower.Contains("print") || methodLower.Contains("write")
+                    || methodLower == "clear" || methodLower.Contains("log"))
+                    connReturnType = "void";
+            }
+
+            var resolvedArgs = BuildFullArgList(targetFullSig, conn.ArgMappings,
+                sourceToReturnVar, priorReturnVarOrder, entryParams);
+            var connArgsStr = string.Join(", ", resolvedArgs);
+
+            sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgsStr})");
+            sb.AppendLine($"            // {conn.ReturnUsage ?? "result stored"}");
+
+            if (connReturnType != "void")
+            {
+                var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
+                sb.AppendLine($"            var {returnVarName} = {toClass}.{toMethod}({connArgsStr});");
+                sourceToReturnVar[conn.ToComponent] = returnVarName;
+                sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
+                priorReturnVarOrder.Add((returnVarName, connReturnType));
+
+                if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
+                {
+                    var simpleName = connReturnType.Split('<', '(', '.')[0].Trim().ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(simpleName) && simpleName != "void")
+                        sourceToReturnVar[simpleName] = returnVarName;
+                }
+            }
+            else
+            {
+                sb.AppendLine($"            {toClass}.{toMethod}({connArgsStr});");
+            }
+            sb.AppendLine();
+        }
+    }
+
+    private string ResolveToMethod(Component toComp, string connToMethod)
+    {
+        var toMethod = connToMethod;
+        if (toComp.MethodSignatures is { Length: > 0 })
+        {
+            var targetSig = toComp.MethodSignatures.FirstOrDefault(s =>
+                string.Equals(s.Name, connToMethod, StringComparison.OrdinalIgnoreCase));
+            if (targetSig?.PatternMethod is string pm && !string.IsNullOrWhiteSpace(pm))
+                toMethod = pm;
+        }
+
+        if (toMethod == connToMethod && !string.IsNullOrWhiteSpace(toComp.PatternName))
+        {
+            var patternSigs = GetPatternSignaturesForComponent(toComp);
+            if (patternSigs is { Count: > 0 })
+            {
+                var match = patternSigs.FirstOrDefault(s =>
+                    string.Equals(s.Name, connToMethod, StringComparison.OrdinalIgnoreCase));
+                toMethod = match is not null ? match.Name : patternSigs[0].Name;
+            }
+        }
+        return toMethod;
+    }
+
+    private List<MethodSignature>? GetPatternSignaturesForComponent(Component comp)
+    {
+        if (string.IsNullOrWhiteSpace(comp.PatternName)) return null;
+        try { return _registry.GetPatternSignatures(comp.PatternName); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — pattern signatures for '{comp.PatternName}': {ex.Message}");
+            return null;
+        }
+    }
+
+    private MethodSignature? ResolveTargetSignature(Component toComp, string toMethod)
+    {
+        var patternSigs = GetPatternSignaturesForComponent(toComp);
+        if (patternSigs is { Count: > 0 })
+        {
+            var sig = patternSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (sig is not null) return sig;
+        }
+
+        if (toComp.MethodSignatures is { Length: > 0 })
+        {
+            var sig = toComp.MethodSignatures.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(s.PatternMethod, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (sig is not null) return sig;
+        }
+        return null;
+    }
+
+    private static List<string> BuildFullArgList(
+        MethodSignature? targetSig, string[]? argMappings,
+        Dictionary<string, string> sourceToReturnVar,
+        List<(string VarName, string ReturnType)> priorReturnVarOrder,
+        MethodParam[] entryParams)
+    {
+        if (targetSig is null || targetSig.Params.Length == 0)
+        {
+            var fallback = new List<string>();
+            if (argMappings?.Length > 0)
+            {
+                foreach (var am in argMappings)
+                {
+                    var arrow = am.IndexOf("->");
+                    string src = arrow > 0 ? am[..arrow].Trim() : am.Trim();
+                    fallback.Add(sourceToReturnVar.TryGetValue(src, out var v) ? v : $"/* unresolved: {src} */ null");
+                }
+            }
+            return fallback;
+        }
+
+        var fullParams = targetSig.Params;
+        var result = new List<string>(fullParams.Length);
+
+        for (int i = 0; i < fullParams.Length; i++)
+        {
+            var param = fullParams[i];
+            string? resolved = null;
+
+            if (argMappings is { Length: > 0 } && i < argMappings.Length)
+            {
+                var am = argMappings[i];
+                var arrow = am.IndexOf("->");
+                string src = arrow > 0 ? am[..arrow].Trim() : am.Trim();
+                if (sourceToReturnVar.TryGetValue(src, out var v))
+                {
+                    var pType = param.DafnyType ?? param.Type;
+                    var sInfo = priorReturnVarOrder.FirstOrDefault(x => x.VarName == v);
+                    var sType = sInfo != default ? sInfo.ReturnType : "string";
+                    if (IsTypeCompatible(sType, pType)) resolved = v;
+                }
+            }
+
+            if (resolved is null && sourceToReturnVar.TryGetValue(param.Name, out var nm))
+            {
+                var pType = param.DafnyType ?? param.Type;
+                var sInfo = priorReturnVarOrder.FirstOrDefault(x => x.VarName == nm);
+                var sType = sInfo != default ? sInfo.ReturnType : "string";
+                if (IsTypeCompatible(sType, pType)) resolved = nm;
+            }
+
+            if (resolved is null)
+            {
+                var pType = param.DafnyType ?? param.Type;
+                var priors = priorReturnVarOrder
+                    .Where(v => !entryParams.Any(p => p.Name == v.VarName))
+                    .Distinct().ToList();
+                var match = priors.FirstOrDefault(v => IsTypeCompatible(v.ReturnType, pType));
+                if (match != default) resolved = match.VarName;
+            }
+
+            resolved ??= DefaultForDafnyType(param.DafnyType ?? param.Type);
+            result.Add(resolved);
+        }
+        return result;
+    }
+
+    // === Type helpers ===
+
+    public static bool IsValidationType(string returnType)
+    {
+        if (string.IsNullOrWhiteSpace(returnType)) return false;
+        var l = returnType.ToLowerInvariant().Trim();
+        return l.Contains("validation") || l.Contains("result") || l == "bool"
+            || l.Contains("success") || l.Contains("failure");
+    }
+
+    public static bool IsTypeCompatible(string returnType, string paramType)
+    {
+        if (string.IsNullOrWhiteSpace(returnType) || string.IsNullOrWhiteSpace(paramType)) return false;
+        var r = returnType.ToLowerInvariant().Trim();
+        var p = paramType.ToLowerInvariant().Trim();
+        if (r == p) return true;
+        if (r.StartsWith("seq<") && r.EndsWith('>') && p.StartsWith("seq<") && p.EndsWith('>'))
+            return IsTypeCompatible(r[4..^1].Trim(), p[4..^1].Trim());
+        if (r.StartsWith("set<") && r.EndsWith('>') && p.StartsWith("set<") && p.EndsWith('>'))
+            return IsTypeCompatible(r[4..^1].Trim(), p[4..^1].Trim());
+        if (r == "string" && p == "string") return true;
+        if ((r == "int" || r == "bigint") && (p == "int" || p == "bigint")) return true;
+        if (r == "var") return true;
+        return false;
+    }
+
+    public static string DefaultForDafnyType(string dafnyType)
+    {
+        var t = dafnyType.Trim();
+        if (t.StartsWith("seq<", StringComparison.Ordinal) && t.EndsWith('>'))
+            return $"Dafny.Sequence<{MapDafnyTypeToCSharp(t[4..^1].Trim())}>.Empty";
+        if (t.StartsWith("set<", StringComparison.Ordinal) && t.EndsWith('>'))
+            return $"Dafny.Set<{MapDafnyTypeToCSharp(t[4..^1].Trim())}>.Empty";
+        return t switch
+        {
+            "int" => "BigInteger.Zero",
+            "bool" => "false",
+            "string" => "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")",
+            _ => $"default({MapDafnyTypeToCSharp(t)})"
+        };
+    }
+
+    public static string MapDafnyTypeToCSharp(string dafnyType)
+    {
+        var t = dafnyType.Trim();
+        return t switch
+        {
+            "int" => "BigInteger",
+            "bool" => "bool",
+            "string" => "Dafny.ISequence<Dafny.Rune>",
+            _ when t.StartsWith("seq<") => "Dafny.ISequence<" + MapDafnyTypeToCSharp(t[4..^1]) + ">",
+            _ when t.StartsWith("set<") => "Dafny.ISet<" + MapDafnyTypeToCSharp(t[4..^1]) + ">",
+            _ => t
+        };
+    }
+
+    private static string ResolveStubClass(Component targetComp, string methodName)
+    {
+        var m = methodName.ToLowerInvariant();
+        if (m.Contains("file") || m.Contains("read") && !m.Contains("console")) return "FileIO";
+        if (m.Contains("print") || m.Contains("console") || m.Contains("readline")) return "ConsoleIO";
+        if (m.Contains("stream") || m.Contains("chunk")) return "StreamIO";
+        if (m is "get" or "post" or "put" or "delete" or "http") return "NetworkIO";
+        if (m.Contains("query") || m.Contains("execute") || m.Contains("connection")) return "DatabaseIO";
+        if (m.Contains("time") || m.Contains("sleep") || m.Contains("random")) return "TimeRandom";
+        if (targetComp.StubNames?.Length > 0) return StubNameToClassName(targetComp.StubNames[0]);
+        return "FileIO";
+    }
+
+    private static string StubNameToClassName(string stubName)
+    {
+        var knownAbbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "io", "ci", "cd" };
+        var parts = stubName.Split('-');
+        return string.Concat(parts.Select(p =>
+        {
+            if (p.Length == 0) return "";
+            if (knownAbbreviations.Contains(p)) return p.ToUpperInvariant();
+            return char.ToUpperInvariant(p[0]) + p[1..];
+        }));
+    }
+}
