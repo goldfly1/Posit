@@ -147,6 +147,8 @@ public sealed class Z3Runner
             // correct module. Without this, every Dafny module produces `namespace _module`
             // and they collide when referenced from C#.
             // Also update internal fully-qualified references from `_module.` to `_module_{moduleName}.`
+            // Also strip the Dafny runtime helpers (FuncExtensions, ArrayHelpers, DafnyAssembly)
+            // which are provided by DafnyRuntime.dll — including them causes CS0101 duplicates.
             if (File.Exists(outputPath))
             {
                 var csharpContent = await File.ReadAllTextAsync(outputPath, ct);
@@ -155,10 +157,15 @@ public sealed class Z3Runner
                 // Rename internal fully-qualified references to _module.X → _module_{moduleName}.X
                 // Be careful: only replace `_module.` (with the dot), not `_module_` or `_module{`
                 renamed = renamed.Replace("_module.", $"_module_{moduleName}.");
+                // Strip Dafny runtime helpers that conflict with DafnyRuntime.dll:
+                // - [assembly: DafnyAssembly.DafnySourceAttribute(...)] — multi-line attribute
+                // - internal static class FuncExtensions { ... } — entire class
+                // - namespace Dafny { ... } — entire namespace block (contains ArrayHelpers)
+                renamed = StripDafnyRuntimeHelpers(renamed);
                 if (renamed != csharpContent)
                 {
                     await File.WriteAllTextAsync(outputPath, renamed, ct);
-                    Console.Error.WriteLine($"[Posit] dafny translate cs — renamed namespace _module → _module_{moduleName} in {Path.GetFileName(outputPath)}");
+                    Console.Error.WriteLine($"[Posit] dafny translate cs — renamed namespace + stripped runtime helpers in {Path.GetFileName(outputPath)}");
                 }
             }
 
@@ -204,4 +211,91 @@ public sealed class Z3Runner
 
     private string BuildTranslateArguments(string dafnyPath) =>
         $"translate cs \"{dafnyPath}\" --no-verify --allow-external-contracts --allow-warnings --translate-standard-library:false";
+
+    /// <summary>
+    /// Strip Dafny runtime helpers from translated C# that are already provided
+    /// by DafnyRuntime.dll. Including them causes CS0101 (duplicate definitions).
+    /// Strips:
+    /// - [assembly: DafnyAssembly.DafnySourceAttribute(...)] — multi-line attribute
+    /// - internal static class FuncExtensions { ... } — entire class block
+    /// - namespace Dafny { ... } — entire namespace block (contains ArrayHelpers)
+    /// </summary>
+    private static string StripDafnyRuntimeHelpers(string content)
+    {
+        // Strip the DafnyAssembly attribute (may span multiple lines)
+        content = System.Text.RegularExpressions.Regex.Replace(content,
+            @"\[assembly:\s+DafnyAssembly\.DafnySourceAttribute\([^)]*\)\]",
+            "// [DafnyAssembly attribute stripped — provided by DafnyRuntime.dll]",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        // Strip the FuncExtensions class (internal static class FuncExtensions { ... })
+        content = StripBlock(content, "internal static class FuncExtensions");
+
+        // Strip the Dafny namespace (namespace Dafny { ... } — contains ArrayHelpers)
+        content = StripNamespace(content, "Dafny");
+
+        return content;
+    }
+
+    /// <summary>
+    /// Strip a class/block by finding its declaration and matching braces.
+    /// </summary>
+    private static string StripBlock(string content, string declarationMarker)
+    {
+        var idx = content.IndexOf(declarationMarker, StringComparison.Ordinal);
+        if (idx < 0) return content;
+
+        // Find the opening brace
+        var braceStart = content.IndexOf('{', idx);
+        if (braceStart < 0) return content;
+
+        // Match braces to find the end
+        var depth = 0;
+        for (int i = braceStart; i < content.Length; i++)
+        {
+            if (content[i] == '{') depth++;
+            if (content[i] == '}') depth--;
+            if (depth == 0)
+            {
+                // Include the line before (comment) and the closing brace line
+                var lineStart = content.LastIndexOf('\n', idx);
+                lineStart = lineStart < 0 ? 0 : lineStart + 1;
+                return content[..lineStart] + "// [stripped: " + declarationMarker + " — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
+            }
+        }
+        return content;
+    }
+
+    /// <summary>
+    /// Strip a namespace block by finding its declaration and matching braces.
+    /// </summary>
+    private static string StripNamespace(string content, string nsName)
+    {
+        var marker = $"namespace {nsName} {{";
+        var idx = content.IndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            // Try without space before brace
+            marker = $"namespace {nsName}{{";
+            idx = content.IndexOf(marker, StringComparison.Ordinal);
+        }
+        if (idx < 0) return content;
+
+        var braceStart = content.IndexOf('{', idx);
+        if (braceStart < 0) return content;
+
+        var depth = 0;
+        for (int i = braceStart; i < content.Length; i++)
+        {
+            if (content[i] == '{') depth++;
+            if (content[i] == '}') depth--;
+            if (depth == 0)
+            {
+                var lineStart = content.LastIndexOf('\n', idx);
+                lineStart = lineStart < 0 ? 0 : lineStart + 1;
+                return content[..lineStart] + "// [stripped: namespace " + nsName + " — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
+            }
+        }
+        return content;
+    }
 }
