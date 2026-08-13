@@ -289,7 +289,19 @@ public sealed class WiringGenerator
         sb.AppendLine("        /// </summary>");
         sb.AppendLine($"        public static void Wire_{comp.Name}({paramDecls})");
         sb.AppendLine("        {");
-        sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
+
+        // For Dafny components, call the entry method on __default.
+        // For io-shell components, there's no __default — skip the entry call
+        // and go straight to connection calls (the component delegates to its deps).
+        if (comp.Classification != ModuleClassification.IoShell)
+        {
+            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethodName}({paramNames});");
+        }
+        else
+        {
+            sb.AppendLine("            // io-shell — no __default entry call, delegate to connections");
+            sb.AppendLine("            var result = 0;");
+        }
         sb.AppendLine();
 
         AppendConnectionCalls(sb, comp, componentByName, entryParams);
@@ -705,7 +717,15 @@ public sealed class WiringGenerator
         var targetIsString = targetParamType == "string";
         if (!targetIsString) return arg;
 
-        // Skip literals and defaults — they're already in the right form
+        // Dafny string defaults (UnicodeFromString) → C# string "" when target is io-shell
+        if (targetIsIoShell && arg.Contains("UnicodeFromString"))
+            return "\"\"";
+
+        // C# string literals → Dafny ISequence<Rune> when target is Dafny
+        if (!targetIsIoShell && arg == "\"\"")
+            return "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")";
+
+        // Skip other literals and defaults — they're already in the right form
         if (arg.StartsWith("Dafny.") || arg.StartsWith("BigInteger") || arg.StartsWith("bool.")
             || arg.StartsWith("default(") || arg == "false" || arg == "true")
             return arg;
