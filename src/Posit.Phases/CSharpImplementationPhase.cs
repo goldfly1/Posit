@@ -130,6 +130,15 @@ public sealed class CSharpImplementationPhase : IPhase
 
         Console.Error.WriteLine($"[Posit] C# Implementation — {allFiles.Count} C# files produced");
 
+        // Deduplicate: the 2-pass implementation flow may add the same file twice.
+        // Keep the last occurrence of each path (latest content wins).
+        allFiles = allFiles
+            .GroupBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Last())
+            .ToList();
+
+        Console.Error.WriteLine($"[Posit] C# Implementation — {allFiles.Count} unique C# files after dedup");
+
         // Carapace enforcement: check 200-line cap on generated C# files
         foreach (var file in allFiles)
         {
