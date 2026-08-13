@@ -540,6 +540,19 @@ public sealed class BotHarness
             packages.Add("Microsoft.EntityFrameworkCore|9.0.0");
         }
 
+        // Microsoft.Data.SqlClient (database-io stubs)
+        if (allSource.Contains("Microsoft.Data.SqlClient") ||
+            allSource.Contains("SqlConnection") || allSource.Contains("SqlTransaction"))
+        {
+            packages.Add("Microsoft.Data.SqlClient|5.2.2");
+        }
+
+        // Npgsql (PostgreSQL database-io stubs)
+        if (allSource.Contains("Npgsql") || allSource.Contains("NpgsqlConnection"))
+        {
+            packages.Add("Npgsql|8.0.4");
+        }
+
         return (packages, frameworks);
     }
 
