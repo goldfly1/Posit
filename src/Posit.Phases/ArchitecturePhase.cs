@@ -561,9 +561,15 @@ public sealed class ArchitecturePhase : IPhase
                         }
 
                         // Validate fromMethod matches a methodSignature name
-                        if (c.MethodSignatures is not null && !string.IsNullOrWhiteSpace(conn.FromMethod))
+                        // For io-shell components, also accept publicSurface entries (e.g., "Program" entry point)
+                        if (!string.IsNullOrWhiteSpace(conn.FromMethod))
                         {
-                            if (!c.MethodSignatures.Any(ms => string.Equals(ms.Name, conn.FromMethod, StringComparison.OrdinalIgnoreCase)))
+                            var fromMethodMatched = false;
+                            if (c.MethodSignatures is not null)
+                                fromMethodMatched = c.MethodSignatures.Any(ms => string.Equals(ms.Name, conn.FromMethod, StringComparison.OrdinalIgnoreCase));
+                            if (!fromMethodMatched && c.Classification == ModuleClassification.IoShell && c.PublicSurface is not null)
+                                fromMethodMatched = c.PublicSurface.Any(s => string.Equals(s, conn.FromMethod, StringComparison.OrdinalIgnoreCase));
+                            if (!fromMethodMatched)
                                 errors.Add($"validation.mismatch.connection_fromMethod: {prefix} '{c.Name}' connection fromMethod '{conn.FromMethod}' does not match any methodSignature name");
                         }
 
@@ -614,14 +620,39 @@ public sealed class ArchitecturePhase : IPhase
         }
 
         // Build dependency graph and detect cycles.
+        // Auto-repair: io-shell components are LEAF I/O providers. They should never
+        // depend on business-logic (dafny) components. The model sometimes creates
+        // cycles by having io-shell ↔ CLI components depend on each other. Strip
+        // io-shell → non-io-shell dependencies before cycle detection.
+        var ioShellNames = new HashSet<string>(
+            contract.Components
+                .Where(c => c.Classification == ModuleClassification.IoShell)
+                .Select(c => c.Name),
+            StringComparer.OrdinalIgnoreCase);
+
         var graph = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var c in contract.Components)
         {
             if (string.IsNullOrWhiteSpace(c.Name)) continue;
             if (graph.ContainsKey(c.Name)) continue; // duplicate name already reported above
-            graph[c.Name] = (c.Dependencies ?? [])
+            var deps = (c.Dependencies ?? [])
                 .Where(d => componentByName.ContainsKey(d))
                 .ToList();
+
+            // Auto-repair: if this is an io-shell component, strip dependencies
+            // on non-io-shell components. Io-shell = leaf, no back-edges to logic.
+            if (ioShellNames.Contains(c.Name))
+            {
+                var stripped = deps.Where(d => ioShellNames.Contains(d)).ToList();
+                if (stripped.Count < deps.Count)
+                {
+                    var removed = deps.Except(stripped).ToList();
+                    Console.Error.WriteLine($"[Posit] Architecture — auto-repair: stripped io-shell '{c.Name}' dependencies on non-io-shell components: {string.Join(", ", removed)}");
+                    deps = stripped;
+                }
+            }
+
+            graph[c.Name] = deps;
         }
 
         var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

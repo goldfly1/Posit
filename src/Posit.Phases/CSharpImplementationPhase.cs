@@ -728,7 +728,7 @@ public sealed class CSharpImplementationPhase : IPhase
     /// generates real C# wiring code with actual method calls and type conversions.
     /// One Wire.cs per component with connections — each seam wires locally.
     /// </summary>
-    private static List<SourceCodeFile> GenerateWiring(
+    private List<SourceCodeFile> GenerateWiring(
         ArchitectureContract arch,
         List<(string ModuleName, string CSharpPath)> translatedFiles)
     {
@@ -797,7 +797,7 @@ public sealed class CSharpImplementationPhase : IPhase
     /// program entry point with Run(string[] args). Otherwise it's a wiring class
     /// that chains this component's connections to its dependencies.
     /// </summary>
-    private static SourceCodeFile? GenerateComponentWiring(
+    private SourceCodeFile? GenerateComponentWiring(
         Component comp,
         bool isCli,
         Component cliComponent,
@@ -865,11 +865,29 @@ public sealed class CSharpImplementationPhase : IPhase
         sb.AppendLine("    public static class Wire");
         sb.AppendLine("    {");
 
-        // Find the entry method signature for this component
+        // Find the entry method signature for this component.
+        // Use the PATTERN's actual signature (from registry) if available —
+        // the architect may only list 1-2 semantic params, but the real pattern
+        // method (e.g. HandleRequest) takes 6. We need ALL params to compile.
         var entrySigs = comp.MethodSignatures!;
         var entrySig = entrySigs.FirstOrDefault() ?? entrySigs[0];
         var entryMethodName = entrySig.PatternMethod ?? entrySig.Name;
         var entryParams = entrySig.Params;
+
+        // Try to get the full pattern signature — it has the real param list.
+        var patternFullSigs = GetPatternSignaturesForComponent(comp);
+        if (patternFullSigs is { Count: > 0 })
+        {
+            var patternSig = patternFullSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, entryMethodName, StringComparison.OrdinalIgnoreCase))
+                ?? patternFullSigs[0];
+            entryParams = patternSig.Params;
+            // Keep the architect's method name as the call target (PatternMethod maps it)
+            if (entrySig.PatternMethod is string pm)
+                entryMethodName = pm;
+            else
+                entryMethodName = patternSig.Name;
+        }
 
         if (isCli)
         {
@@ -888,29 +906,46 @@ public sealed class CSharpImplementationPhase : IPhase
             sb.AppendLine("            }");
             sb.AppendLine();
 
-            // Convert CLI args to Dafny types for the entry method call
+            // Convert CLI args to Dafny types for the entry method call.
+            // Only the first N params come from CLI args (typically 1-2: input string).
+            // The rest get type-appropriate defaults (e.g., delimiter="|", minFields=2,
+            // maxFields=3, empty entity list, nextId=0). The pattern's requires
+            // clauses constrain these, but defaults satisfy the basic contract.
             var paramInitLines = new List<string>();
             for (int i = 0; i < entryParams.Length; i++)
             {
                 var param = entryParams[i];
                 var dafnyType = param.DafnyType ?? param.Type;
 
-                if (dafnyType == "string")
+                // First param is always the CLI input (args[0]).
+                // Additional params get defaults — they're pattern configuration
+                // (delimiter, minFields, maxFields, entities, nextId, etc.)
+                if (i == 0)
                 {
-                    paramInitLines.Add($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[{i}]);");
-                }
-                else if (dafnyType == "int")
-                {
-                    paramInitLines.Add($"            var {param.Name} = BigInteger.Parse(args[{i}]);");
-                }
-                else if (dafnyType == "bool")
-                {
-                    paramInitLines.Add($"            var {param.Name} = bool.Parse(args[{i}]);");
+                    if (dafnyType == "string")
+                    {
+                        paramInitLines.Add($"            var {param.Name} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
+                    }
+                    else if (dafnyType == "int")
+                    {
+                        paramInitLines.Add($"            var {param.Name} = BigInteger.Parse(args[0]);");
+                    }
+                    else if (dafnyType == "bool")
+                    {
+                        paramInitLines.Add($"            var {param.Name} = bool.Parse(args[0]);");
+                    }
+                    else
+                    {
+                        paramInitLines.Add($"            // TODO: convert args[0] to {dafnyType} for parameter '{param.Name}'");
+                        paramInitLines.Add($"            var {param.Name} = default({MapDafnyTypeToCSharpWire(dafnyType)});");
+                    }
                 }
                 else
                 {
-                    paramInitLines.Add($"            // TODO: convert args[{i}] to {dafnyType} for parameter '{param.Name}'");
-                    paramInitLines.Add($"            var {param.Name} = default({MapDafnyTypeToCSharpWire(dafnyType)});");
+                    // Params beyond the first get type-appropriate defaults.
+                    // These are pattern configuration params (delimiter, minFields, etc.)
+                    var defaultVal = DefaultForDafnyType(dafnyType);
+                    paramInitLines.Add($"            var {param.Name} = {defaultVal}; // default for {dafnyType}");
                 }
             }
             foreach (var line in paramInitLines)
@@ -970,7 +1005,7 @@ public sealed class CSharpImplementationPhase : IPhase
     /// Append the connection calls for a component, chaining return values
     /// and using positional fallback for unresolved arg mappings.
     /// </summary>
-    private static void AppendConnectionCalls(
+    private void AppendConnectionCalls(
         StringBuilder sb,
         Component comp,
         Dictionary<string, Component> componentByName,
@@ -982,7 +1017,8 @@ public sealed class CSharpImplementationPhase : IPhase
         var sourceToReturnVar = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Track prior return variable names IN ORDER (for positional fallback)
-        var priorReturnVarOrder = new List<string>();
+        // Each entry is (varName, returnType) so the fallback can skip incompatible types
+        var priorReturnVarOrder = new List<(string VarName, string ReturnType)>();
 
         // CLI input params are available as sources
         foreach (var p in entryParams)
@@ -997,16 +1033,44 @@ public sealed class CSharpImplementationPhase : IPhase
                 continue;
             }
 
-            // Use the target component's PatternMethod (actual Dafny method name) if available.
-            // The architect names the method (e.g., "Parse") but the pattern's real method
-            // might be "ParseLine" or "HandleRequest". PatternMethod bridges this gap.
+            // Resolve the actual Dafny method name to call on the target component.
+            // The architect names the method (e.g., "Parse") but the pattern's real
+            // method might be "HandleRequest". Try in order:
+            //   1. target component's MethodSignatures[].PatternMethod
+            //   2. pattern registry — find the method matching conn.ToMethod by name,
+            //      or fall back to the pattern's first method (the universal entry point)
+            //   3. conn.ToMethod as-is (last resort)
             var toMethod = conn.ToMethod;
             if (toComp.MethodSignatures is { Length: > 0 })
             {
                 var targetSig = toComp.MethodSignatures.FirstOrDefault(s =>
                     string.Equals(s.Name, conn.ToMethod, StringComparison.OrdinalIgnoreCase));
-                if (targetSig?.PatternMethod is string patternMethod)
+                if (targetSig?.PatternMethod is string patternMethod && !string.IsNullOrWhiteSpace(patternMethod))
                     toMethod = patternMethod;
+            }
+
+            // If PatternMethod wasn't set (architect often leaves it blank or same as Name),
+            // check the pattern registry for the real method names.
+            if (toMethod == conn.ToMethod && !string.IsNullOrWhiteSpace(toComp.PatternName))
+            {
+                var patternSigs = GetPatternSignaturesForComponent(toComp);
+                if (patternSigs is { Count: > 0 })
+                {
+                    // First: try exact name match in the pattern's methods
+                    var patternMatch = patternSigs.FirstOrDefault(s =>
+                        string.Equals(s.Name, conn.ToMethod, StringComparison.OrdinalIgnoreCase));
+                    if (patternMatch is not null)
+                    {
+                        toMethod = patternMatch.Name;
+                    }
+                    else
+                    {
+                        // The architect's semantic name (e.g. "Parse") doesn't match any
+                        // pattern method. The pattern's universal entry point is the first
+                        // method (typically HandleRequest). Use that.
+                        toMethod = patternSigs[0].Name;
+                    }
+                }
             }
             
             // Build the class reference: dafny modules use _module_X.__default,
@@ -1026,47 +1090,30 @@ public sealed class CSharpImplementationPhase : IPhase
             var connReturnType = conn.ReturnType ?? "var";
             var returnVarName = $"{conn.ToComponent.ToLowerInvariant()}Result";
 
-            // Build argument list from argMappings
-            var resolvedArgs = new List<string>();
-            if (conn.ArgMappings?.Length > 0)
+            // Build argument list: look up the target method's ACTUAL full signature
+            // from the pattern registry (or the target component's MethodSignatures),
+            // then fill in ALL params positionally. Args from conn.ArgMappings are
+            // mapped to params by position; any unmapped params get type-appropriate
+            // defaults. This fixes the HandleRequest 6-param vs 1-2-arg mismatch.
+            var targetFullSig = ResolveTargetSignature(toComp, toMethod);
+            // If the target method returns void, override the connection's return type.
+            // The architect may say "returns success" but PrintLine/Print return void.
+            if (targetFullSig is not null && (
+                string.IsNullOrWhiteSpace(targetFullSig.ReturnType) ||
+                targetFullSig.ReturnType.Equals("void", StringComparison.OrdinalIgnoreCase)))
             {
-                foreach (var am in conn.ArgMappings)
-                {
-                    var arrowIdx = am.IndexOf("->");
-                    string source;
-                    if (arrowIdx > 0)
-                    {
-                        source = am[..arrowIdx].Trim();
-                    }
-                    else
-                    {
-                        source = am.Trim();
-                    }
-
-                    // Try to resolve the source to a known variable
-                    if (sourceToReturnVar.TryGetValue(source, out var resolvedVar))
-                    {
-                        resolvedArgs.Add(resolvedVar);
-                    }
-                    else
-                    {
-                        // Positional fallback: use the most recent prior call's return variable
-                        var priorReturnVars = priorReturnVarOrder
-                            .Where(v => !entryParams.Any(p => p.Name == v))
-                            .Distinct()
-                            .ToList();
-
-                        if (priorReturnVars.Count >= 1)
-                        {
-                            resolvedArgs.Add(priorReturnVars[^1]);
-                        }
-                        else
-                        {
-                            resolvedArgs.Add($"/* unresolved: {source} */ null");
-                        }
-                    }
-                }
+                connReturnType = "void";
             }
+            else if (toComp.Classification == ModuleClassification.IoShell)
+            {
+                // For io-shell methods without a resolved signature, check common
+                // void-returning method names (Print, PrintLine, Write, Clear, etc.)
+                var methodLower = toMethod.ToLowerInvariant();
+                if (methodLower.Contains("print") || methodLower.Contains("write")
+                    || methodLower == "clear" || methodLower.Contains("log"))
+                    connReturnType = "void";
+            }
+            var resolvedArgs = BuildFullArgList(targetFullSig, conn.ArgMappings, sourceToReturnVar, priorReturnVarOrder, entryParams);
 
             var connArgsStr = string.Join(", ", resolvedArgs);
             sb.AppendLine($"            // {conn.FromMethod} → {conn.ToComponent}.{toMethod}({connArgsStr})");
@@ -1079,7 +1126,7 @@ public sealed class CSharpImplementationPhase : IPhase
                 // Register this return variable for subsequent calls
                 sourceToReturnVar[conn.ToComponent] = returnVarName;
                 sourceToReturnVar[conn.ToComponent.ToLowerInvariant()] = returnVarName;
-                priorReturnVarOrder.Add(returnVarName);
+                priorReturnVarOrder.Add((returnVarName, connReturnType));
 
                 // Map the return type name if specified
                 if (!string.IsNullOrWhiteSpace(connReturnType) && connReturnType != "var")
@@ -1095,6 +1142,269 @@ public sealed class CSharpImplementationPhase : IPhase
             }
             sb.AppendLine();
         }
+    }
+
+    /// <summary>
+    /// Get the pattern's method signatures for a component, if it has a PatternName.
+    /// Returns null if the component has no pattern or the pattern can't be found.
+    /// </summary>
+    private List<MethodSignature>? GetPatternSignaturesForComponent(Component comp)
+    {
+        if (string.IsNullOrWhiteSpace(comp.PatternName))
+            return null;
+        try
+        {
+            return _registry.GetPatternSignatures(comp.PatternName);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Posit] Wiring — could not get pattern signatures for '{comp.PatternName}': {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolve the actual full signature of a target method. Tries:
+    /// 1. The pattern registry (if the component has a PatternName) — AUTHORITATIVE,
+    ///    because the pattern has the real, complete param list. The architect's
+    ///    MethodSignatures may be incomplete (they don't know the real signature).
+    /// 2. The target component's MethodSignatures (fallback if no pattern)
+    /// 3. Fallback: null (caller will use conn.ArgMappings as before)
+    /// </summary>
+    private MethodSignature? ResolveTargetSignature(Component toComp, string toMethod)
+    {
+        // First: look up the pattern's signatures from the registry — AUTHORITATIVE
+        var patternSigs = GetPatternSignaturesForComponent(toComp);
+        if (patternSigs is { Count: > 0 })
+        {
+            var sig = patternSigs.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (sig is not null)
+                return sig;
+        }
+
+        // Second: fall back to the target component's own MethodSignatures
+        if (toComp.MethodSignatures is { Length: > 0 })
+        {
+            var sig = toComp.MethodSignatures.FirstOrDefault(s =>
+                string.Equals(s.Name, toMethod, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(s.PatternMethod, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (sig is not null)
+                return sig;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Build the full argument list for a method call, using the target method's
+    /// actual signature. Each param is filled positionally:
+    /// - If conn.ArgMappings has an entry for this position, resolve it to a variable.
+    /// - If not, emit a type-appropriate default value.
+    /// 
+    /// This is the fix for the HandleRequest 6-param vs 1-2-arg mismatch: the pattern
+    /// method takes 6 params but the connection spec only provides 1-2. Now ALL params
+    /// get filled — mapped ones from arg mappings, unmapped ones from defaults.
+    /// </summary>
+    private static List<string> BuildFullArgList(
+        MethodSignature? targetSig,
+        string[]? argMappings,
+        Dictionary<string, string> sourceToReturnVar,
+        List<(string VarName, string ReturnType)> priorReturnVarOrder,
+        MethodParam[] entryParams)
+    {
+        // If we don't have the full signature, fall back to the old behavior:
+        // just use the arg mappings as-is
+        if (targetSig is null || targetSig.Params.Length == 0)
+        {
+            var fallbackArgs = new List<string>();
+            if (argMappings?.Length > 0)
+            {
+                foreach (var am in argMappings)
+                {
+                    var arrowIdx = am.IndexOf("->");
+                    string source = arrowIdx > 0 ? am[..arrowIdx].Trim() : am.Trim();
+                    if (sourceToReturnVar.TryGetValue(source, out var resolvedVar))
+                        fallbackArgs.Add(resolvedVar);
+                    else
+                        fallbackArgs.Add($"/* unresolved: {source} */ null");
+                }
+            }
+            return fallbackArgs;
+        }
+
+        // We have the full signature — build args positionally for ALL params
+        var fullParams = targetSig.Params;
+        var result = new List<string>(fullParams.Length);
+
+        for (int i = 0; i < fullParams.Length; i++)
+        {
+            var param = fullParams[i];
+            string? resolved = null;
+
+            // Try to resolve from arg mappings (positional)
+            if (argMappings is { Length: > 0 } && i < argMappings.Length)
+            {
+                var am = argMappings[i];
+                var arrowIdx = am.IndexOf("->");
+                string source = arrowIdx > 0 ? am[..arrowIdx].Trim() : am.Trim();
+
+                if (sourceToReturnVar.TryGetValue(source, out var resolvedVar))
+                {
+                    // Type-check: only accept the mapped variable if its type
+                    // is compatible with the target param's type. If the architect
+                    // mapped a string source to a seq<seq<string>> param, the
+                    // types don't match — skip and let fallback/defaults handle it.
+                    var paramDafnyType = param.DafnyType ?? param.Type;
+                    // Look up the source variable's type from priorReturnVarOrder.
+                    // If not found there, it's an entry param (always string from CLI).
+                    var sourceTypeInfo = priorReturnVarOrder.FirstOrDefault(v => v.VarName == resolvedVar);
+                    var sourceType = sourceTypeInfo != default ? sourceTypeInfo.ReturnType : "string";
+                    if (IsTypeCompatible(sourceType, paramDafnyType))
+                    {
+                        resolved = resolvedVar;
+                    }
+                    // else: type mismatch — leave resolved null for fallback
+                }
+            }
+
+            // If not resolved from arg mappings, try matching by param name
+            // (with the same type-check as arg mappings)
+            if (resolved is null && sourceToReturnVar.TryGetValue(param.Name, out var nameMatch))
+            {
+                var paramDafnyType = param.DafnyType ?? param.Type;
+                var sourceTypeInfo = priorReturnVarOrder.FirstOrDefault(v => v.VarName == nameMatch);
+                var sourceType = sourceTypeInfo != default ? sourceTypeInfo.ReturnType : "string";
+                if (IsTypeCompatible(sourceType, paramDafnyType))
+                {
+                    resolved = nameMatch;
+                }
+            }
+
+            // If still not resolved, use positional fallback:
+            // find the most recent prior call's return variable whose type
+            // is compatible with the target param's type.
+            // Skip validation/result types when the param expects data (seq, string, etc.)
+            if (resolved is null)
+            {
+                var paramDafnyType = param.DafnyType ?? param.Type;
+                var priorReturnVars = priorReturnVarOrder
+                    .Where(v => !entryParams.Any(p => p.Name == v.VarName))
+                    .Distinct()
+                    .ToList();
+
+                // Try type-compatible match first: prefer return vars whose type
+                // matches the target param type
+                var typeMatch = priorReturnVars.FirstOrDefault(v =>
+                    IsTypeCompatible(v.ReturnType, paramDafnyType));
+
+                if (typeMatch != default)
+                {
+                    resolved = typeMatch.VarName;
+                }
+                // If no type-compatible match, leave resolved null —
+                // the default-value path will emit a type-appropriate default.
+                // Do NOT fall back to any non-validation data var — that
+                // causes CS1503 type mismatches at compile time.
+            }
+
+            // If still not resolved, emit a type-appropriate default
+            if (resolved is null)
+            {
+                var dafnyType = param.DafnyType ?? param.Type;
+                resolved = DefaultForDafnyType(dafnyType);
+            }
+
+            result.Add(resolved);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Check if a return type is a validation/result type (not data).
+    /// Validation results, Result<T> wrappers, and bools are status signals,
+    /// not data to pass downstream.
+    /// </summary>
+    private static bool IsValidationType(string returnType)
+    {
+        if (string.IsNullOrWhiteSpace(returnType))
+            return false;
+        var lower = returnType.ToLowerInvariant().Trim();
+        return lower.Contains("validation") || lower.Contains("result") || lower == "bool"
+            || lower.Contains("success") || lower.Contains("failure");
+    }
+
+    /// <summary>
+    /// Check if a return type is compatible with a target parameter type.
+    /// Uses recursive matching: seq&lt;X&gt; matches seq&lt;X&gt; but not seq&lt;seq&lt;X&gt;&gt;.
+    /// </summary>
+    private static bool IsTypeCompatible(string returnType, string paramType)
+    {
+        if (string.IsNullOrWhiteSpace(returnType) || string.IsNullOrWhiteSpace(paramType))
+            return false;
+        var r = returnType.ToLowerInvariant().Trim();
+        var p = paramType.ToLowerInvariant().Trim();
+
+        // Exact match
+        if (r == p) return true;
+
+        // Both seq-based — compare inner types recursively
+        if (r.StartsWith("seq<") && r.EndsWith('>') && p.StartsWith("seq<") && p.EndsWith('>'))
+        {
+            var rInner = r[4..^1].Trim();
+            var pInner = p[4..^1].Trim();
+            return IsTypeCompatible(rInner, pInner);
+        }
+
+        // Both set-based — compare inner types recursively
+        if (r.StartsWith("set<") && r.EndsWith('>') && p.StartsWith("set<") && p.EndsWith('>'))
+        {
+            var rInner = r[4..^1].Trim();
+            var pInner = p[4..^1].Trim();
+            return IsTypeCompatible(rInner, pInner);
+        }
+
+        // Both string-based
+        if (r == "string" && p == "string") return true;
+
+        // Both int-based
+        if ((r == "int" || r == "bigint") && (p == "int" || p == "bigint")) return true;
+
+        // Return type is "var" (unknown) — accept anything
+        if (r == "var") return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Emit a type-appropriate default value for a Dafny type in C#.
+    /// Used to fill in unmapped params when the connection spec doesn't provide
+    /// values for all of the target method's parameters.
+    /// </summary>
+    private static string DefaultForDafnyType(string dafnyType)
+    {
+        var t = dafnyType.Trim();
+
+        // Strip whitespace and normalize
+        if (t.StartsWith("seq<", StringComparison.Ordinal) && t.EndsWith('>'))
+        {
+            var inner = t[4..^1].Trim();
+            return $"Dafny.Sequence<{MapDafnyTypeToCSharpWire(inner)}>.Empty";
+        }
+        if (t.StartsWith("set<", StringComparison.Ordinal) && t.EndsWith('>'))
+        {
+            var inner = t[4..^1].Trim();
+            return $"Dafny.Set<{MapDafnyTypeToCSharpWire(inner)}>.Empty";
+        }
+
+        return t switch
+        {
+            "int" => "BigInteger.Zero",
+            "bool" => "false",
+            "string" => "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")",
+            _ => $"default({MapDafnyTypeToCSharpWire(t)})"
+        };
     }
 
     /// <summary>
@@ -1158,11 +1468,21 @@ public sealed class CSharpImplementationPhase : IPhase
 
     /// <summary>
     /// Convert a stub name like "file-io" to a class name like "FileIO".
+    /// Multi-letter abbreviations like "io" are fully uppercased.
     /// </summary>
     private static string StubNameToClassName(string stubName)
     {
+        var knownAbbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "io", "ci", "cd" };
+
         var parts = stubName.Split('-');
-        return string.Concat(parts.Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..] : ""));
+        return string.Concat(parts.Select(p =>
+        {
+            if (p.Length == 0) return "";
+            if (knownAbbreviations.Contains(p))
+                return p.ToUpperInvariant();
+            return char.ToUpperInvariant(p[0]) + p[1..];
+        }));
     }
 
     /// <summary>

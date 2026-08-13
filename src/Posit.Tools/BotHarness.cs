@@ -59,7 +59,7 @@ public sealed class BotHarness
             Console.Error.WriteLine($"[Posit] Bot Harness — CLI component: {cliComponent.Name}");
 
             // 3. Materialize all files to disk
-            var filesByRelPath = MaterializeFiles(source, dafnyVer, tests, contextDir);
+            var filesByRelPath = MaterializeFiles(source, dafnyVer, tests, arch, contextDir);
 
             // 4. Generate project files and solution
             var targetFramework = DetectTargetFramework(filesByRelPath.Values) ?? "net10.0";
@@ -167,6 +167,7 @@ public sealed class BotHarness
         SourceCodeBundle source,
         DafnyVerificationResult[]? dafnyVer,
         TestSuite? tests,
+        ArchitectureContract? arch,
         string contextDir)
     {
         var filesByRelPath = new Dictionary<string, SourceCodeFile>(StringComparer.OrdinalIgnoreCase);
@@ -194,6 +195,12 @@ public sealed class BotHarness
                 AddFile(filesByRelPath, file);
         }
 
+        // Post-process test files: inject using statements for io-shell class names
+        // that the QA model references without namespace qualification.
+        // The model writes tests that use FileIO, StreamIO, etc. as bare names,
+        // but these classes live in the io-shell component's namespace.
+        InjectIoShellUsings(filesByRelPath, arch);
+
         // Write all files to disk
         foreach (var file in filesByRelPath.Values)
         {
@@ -210,6 +217,145 @@ public sealed class BotHarness
         var rel = file.Path.Replace('\\', '/').TrimStart('/');
         if (string.IsNullOrEmpty(rel)) return;
         filesByRelPath[rel] = new SourceCodeFile(rel, file.Content);
+    }
+
+    /// <summary>
+    /// Scan test files for io-shell class names (FileIO, StreamIO, ConsoleIO, etc.)
+    /// used without namespace qualification. Inject the correct using statements
+    /// at the top of the file so they compile.
+    ///
+    /// The QA model generates tests that reference these classes as bare names
+    /// (e.g., "FileIO.ReadFile(...)") but doesn't know which namespace they're in.
+    /// We map class names to component namespaces from the architecture contract.
+    /// </summary>
+    private static void InjectIoShellUsings(
+        Dictionary<string, SourceCodeFile> filesByRelPath,
+        ArchitectureContract? arch)
+    {
+        if (arch?.Components is null || arch.Components.Length == 0)
+            return;
+
+        // Build a map: io-shell class name → component namespace
+        // Each io-shell component's namespace is its Name (e.g., "CsvFileReader")
+        // and the stub classes are FileIO, ConsoleIO, StreamIO, etc.
+        var classToNamespace = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var comp in arch.Components)
+        {
+            if (comp.Classification != ModuleClassification.IoShell)
+                continue;
+
+            // Map common stub class names to this component's namespace
+            var stubNames = comp.StubNames ?? [];
+            foreach (var stubName in stubNames)
+            {
+                var className = StubNameToClassName(stubName);
+                if (!string.IsNullOrEmpty(className))
+                    classToNamespace.TryAdd(className, comp.Name);
+            }
+        }
+
+        if (classToNamespace.Count == 0)
+            return;
+
+        // Known io-shell class names to scan for
+        var knownClassNames = new HashSet<string>(classToNamespace.Keys, StringComparer.OrdinalIgnoreCase);
+
+        // Scan test files (files with "Test" in the name or containing [Fact]/[Theory])
+        var testFilePaths = filesByRelPath
+            .Where(kvp => kvp.Key.Contains("Test", StringComparison.OrdinalIgnoreCase)
+                          || kvp.Value.Content.Contains("[Fact]")
+                          || kvp.Value.Content.Contains("[Theory]"))
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var testPath in testFilePaths)
+        {
+            var file = filesByRelPath[testPath];
+            var content = file.Content;
+
+            // Find which class names are referenced in this file
+            var neededUsings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var className in knownClassNames)
+            {
+                // Look for the class name as a word in the file (not in a using statement already)
+                if (content.Contains(className, StringComparison.OrdinalIgnoreCase)
+                    && !AlreadyHasUsingFor(content, className, classToNamespace[className]))
+                {
+                    neededUsings.Add(classToNamespace[className]);
+                }
+            }
+
+            if (neededUsings.Count == 0)
+                continue;
+
+            // Inject using statements at the top of the file, after existing using directives.
+            // Only match lines that are using DIRECTIVES (e.g. "using System;"),
+            // NOT using STATEMENTS (e.g. "using var sw = new StringWriter();").
+            var lines = content.Split('\n').ToList();
+            var lastUsingIdx = -1;
+            for (int i = 0; i < lines.Count && i < 50; i++)
+            {
+                var trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("using ", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Using directive: "using Namespace;" or "using static X;"
+                    // NOT a using statement: "using var x = ..." or "using (x) {"
+                    var afterUsing = trimmed[6..].TrimStart();
+                    if (!afterUsing.StartsWith("var ") && !afterUsing.StartsWith("(")
+                        && !char.IsLower(afterUsing[0]))
+                    {
+                        lastUsingIdx = i;
+                    }
+                }
+            }
+
+            var usingLines = neededUsings
+                .OrderBy(n => n)
+                .Select(n => $"using {n};")
+                .ToList();
+
+            if (lastUsingIdx >= 0)
+            {
+                lines.InsertRange(lastUsingIdx + 1, usingLines);
+            }
+            else
+            {
+                // No existing usings — insert at the very top
+                usingLines.Add("");
+                lines.InsertRange(0, usingLines);
+            }
+
+            var newContent = string.Join('\n', lines);
+            filesByRelPath[testPath] = new SourceCodeFile(testPath, newContent);
+            Console.Error.WriteLine($"[Posit] Bot Harness — injected {neededUsings.Count} using statements into test file: {testPath}");
+        }
+    }
+
+    /// <summary>
+    /// Check if the file already has a using statement for the given namespace.
+    /// </summary>
+    private static bool AlreadyHasUsingFor(string content, string className, string namespaceName)
+    {
+        return content.Contains($"using {namespaceName};", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Convert a stub name like "file-io" to a class name like "FileIO".
+    /// Multi-letter abbreviations like "io" are fully uppercased.
+    /// </summary>
+    private static string StubNameToClassName(string stubName)
+    {
+        var knownAbbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "io", "ci", "cd" };
+
+        var parts = stubName.Split('-');
+        return string.Concat(parts.Select(p =>
+        {
+            if (p.Length == 0) return "";
+            if (knownAbbreviations.Contains(p))
+                return p.ToUpperInvariant();
+            return char.ToUpperInvariant(p[0]) + p[1..];
+        }));
     }
 
     // === Step 4: Generate projects and solution ===
@@ -276,6 +422,23 @@ public sealed class BotHarness
 
             var (pkgs, fws) = InferPackagesAndFrameworks(projectDir, isTest, targetFramework);
             File.WriteAllText(csprojPath, GenerateCsproj(projectName, targetFramework, isExe, refs, pkgs, fws, isTest, dafnyRuntimeSrc is not null));
+
+            // If this is an Exe project but has no Program.cs, generate one.
+            // Wire.cs has `public static int Run(string[] args)` but .NET requires
+            // a `static Main(string[] args)` entry point. Generate a thin wrapper.
+            if (isExe && !File.Exists(Path.Combine(projectDir, "Program.cs")))
+            {
+                var wireNamespace = projectName; // Wire.cs uses namespace {ComponentName}
+                var programContent = $""""
+                    // Auto-generated entry point — calls Wire.Run(args)
+                    using {wireNamespace};
+
+                    var exitCode = Wire.Run(args);
+                    Environment.Exit(exitCode);
+                    """";
+                File.WriteAllText(Path.Combine(projectDir, "Program.cs"), programContent);
+                Console.Error.WriteLine($"[Posit] Bot Harness — generated Program.cs entry point for {projectName}");
+            }
         }
 
         // Generate solution
