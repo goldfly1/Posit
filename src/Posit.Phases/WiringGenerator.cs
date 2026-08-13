@@ -207,7 +207,8 @@ public sealed class WiringGenerator
         if (comp.Classification != ModuleClassification.IoShell)
         {
             var argList = string.Join(", ", entryVars.Select(v => v.Name));
-            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethod}({argList});");
+            var entryClass = ResolveDafnyClass(comp, entryMethod);
+            sb.AppendLine($"            var result = {entryClass}.{entryMethod}({argList});");
         }
         else
         {
@@ -253,7 +254,8 @@ public sealed class WiringGenerator
         if (comp.Classification != ModuleClassification.IoShell)
         {
             var argList = string.Join(", ", entryVars.Select(v => v.Name));
-            sb.AppendLine($"            var result = _module_{comp.Name}.__default.{entryMethod}({argList});");
+            var entryClass = ResolveDafnyClass(comp, entryMethod);
+            sb.AppendLine($"            var result = {entryClass}.{entryMethod}({argList});");
         }
         else
         {
@@ -303,7 +305,7 @@ public sealed class WiringGenerator
 
             string toClass = toComp.Classification == ModuleClassification.IoShell
                 ? $"{conn.ToComponent}.{ResolveStubClass(toComp, toMethod)}"
-                : $"_module_{conn.ToComponent}.__default";
+                : ResolveDafnyClass(toComp, toMethod);
 
             // Get target method's actual C# param types from scanner
             var targetParams = GetTargetCsParams(toComp, toMethod);
@@ -586,6 +588,25 @@ public sealed class WiringGenerator
     // ════════════════════════════════════════════════════════════════════════
     // METHOD NAME RESOLUTION — find the real method name from scanner
     // ════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Resolve the C# class name for a Dafny module's method.
+    /// Most Dafny modules use __default, but some patterns (e.g. frames) use
+    /// a different class name (e.g. Frame). Check the scanner for the actual
+    /// class that contains the method.
+    /// </summary>
+    private string ResolveDafnyClass(Component toComp, string toMethod)
+    {
+        if (_scannedMethods.TryGetValue(toComp.Name, out var scanned) && scanned.Count > 0)
+        {
+            var match = scanned.FirstOrDefault(m =>
+                string.Equals(m.Name, toMethod, StringComparison.OrdinalIgnoreCase));
+            if (match is not null && !string.IsNullOrEmpty(match.ClassName))
+                return $"_module_{toComp.Name}.{match.ClassName}";
+        }
+        // Default: __default (standard Dafny translation)
+        return $"_module_{toComp.Name}.__default";
+    }
 
     private string ResolveToMethod(Component toComp, string connToMethod)
     {
