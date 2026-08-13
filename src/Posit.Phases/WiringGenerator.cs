@@ -268,7 +268,11 @@ public sealed class WiringGenerator
         // Qualify types with the component's namespace to avoid ambiguity
         // when multiple modules define the same type (e.g. _IEntity)
         var paramDecls = string.Join(", ", entryParams.Select(p =>
-            $"{QualifyType(MapDafnyTypeToCSharp(p.DafnyType ?? p.Type), comp.Name)} {p.Name}"));
+        {
+            var csType = QualifyType(MapDafnyTypeToCSharp(p.DafnyType ?? p.Type), comp.Name);
+            var name = EscapeReservedKeyword(p.Name);
+            return $"{csType} {name}";
+        }));
 
         sb.AppendLine("        /// <summary>");
         sb.AppendLine($"        /// Wires {comp.Name}'s connections to its dependencies.");
@@ -634,6 +638,32 @@ public sealed class WiringGenerator
     }
 
     // === Type helpers ===
+
+    /// <summary>
+    /// Prefix C# reserved keywords with @ to use them as identifiers.
+    /// e.g. "event" → "@event", "result" → "@result"
+    /// </summary>
+    private static string EscapeReservedKeyword(string name)
+    {
+        var reserved = new HashSet<string>(StringComparer.Ordinal)
+        { "event", "object", "string", "int", "bool", "class",
+          "static", "void", "return", "new", "var", "if", "else", "for",
+          "while", "switch", "case", "break", "continue", "default", "null",
+          "true", "false", "this", "base", "out", "ref", "in", "params",
+          "using", "namespace", "public", "private", "protected", "internal",
+          "abstract", "virtual", "override", "sealed", "readonly", "const",
+          "async", "await", "yield", "lock", "try", "catch", "finally",
+          "throw", "typeof", "sizeof", "is", "as", "delegate", "enum",
+          "struct", "interface", "get", "set", "value", "operator", "explicit",
+          "implicit", "partial", "where", "select", "from", "group", "into",
+          "orderby", "join", "let", "on", "equals", "by", "ascending",
+          "descending", "global", "stackalloc", "fixed", "unchecked", "checked",
+          "unsafe" };
+
+        if (reserved.Contains(name))
+            return $"@{name}";
+        return name;
+    }
 
     /// <summary>
     /// Qualify a C# type with the component's namespace if it's a Dafny interface
