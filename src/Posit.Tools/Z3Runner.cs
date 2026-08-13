@@ -203,5 +203,5 @@ public sealed class Z3Runner
         " --standard-libraries";
 
     private string BuildTranslateArguments(string dafnyPath) =>
-        $"translate cs \"{dafnyPath}\" --no-verify --allow-external-contracts --allow-warnings --no-include-runtime";
+        $"translate cs \"{dafnyPath}\" --no-verify --allow-external-contracts --allow-warnings --translate-standard-library:false";
 }
