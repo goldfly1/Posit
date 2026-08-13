@@ -222,35 +222,28 @@ public sealed class Z3Runner
     /// </summary>
     private static string StripDafnyRuntimeHelpers(string content)
     {
-        // Strip the DafnyAssembly attribute — it uses a verbatim string @"..." that
-        // can span many lines and contain parens. Match up to the closing ")].
-        content = System.Text.RegularExpressions.Regex.Replace(content,
-            @"\[assembly:\s+DafnyAssembly\.DafnySourceAttribute\(@"".*?""\)\]",
-            "// [assembly attribute stripped — provided by DafnyRuntime.dll]",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
+        // Dafny 4.11 translated C# has this structure:
+        //   [assembly: DafnyAssembly...]     ← runtime boilerplate
+        //   namespace Dafny { ... }          ← runtime boilerplate (ArrayHelpers)
+        //   internal static class FuncExtensions { ... }  ← runtime boilerplate
+        //   namespace _module_X { ... }      ← THE MODULE CODE (what we want)
+        //
+        // Instead of stripping individual pieces, extract ONLY the module namespace
+        // and discard everything else. The runtime boilerplate is provided by DafnyRuntime.dll.
+        //
+        // After the namespace rename pass, the module namespace is _module_{moduleName}.
+        // We find it by looking for "namespace _module_" and brace-matching to the end.
 
-        // Strip the FuncExtensions class (internal static class FuncExtensions { ... })
-        content = StripBlock(content, "internal static class FuncExtensions");
+        var moduleStart = content.IndexOf("namespace _module_");
+        if (moduleStart < 0)
+            return content;  // can't find module namespace — return as-is
 
-        // Strip the Dafny namespace (namespace Dafny { ... } — contains ArrayHelpers)
-        content = StripNamespace(content, "Dafny");
+        // Find the opening brace of the namespace
+        var braceStart = content.IndexOf('{', moduleStart);
+        if (braceStart < 0)
+            return content;
 
-        return content;
-    }
-
-    /// <summary>
-    /// Strip a class/block by finding its declaration and matching braces.
-    /// </summary>
-    private static string StripBlock(string content, string declarationMarker)
-    {
-        var idx = content.IndexOf(declarationMarker, StringComparison.Ordinal);
-        if (idx < 0) return content;
-
-        // Find the opening brace
-        var braceStart = content.IndexOf('{', idx);
-        if (braceStart < 0) return content;
-
-        // Match braces to find the end
+        // Match braces to find the end of the namespace
         var depth = 0;
         for (int i = braceStart; i < content.Length; i++)
         {
@@ -258,45 +251,16 @@ public sealed class Z3Runner
             if (content[i] == '}') depth--;
             if (depth == 0)
             {
-                // Include the line before (comment) and the closing brace line
-                var lineStart = content.LastIndexOf('\n', idx);
-                lineStart = lineStart < 0 ? 0 : lineStart + 1;
-                return content[..lineStart] + "// [stripped — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
+                // Extract just the module namespace + closing brace
+                var moduleCode = content[moduleStart..(i + 1)];
+                // Add using statements that the translated C# needs
+                return "// Translated Dafny C# — runtime boilerplate stripped (provided by DafnyRuntime.dll)\n" +
+                       "using System;\nusing System.Numerics;\nusing System.Collections;\n\n" +
+                       moduleCode + "\n";
             }
         }
-        return content;
+
+        return content;  // brace matching failed — return as-is
     }
 
-    /// <summary>
-    /// Strip a namespace block by finding its declaration and matching braces.
-    /// </summary>
-    private static string StripNamespace(string content, string nsName)
-    {
-        var marker = $"namespace {nsName} {{";
-        var idx = content.IndexOf(marker, StringComparison.Ordinal);
-        if (idx < 0)
-        {
-            // Try without space before brace
-            marker = $"namespace {nsName}{{";
-            idx = content.IndexOf(marker, StringComparison.Ordinal);
-        }
-        if (idx < 0) return content;
-
-        var braceStart = content.IndexOf('{', idx);
-        if (braceStart < 0) return content;
-
-        var depth = 0;
-        for (int i = braceStart; i < content.Length; i++)
-        {
-            if (content[i] == '{') depth++;
-            if (content[i] == '}') depth--;
-            if (depth == 0)
-            {
-                var lineStart = content.LastIndexOf('\n', idx);
-                lineStart = lineStart < 0 ? 0 : lineStart + 1;
-                return content[..lineStart] + "// [stripped — provided by DafnyRuntime.dll]\n" + content[(i + 1)..];
-            }
-        }
-        return content;
-    }
 }
