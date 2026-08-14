@@ -196,13 +196,24 @@ public sealed class DafnyImplementationPhase : IPhase
             text, @"```(?:dafny)?\s*\n?(.*?)\n?```", System.Text.RegularExpressions.RegexOptions.Singleline);
         if (fenceMatch.Success)
             return CleanDafny(fenceMatch.Groups[1].Value);
-        // If it starts with { and looks like JSON, try to extract a string value
+        // If it starts with { try JSON extraction
         if (text.StartsWith('{'))
         {
-            // Try JSON deserialization — handle any key shape
+            // Try JSON deserialization — handle any key shape, look for the value
+            // that contains Dafny code (starts with // or include or method etc.)
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(text);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var val = prop.Value.GetString() ?? "";
+                        if (LooksLikeDafny(val))
+                            return CleanDafny(val);
+                    }
+                }
+                // No value looked like Dafny — try first string value anyway
                 foreach (var prop in doc.RootElement.EnumerateObject())
                 {
                     if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
@@ -210,16 +221,19 @@ public sealed class DafnyImplementationPhase : IPhase
                 }
             }
             catch { }
-            // Fallback: regex extract first string value after any key
-            var jsonMatch = System.Text.RegularExpressions.Regex.Match(
-                text, "\"[^\"]+?\"\\s*:\\s*\"(.*?)\"\\s*[,}]",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
-            if (jsonMatch.Success)
-                return CleanDafny(jsonMatch.Groups[1].Value
-                    .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"")
-                    .Replace("\\r", ""));
         }
         return CleanDafny(text);
+    }
+
+    private static bool LooksLikeDafny(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return false;
+        var trimmed = code.TrimStart();
+        return trimmed.StartsWith("//") || trimmed.StartsWith("include ") ||
+               trimmed.StartsWith("module ") || trimmed.StartsWith("method ") ||
+               trimmed.StartsWith("function ") || trimmed.StartsWith("class ") ||
+               trimmed.StartsWith("datatype ") || trimmed.StartsWith("predicate ") ||
+               trimmed.StartsWith("abstract ");
     }
 
     private static string CleanDafny(string code)
