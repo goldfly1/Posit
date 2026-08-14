@@ -1,2 +1,0 @@
-```dafny
-datatype Result<T> =

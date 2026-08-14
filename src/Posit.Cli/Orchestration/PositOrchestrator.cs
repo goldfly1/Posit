@@ -1,3 +1,5 @@
+using Posit.Tools;
+
 namespace Posit.Cli.Orchestration;
 
 using Posit.Contracts.Artifacts;
@@ -9,13 +11,15 @@ using Posit.Core.State;
 /// through FsmReducer, snowball DesignContext, persist artifacts.
 /// </summary>
 public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm,
-    IDependencyGraphEngine graph, ArtifactRepository artifactRepo, StateStore stateStore)
+    IDependencyGraphEngine graph, ArtifactRepository artifactRepo, StateStore stateStore,
+    PatternRegistry? registry = null)
 {
     private readonly PhaseController _controller = controller;
     private readonly FsmReducer _fsm = fsm;
     private readonly IDependencyGraphEngine _graph = graph;
     private readonly ArtifactRepository _artifactRepo = artifactRepo;
     private readonly StateStore _stateStore = stateStore;
+    private readonly PatternRegistry? _registry = registry;
 
     public async Task<SessionState> RunAsync(SessionState state, CancellationToken ct = default)
     {
@@ -25,6 +29,9 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             if (start.WasRejected) { Log($"Rejected: {start.RejectionReason}"); return state; }
             state = start.State;
         }
+
+        var seenFailures = new Dictionary<PhaseId, int>();
+        const int maxSamePhaseFailures = 10;
 
         while (true)
         {
@@ -36,6 +43,15 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             if (state.Status != SessionStatus.Active) break;
 
             var phaseId = state.CurrentPhaseId!.Value;
+
+            // Circuit breaker: abort if the same phase fails too many times (rollback loop)
+            if (state.CurrentAttempt == 1 && seenFailures.TryGetValue(phaseId, out var c) && c >= maxSamePhaseFailures)
+            {
+                Log($"[{phaseId}] ABORT: {c} failures on same phase (rollback loop)");
+                state = _fsm.Apply(state, "session.abort").State;
+                break;
+            }
+
             var phase = _controller.Resolve(phaseId);
             if (phase is null) break;
 
@@ -58,11 +74,23 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             state = _fsm.Apply(state, ok ? "phase.success" : "phase.failed", result).State;
             if (ok)
             {
-                state = state.WithDesignContext(SnowballDesignContext(state.DesignContext, result));
+                state = state.WithDesignContext(DesignContextSnowballer.Snowball(state.DesignContext, result));
                 await _artifactRepo.StageAsync(result.Artifacts, ct);
             }
             await _stateStore.SaveSessionAsync(state.SessionId, state, ct);
-            Log($"[{phaseId}] {(ok ? "success" : "failed")} (attempt {result.AttemptNumber})");
+
+            if (ok)
+            {
+                Log($"[{phaseId}] success (attempt {result.AttemptNumber})");
+                seenFailures.Remove(phaseId);
+            }
+            else
+            {
+                seenFailures[phaseId] = (seenFailures.TryGetValue(phaseId, out var fc) ? fc : 0) + 1;
+                Log($"[{phaseId}] failed (attempt {result.AttemptNumber})");
+                foreach (var w in result.Warnings)
+                    Log($"  → {w}");
+            }
         }
 
         var complete = _fsm.Apply(state, "session.complete");
@@ -89,7 +117,8 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
 
     private async Task<PhaseContext> BuildContext(SessionState state, PhaseId phaseId) => new()
     {
-        SessionId = state.SessionId, PhaseId = phaseId, Prompt = BuildPromptTemplate(phaseId),
+        SessionId = state.SessionId, PhaseId = phaseId,
+        Prompt = PromptBuilder.Build(phaseId, _registry),
         UserRequest = state.InitialRequest?.Prompt,
         InputArtifacts = await _artifactRepo.ListBySessionAsync(state.SessionId),
         ModelRoute = GetModelForPhase(), BudgetRemaining = state.Profile.Budget,
@@ -102,71 +131,6 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         Tier = ModelTier.Fast, ProviderId = "ollama",
         ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.2
     };
-
-    private static PromptTemplate BuildPromptTemplate(PhaseId phaseId) => new()
-    {
-        PhaseId = phaseId, Version = new PromptVersion("1.0.0"),
-        SystemPrompt = $"You are executing the {phaseId.Value} phase of the Posit spec compiler. " +
-            "Decompose the spec into components, classify each as dafny or io-shell, " +
-            "select patterns from the registry, and fill the skeleton. Respond with valid JSON only.",
-        OutputFormatSpec = "{ \"systemContext\": \"...\", \"components\": [...], ... }",
-        ModelTier = ModelTier.Fast, Temperature = 0.2, MaxOutputTokens = 8192,
-        OutputFormat = OutputFormat.Json, OutputSchemaRef = "ArchitectureContract",
-        Status = PromptStatus.Active
-    };
-
-    private static DesignContext? SnowballDesignContext(DesignContext? current, PhaseResult result)
-    {
-        var p = result.Artifacts.PayloadJson;
-        return result.PhaseId.Value switch
-        {
-            "architecture" => SnowballArch(current, p),
-            "dafny-contracts" => SnowballContracts(current, p),
-            "dafny-implementation" => SnowballImpl(current, p),
-            _ => current
-        };
-    }
-
-    private static DesignContext? SnowballArch(DesignContext? current, byte[] p)
-    {
-        var c = Deserialize<ArchitectureContract>(p);
-        if (c is null) return current;
-        var comps = c.Components.Select(x => new DesignComponent(
-            x.Id, x.Name, x.Responsibility, x.Tech, x.PublicSurface, x.Internals, x.Dependencies)
-        {
-            Classification = x.Classification, PatternName = x.PatternName, StubNames = x.StubNames,
-            DafnyContractPath = x.DafnyContractPath, ParametersJson = x.ParametersJson,
-            MethodSignatures = x.MethodSignatures, Connections = x.Connections, SharedTypes = x.SharedTypes,
-            TestCases = x.TestCases.Select(tc => new DesignTestCase(
-                tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray()
-        }).ToArray();
-        return (current ?? new DesignContext()) with
-        { Components = comps, DeploymentTopology = c.DeploymentTopology };
-    }
-
-    private static DesignContext? SnowballContracts(DesignContext? current, byte[] p)
-    {
-        var cs = Deserialize<DafnyContractResult[]>(p);
-        if (cs is null || cs.Length == 0) return current;
-        var entries = cs.Select(c => new DafnyContractEntry { ModuleName = c.ModuleName,
-            DafnyPath = c.DafnyPath, IsVerified = c.IsVerified,
-            VerificationOutput = c.VerificationOutput }).ToArray();
-        return (current ?? new DesignContext()) with { DafnyContracts = entries };
-    }
-
-    private static DesignContext? SnowballImpl(DesignContext? current, byte[] p)
-    {
-        var results = Deserialize<DafnyVerificationResult[]>(p);
-        if (results is null || results.Length == 0) return current;
-        var updated = (current?.DafnyContracts ?? []).Select(ec =>
-        {
-            var vr = results.FirstOrDefault(r => r.ModuleName == ec.ModuleName);
-            return vr is not null ? ec with { IsVerified = vr.IsVerified,
-                VerificationOutput = vr.VerificationOutput,
-                TranslatedCSharpPath = vr.TranslatedCSharpPath } : ec;
-        }).ToArray();
-        return (current ?? new DesignContext()) with { DafnyContracts = updated };
-    }
 
     /// <summary>Carapace enforcement: filenames, phantom module refs, missing components.</summary>
     private async Task<string[]> EnforceCarapace(PhaseResult result, SessionState state, CancellationToken ct)

@@ -33,6 +33,8 @@ public sealed class CSharpImplementationPhase : IPhase
 
     public Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
+        try
+        {
         var contract = ExtractContract(context);
         if (contract == null)
             return Task.FromResult(Fail(context, "No ArchitectureContract in input artifacts"));
@@ -120,6 +122,11 @@ public sealed class CSharpImplementationPhase : IPhase
             Costs = CostSnapshot.Zero,
             Warnings = warnings.ToArray()
         });
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(Fail(context, $"C# impl exception: {ex.Message}"));
+        }
     }
 
     public ValidationResult ValidateOutput(PhaseResult result)

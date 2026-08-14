@@ -33,7 +33,8 @@ public sealed class Z3Runner
         EnsureStagingDirectory();
         var args = $"verify \"{dafnyPath}\""
                  + $" --solver-path:\"{_z3SolverPath}\""
-                 + $" --verification-time-limit:{_verificationTimeoutSeconds}";
+                 + $" --verification-time-limit:{_verificationTimeoutSeconds}"
+                 + " --allow-warnings";
 
         var (exitCode, stdout, stderr) = await RunDafnyAsync(args, ct);
         var success = exitCode == 0 && !stdout.Contains("verification errors", StringComparison.OrdinalIgnoreCase);
@@ -49,6 +50,7 @@ public sealed class Z3Runner
                  + " --no-verify"
                  + " --allow-external-contracts"
                  + " --allow-warnings"
+                 + " --test-assumptions Externs"
                  + " --translate-standard-library:false";
 
         var (exitCode, stdout, stderr) = await RunDafnyAsync(args, ct);

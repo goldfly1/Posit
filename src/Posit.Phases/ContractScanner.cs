@@ -49,6 +49,14 @@ public static class ContractScanner
                 }
             }
 
+            // io-shell components MUST have at least one stub
+            if (comp.Classification == ModuleClassification.IoShell && comp.StubNames.Length == 0)
+            {
+                errors.Add(new ScanError(comp.Name, "stubNames", "(empty)",
+                    "is empty but component is classified as io-shell — needs at least one stub",
+                    registry.GetAllCSharpStubs().Select(s => s.Name).ToArray()));
+            }
+
             // Check stubNames against C# stubs
             foreach (var stub in comp.StubNames)
             {

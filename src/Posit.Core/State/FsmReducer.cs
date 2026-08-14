@@ -140,11 +140,12 @@ public sealed class FsmReducer
         if (state.Status != SessionStatus.CheckpointRollback)
             return Reject(state, "rollback.to_phase", "Invalid event for state");
 
-        var newState = state
-            .WithStatus(SessionStatus.Active)
-            .WithAttempt(1);
-
-        return Ok(newState, ["rollback.completed"]);
+        // After exhausting retries, the generic rollback path cannot fix the
+        // same phase by retrying it with fresh attempts — the inputs haven't
+        // changed. Abort the session rather than loop infinitely.
+        // (Rollback to Architecture for skeleton correction is handled
+        // separately by ApplyRollbackToArchitecture with a LoopbackCount cap.)
+        return Ok(state.WithStatus(SessionStatus.Aborted), ["session.aborted"]);
     }
 
     /// <summary>

@@ -146,7 +146,7 @@ internal static class Program
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
         controller.Register(new QaPhase());
 
-        return (new PositOrchestrator(controller, fsm, graph, artifactRepo, stateStore), stateStore);
+        return (new PositOrchestrator(controller, fsm, graph, artifactRepo, stateStore, registry), stateStore);
     }
 
     private static ProjectProfile CreateProfile(SessionId sessionId) => new()
