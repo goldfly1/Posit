@@ -153,6 +153,9 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine($"Responsibility: {comp.Responsibility}");
         sb.AppendLine($"Pattern: {comp.PatternName}");
         sb.AppendLine($"Classification: {comp.Classification}");
+        sb.AppendLine();
+        sb.AppendLine($"Write ONLY the Dafny module for '{comp.Name}'. Do NOT include other components.");
+        sb.AppendLine($"Output a single Dafny module named '{comp.Name}' — nothing else.");
         if (comp.ParametersJson is { Length: > 0 })
             sb.AppendLine($"Parameters: {comp.ParametersJson}");
         if (comp.TestCases is { Length: > 0 })
@@ -187,18 +190,36 @@ public sealed class DafnyImplementationPhase : IPhase
     private static string ExtractDafny(string text)
     {
         text = OllamaModelGateway.StripReasoningTags(text);
+        text = text.Trim();
         // Strip markdown code fences
         var fenceMatch = System.Text.RegularExpressions.Regex.Match(
             text, @"```(?:dafny)?\s*\n?(.*?)\n?```", System.Text.RegularExpressions.RegexOptions.Singleline);
         if (fenceMatch.Success)
             return fenceMatch.Groups[1].Value.Trim();
-        // Handle JSON-wrapped output: {"dafnySource": "..."} or {"code": "..."}
-        var jsonMatch = System.Text.RegularExpressions.Regex.Match(
-            text, @"\{[^}]*""(?:dafnySource|code|source)""\s*:\s*""(.*?)""\s*\}",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
-        if (jsonMatch.Success)
-            return jsonMatch.Groups[1].Value
-                .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"").Trim();
+        // If it starts with { and looks like JSON, try to extract a string value
+        if (text.StartsWith('{'))
+        {
+            // Try JSON deserialization — handle any key shape
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(text);
+                // If it has a single string value, extract it
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                        return prop.Value.GetString()?.Trim() ?? text;
+                }
+            }
+            catch { }
+            // Fallback: regex extract first string value after any key
+            var jsonMatch = System.Text.RegularExpressions.Regex.Match(
+                text, @"""[^"]+?""\s*:\s*""(.*?)""\s*[,}]",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (jsonMatch.Success)
+                return jsonMatch.Groups[1].Value
+                    .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"")
+                    .Replace("\\r", "").Trim();
+        }
         return text.Trim();
     }
 
