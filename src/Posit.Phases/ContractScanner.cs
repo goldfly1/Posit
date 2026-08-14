@@ -47,6 +47,27 @@ public static class ContractScanner
                         "does not exist in the pattern registry",
                         registry.GetAllPatterns().Select(p => p.Name).ToArray()));
                 }
+                else
+                {
+                    // For cut-outs: check the model's declared method signatures match
+                    // the REAL method names from the Dafny source. The model must use
+                    // the real names, not invented ones.
+                    var realSigs = registry.GetMethodSignatures(comp.PatternName!);
+                    if (realSigs.Count > 0)
+                    {
+                        var realMethodNames = realSigs.Select(s => s.Name).ToHashSet();
+                        foreach (var ms in comp.MethodSignatures)
+                        {
+                            if (!realMethodNames.Contains(ms.Name))
+                            {
+                                errors.Add(new ScanError(comp.Name, "methodSignature.name",
+                                    ms.Name,
+                                    $"does not exist on cut-out '{comp.PatternName}' (real methods: {string.Join(", ", realMethodNames)})",
+                                    [.. realMethodNames]));
+                            }
+                        }
+                    }
+                }
             }
 
             // io-shell components MUST have at least one stub

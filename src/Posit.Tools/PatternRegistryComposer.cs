@@ -109,6 +109,17 @@ public sealed partial class PatternRegistry
         return FormatPatternSignatures(patternName, ExtractMethodSignatures(pattern.Body));
     }
 
+    /// <summary>
+    /// Get structured method signatures from a pattern (for ContractScanner validation).
+    /// Returns the REAL method names and param counts from the Dafny source.
+    /// </summary>
+    public List<MethodSigInfo> GetMethodSignatures(string patternName)
+    {
+        if (!_patterns.TryGetValue(patternName, out var pattern))
+            return [];
+        return ExtractMethodSignatures(pattern.Body);
+    }
+
     internal static List<MethodSigInfo> ExtractMethodSignatures(string dafnyBody)
     {
         var sigs = new List<MethodSigInfo>();

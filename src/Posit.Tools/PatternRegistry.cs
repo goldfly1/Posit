@@ -156,4 +156,4 @@ public sealed partial class PatternRegistry
 public sealed record PatternEntry(string Name, string PatternName, string Responsibility, string Body, string[] Keywords, bool IncludesResult, bool IsCutOut = false);
 public sealed record StubEntry(string Name, string Body);
 public sealed record CSharpStubEntry(string Name, string Template, string[] AutoBindKeywords);
-internal sealed record MethodSigInfo(string Name, string Params, string ReturnType);
+public sealed record MethodSigInfo(string Name, string Params, string ReturnType);
