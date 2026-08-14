@@ -84,7 +84,9 @@ public sealed class OllamaModelGateway : IModelGateway
 
         var text = body.Message?.Content ?? string.Empty;
         text = StripReasoningTags(text);
-        text = ExtractJson(text);
+        // Only extract JSON for JSON-format prompts — Dafny/plain text output must not be mangled
+        if (prompt.OutputFormat == OutputFormat.Json)
+            text = ExtractJson(text);
 
         // Save thinking trace to file (separate from the prompt/response)
         var thinking = body.Message?.Thinking;
