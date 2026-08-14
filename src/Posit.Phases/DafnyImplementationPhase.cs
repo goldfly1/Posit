@@ -195,7 +195,7 @@ public sealed class DafnyImplementationPhase : IPhase
         var fenceMatch = System.Text.RegularExpressions.Regex.Match(
             text, @"```(?:dafny)?\s*\n?(.*?)\n?```", System.Text.RegularExpressions.RegexOptions.Singleline);
         if (fenceMatch.Success)
-            return fenceMatch.Groups[1].Value.Trim();
+            return CleanDafny(fenceMatch.Groups[1].Value);
         // If it starts with { and looks like JSON, try to extract a string value
         if (text.StartsWith('{'))
         {
@@ -203,11 +203,10 @@ public sealed class DafnyImplementationPhase : IPhase
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(text);
-                // If it has a single string value, extract it
                 foreach (var prop in doc.RootElement.EnumerateObject())
                 {
                     if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
-                        return prop.Value.GetString()?.Trim() ?? text;
+                        return CleanDafny(prop.Value.GetString() ?? text);
                 }
             }
             catch { }
@@ -216,11 +215,17 @@ public sealed class DafnyImplementationPhase : IPhase
                 text, "\"[^\"]+?\"\\s*:\\s*\"(.*?)\"\\s*[,}]",
                 System.Text.RegularExpressions.RegexOptions.Singleline);
             if (jsonMatch.Success)
-                return jsonMatch.Groups[1].Value
+                return CleanDafny(jsonMatch.Groups[1].Value
                     .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"")
-                    .Replace("\\r", "").Trim();
+                    .Replace("\\r", ""));
         }
-        return text.Trim();
+        return CleanDafny(text);
+    }
+
+    private static string CleanDafny(string code)
+    {
+        // Normalize line endings — Dafny on Windows can choke on \r\n
+        return code.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
     }
 
     private static DafnyVerificationResult FailResult(string name, string path, string error) => new()
