@@ -49,7 +49,9 @@ public static class PromptBuilder
         sb.AppendLine("  - For dafny: patternName must be one of the AVAILABLE PATTERNS below (NOT empty)");
         sb.AppendLine("  - For io-shell: stubNames must list at least one AVAILABLE STUB below (NEVER empty)");
         sb.AppendLine("  - methodSignatures: array of {name, params:[{name,type}], returnType, returnDafnyType}");
-        sb.AppendLine("  - connections: array of {fromMethod, toComponent, toMethod, argMappings:[]}");
+        sb.AppendLine("  - connections: array of {fromMethod, toComponent, toMethod, argMappings:[\"sourceField->paramName\", ...]}");
+        sb.AppendLine("    argMappings MUST be an array of STRINGS in \"source->target\" format, e.g. [\"parsedData->input\", \"config->settings\"].");
+        sb.AppendLine("    Do NOT put objects in argMappings. Each string maps a source field to a target parameter.");
         sb.AppendLine("  - testCases: array of {id, name, targetType, description, expectedBehavior}");
         sb.AppendLine();
         sb.AppendLine("CRITICAL: Every component must have EITHER a patternName (if dafny) OR at least one stubName (if io-shell).");
@@ -59,6 +61,25 @@ public static class PromptBuilder
         sb.AppendLine();
         if (registry != null)
         {
+            // List cut-outs first — PREFER these over generic patterns
+            var cutOuts = registry.GetAllPatterns().Where(p => p.IsCutOut).OrderBy(p => p.Name).ToList();
+            if (cutOuts.Count > 0)
+            {
+                sb.AppendLine("═══ AVAILABLE CUT-OUTS (pre-cut domain modules — PREFER THESE over generic patterns) ═══");
+                sb.AppendLine("Cut-outs are pre-written, Z3-verified Dafny modules that do REAL work.");
+                sb.AppendLine("If a cut-out matches the component's responsibility, USE IT (set patternName to the cut-out name).");
+                sb.AppendLine("Each cut-out has REAL method names — use those EXACT names in methodSignatures and connections.");
+                sb.AppendLine("The method signatures are listed below — match them EXACTLY (name, params, return type).");
+                foreach (var p in cutOuts)
+                {
+                    sb.AppendLine($"  - {p.Name}: {p.Responsibility}");
+                    // List actual method signatures from the Dafny source
+                    var sigs = registry.GetPatternSignatures(p.Name);
+                    foreach (var sig in sigs)
+                        sb.AppendLine($"      {sig}");
+                }
+                sb.AppendLine();
+            }
             sb.AppendLine("═══ UNIVERSAL STARTER PATTERN ═══");
             var pipe = registry.GetPattern("pipeline");
             if (pipe != null)
@@ -66,7 +87,7 @@ public static class PromptBuilder
             sb.AppendLine();
             sb.AppendLine("═══ SPECIALIST PATTERNS (add alongside pipeline for specific modules) ═══");
             foreach (var p in registry.GetAllPatterns().OrderBy(p => p.Name))
-                if (p.Name != "pipeline")
+                if (p.Name != "pipeline" && !p.IsCutOut)
                     sb.AppendLine($"  - {p.Name}: {p.Responsibility}");
             sb.AppendLine();
             sb.AppendLine("═══ AVAILABLE STUBS (set stubNames to one or more of these for io-shell components) ═══");

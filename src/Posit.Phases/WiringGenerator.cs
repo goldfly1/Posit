@@ -88,19 +88,16 @@ public static class WiringGenerator
         Dictionary<string, List<CsMethodSignature>> translated, Dictionary<string, List<CsMethodSignature>> stubs,
         string entryVar, string className)
     {
-        // Variable registry: maps semantic names → actual C# variable names
-        // The entry var is registered under both its own name and common aliases
-        var currentVars = new Dictionary<string, VarInfo>(StringComparer.OrdinalIgnoreCase)
-        {
-            [entryVar] = new(entryVar, "string"),
-            ["input"] = new(entryVar, "string"),
-            ["args"] = new(entryVar, "string"),
-        };
-        var retVarCounter = 0;
+        // DETERMINISTIC LINEAR CHAINING:
+        // The pipeline is a linear chain. Output of step N feeds into step N+1.
+        // The first call gets args[0] (CLI input). Subsequent calls get the previous return.
+        // Remaining params get defaults. The model's argMappings are used as hints
+        // for non-first params only (e.g. delimiter=",").
+        // This avoids trusting the model to name intermediate variables correctly.
 
-        // Build a map of argMapping source names → which ret var they refer to
-        // by scanning ahead: each connection's return value gets registered
-        // under the source names that future connections expect
+        var prevRet = entryVar;  // starts as CLI input, then becomes previous return
+        var prevType = comp.Classification == ModuleClassification.IoShell ? "string" : "Dafny.ISequence<Dafny.Rune>";
+        var retVarCounter = 0;
 
         for (var ci = 0; ci < comp.Connections.Length; ci++)
         {
@@ -108,7 +105,7 @@ public static class WiringGenerator
             var targetComp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
             if (targetComp == null) continue;
 
-            // Find the actual C# method signature — try exact name match, then patternMethod
+            // Find the actual C# method signature
             var targetSigs = GetSignatures(targetComp, translated, stubs);
             if (targetSigs == null || targetSigs.Count == 0)
             {
@@ -116,46 +113,16 @@ public static class WiringGenerator
                 continue;
             }
 
-            // Try exact match on toMethod
-            var targetSig = targetSigs.FirstOrDefault(s => s.Name == conn.ToMethod);
-            // If not found, try matching via the contract's MethodSignatures patternMethod
-            if (targetSig == null)
-            {
-                var contractSig = targetComp.MethodSignatures.FirstOrDefault(
-                    m => m.Name == conn.ToMethod && !string.IsNullOrWhiteSpace(m.PatternMethod));
-                if (contractSig != null)
-                    targetSig = targetSigs.FirstOrDefault(s => s.Name == contractSig.PatternMethod);
-            }
-            // If still not found, try fuzzy match: toMethod contains or is contained in actual method name
-            if (targetSig == null)
-            {
-                var toMethodLower = conn.ToMethod.ToLowerInvariant();
-                targetSig = targetSigs.FirstOrDefault(s =>
-                    s.Name.ToLowerInvariant().Contains(toMethodLower) ||
-                    toMethodLower.Contains(s.Name.ToLowerInvariant()));
-            }
-            // If still not found, prefer non-factory methods (skip Default, _TypeDescriptor, create_*)
-            if (targetSig == null)
-            {
-                targetSig = targetSigs.FirstOrDefault(s =>
-                    !s.Name.StartsWith("create_") && !s.Name.StartsWith("_") &&
-                    s.Name != "Default" && s.Name != "_TypeDescriptor");
-            }
-            // Last resort: first available
-            if (targetSig == null)
-                targetSig = targetSigs[0];
-
-            // Determine the actual method name to call in C#
+            var targetSig = ResolveMethod(conn, targetComp, targetSigs);
             var actualMethodName = targetSig.Name;
-
             var targetClass = ResolveTargetClass(targetComp, translated, stubs);
             var retVarName = $"ret{retVarCounter++}";
             var retType = targetSig.ReturnType;
 
-            // Build arguments from arg mappings
-            var args = BuildArgs(conn, currentVars, targetSig);
+            // Build args: first param gets the chained previous return,
+            // remaining params use argMappings as hints, then defaults
+            var args = BuildChainedArgs(conn, prevRet, prevType, targetSig);
 
-            // Emit the call with the ACTUAL C# method name, not the model's semantic name
             if (retType == "void" || retType == "Void")
             {
                 sb.AppendLine($"            {targetClass}.{actualMethodName}({args});");
@@ -163,27 +130,86 @@ public static class WiringGenerator
             else
             {
                 sb.AppendLine($"            var {retVarName} = {targetClass}.{actualMethodName}({args});");
-                // Register return value under retN AND under the source names that
-                // future connections will use to reference this return
-                currentVars[retVarName] = new VarInfo(retVarName, retType);
-                // Look ahead: find the source field names in the NEXT connections
-                // that would reference this return value
-                for (var ni = ci + 1; ni < comp.Connections.Length; ni++)
+                prevRet = retVarName;
+                prevType = retType;
+            }
+        }
+    }
+
+    /// <summary>Build args for linear chaining: first param = previous return, rest from mappings/defaults.</summary>
+    private static string BuildChainedArgs(ConnectionSpec conn, string prevRet, string prevType, CsMethodSignature targetSig)
+    {
+        var parts = new List<string>();
+        for (var i = 0; i < targetSig.ParamNames.Length; i++)
+        {
+            if (i == 0)
+            {
+                // First param: the chained previous return (with type conversion)
+                var converted = ConvertType(prevType, targetSig.ParamTypes[i], prevRet);
+                parts.Add(converted ?? DefaultForType(targetSig.ParamTypes[i]));
+            }
+            else
+            {
+                // Remaining params: try argMappings, then defaults
+                if (i < conn.ArgMappings.Length)
                 {
-                    var nextConn = comp.Connections[ni];
-                    foreach (var mapping in nextConn.ArgMappings)
+                    var mapping = conn.ArgMappings[i];
+                    var arrowIdx = mapping.IndexOf("->");
+                    var targetName = arrowIdx >= 0 ? mapping[(arrowIdx + 2)..].Trim() : "";
+                    // If the mapping target matches this param name, use the source value
+                    if (targetName == targetSig.ParamNames[i] && arrowIdx >= 0)
                     {
-                        var arrowIdx = mapping.IndexOf("->");
-                        var sourceField = arrowIdx >= 0 ? mapping[..arrowIdx].Trim() : mapping.Trim();
-                        // If this source field isn't already a known var, register retVar under it
-                        if (!currentVars.ContainsKey(sourceField))
-                        {
-                            currentVars[sourceField] = new VarInfo(retVarName, retType);
-                        }
+                        var sourceField = mapping[..arrowIdx].Trim();
+                        // Source could be a literal or a known var — for now, use as string literal
+                        if (sourceField.Length > 0)
+                            parts.Add($"\"{sourceField}\"");
+                        else
+                            parts.Add(DefaultForType(targetSig.ParamTypes[i]));
                     }
+                    else
+                    {
+                        parts.Add(DefaultForType(targetSig.ParamTypes[i]));
+                    }
+                }
+                else
+                {
+                    parts.Add(DefaultForType(targetSig.ParamTypes[i]));
                 }
             }
         }
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>Resolve a method from the connection's toMethod, trying multiple strategies.</summary>
+    private static CsMethodSignature ResolveMethod(ConnectionSpec conn, Component targetComp, List<CsMethodSignature> targetSigs)
+    {
+        // Try exact match on toMethod
+        var sig = targetSigs.FirstOrDefault(s => s.Name == conn.ToMethod);
+        // Try patternMethod mapping from contract
+        if (sig == null)
+        {
+            var contractSig = targetComp.MethodSignatures.FirstOrDefault(
+                m => m.Name == conn.ToMethod && !string.IsNullOrWhiteSpace(m.PatternMethod));
+            if (contractSig != null)
+                sig = targetSigs.FirstOrDefault(s => s.Name == contractSig.PatternMethod);
+        }
+        // Fuzzy match
+        if (sig == null)
+        {
+            var toMethodLower = conn.ToMethod.ToLowerInvariant();
+            sig = targetSigs.FirstOrDefault(s =>
+                s.Name.ToLowerInvariant().Contains(toMethodLower) ||
+                toMethodLower.Contains(s.Name.ToLowerInvariant()));
+        }
+        // Prefer non-factory methods
+        if (sig == null)
+        {
+            sig = targetSigs.FirstOrDefault(s =>
+                !s.Name.StartsWith("create_") && !s.Name.StartsWith("_") &&
+                s.Name != "Default" && s.Name != "_TypeDescriptor");
+        }
+        // Last resort
+        return sig ?? targetSigs[0];
     }
 
     private static void AppendSingleConnection(

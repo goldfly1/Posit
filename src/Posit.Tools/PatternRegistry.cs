@@ -85,6 +85,19 @@ public sealed partial class PatternRegistry
             _patterns[name] = new PatternEntry(name, patternName, responsibility, content,
                 ExtractKeywords(responsibility), content.Contains("include \"result.dfy\""));
         }
+        // Load cut-outs (domain-specific pre-cut Dafny modules)
+        var cutOutsDir = Path.Combine(_patternsRoot, "cut-outs");
+        if (Directory.Exists(cutOutsDir))
+        {
+            foreach (var file in Directory.GetFiles(cutOutsDir, "*.dfy"))
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                var content = File.ReadAllText(file);
+                var (patternName, responsibility) = ParsePatternHeader(content);
+                _patterns[name] = new PatternEntry(name, patternName, responsibility, content,
+                    ExtractKeywords(responsibility), content.Contains("include \"result.dfy\""), IsCutOut: true);
+            }
+        }
     }
 
     private void LoadStubs()
@@ -140,7 +153,7 @@ public sealed partial class PatternRegistry
     }
 }
 
-public sealed record PatternEntry(string Name, string PatternName, string Responsibility, string Body, string[] Keywords, bool IncludesResult);
+public sealed record PatternEntry(string Name, string PatternName, string Responsibility, string Body, string[] Keywords, bool IncludesResult, bool IsCutOut = false);
 public sealed record StubEntry(string Name, string Body);
 public sealed record CSharpStubEntry(string Name, string Template, string[] AutoBindKeywords);
 internal sealed record MethodSigInfo(string Name, string Params, string ReturnType);

@@ -103,6 +103,28 @@ public static class ContractScanner
                         conn.FromMethod, "does not exist on this component's methodSignatures",
                         [.. ownMethods]));
             }
+
+            // Declaration/use consistency: every declared method should be used in a
+            // connection (as fromMethod on this component or toMethod targeting this
+            // component). A method that appears only once — declared but never called,
+            // or called but never declared — is suspicious and kicked back to the model.
+            var allCalledMethods = new HashSet<string>();
+            // Methods called ON this component (via other components' connections)
+            foreach (var other in contract.Components)
+                foreach (var conn in other.Connections)
+                    if (conn.ToComponent == comp.Name)
+                        allCalledMethods.Add(conn.ToMethod);
+            // Methods called FROM this component
+            foreach (var conn in comp.Connections)
+                allCalledMethods.Add(conn.FromMethod);
+
+            foreach (var declared in ownMethods)
+            {
+                if (!allCalledMethods.Contains(declared))
+                    errors.Add(new ScanError(comp.Name, "methodSignature.name",
+                        declared, "is declared but never used in any connection",
+                        [.. allCalledMethods]));
+            }
         }
 
         return errors;
