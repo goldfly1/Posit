@@ -163,7 +163,7 @@ public sealed class DafnyImplementationPhase : IPhase
         }
         sb.AppendLine();
         sb.AppendLine("Rules:");
-        sb.AppendLine("1. Output ONLY Dafny code. No markdown fences, no explanations.");
+        sb.AppendLine("1. Output ONLY raw Dafny code. No JSON wrapper, no markdown fences, no explanations.");
         sb.AppendLine("2. Keep the same module name and method signatures as the skeleton.");
         sb.AppendLine("3. Keep all {:extern} declarations unchanged — these are I/O portals.");
         sb.AppendLine("4. Write real method bodies that implement the spec's logic, not generic algorithm code.");
@@ -190,8 +190,15 @@ public sealed class DafnyImplementationPhase : IPhase
         // Strip markdown code fences
         var fenceMatch = System.Text.RegularExpressions.Regex.Match(
             text, @"```(?:dafny)?\s*\n?(.*?)\n?```", System.Text.RegularExpressions.RegexOptions.Singleline);
-        if ( fenceMatch.Success)
+        if (fenceMatch.Success)
             return fenceMatch.Groups[1].Value.Trim();
+        // Handle JSON-wrapped output: {"dafnySource": "..."} or {"code": "..."}
+        var jsonMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"\{[^}]*""(?:dafnySource|code|source)""\s*:\s*""(.*?)""\s*\}",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (jsonMatch.Success)
+            return jsonMatch.Groups[1].Value
+                .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"").Trim();
         return text.Trim();
     }
 
