@@ -221,6 +221,14 @@ public sealed class DafnyImplementationPhase : IPhase
                 }
             }
             catch { }
+            // Fallback: regex extract value after "dafnySource" or any key
+            var jsonMatch = System.Text.RegularExpressions.Regex.Match(
+                text, "\"(?:dafnySource|code|source)\"\\s*:\\s*\"(.*?)(?<!\\\\)\")",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (jsonMatch.Success)
+                return CleanDafny(jsonMatch.Groups[1].Value
+                    .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"")
+                    .Replace("\\r", ""));
         }
         return CleanDafny(text);
     }
