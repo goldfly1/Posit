@@ -144,15 +144,17 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         foreach (var f in bundle.Files)
         {
             var fn = Path.GetFileName(f.Path);
-            var dir = Path.GetDirectoryName(f.Path);
+            var dir = Path.GetDirectoryName(f.Path)?.Replace('\\', '/');
             if (!contract.Components.Any(c => fn == $"{c.Name}.cs" || fn.StartsWith($"{c.Name}.")
                 || fn.StartsWith($"{c.Name}Extern.") || (fn == "Wire.cs" && dir == c.Name)))
                 errors.Add($"Carapace: '{f.Path}' matches no component");
         }
         foreach (var comp in contract.Components)
-            if (!bundle.Files.Any(f => f.Path == $"{comp.Name}.cs" || f.Path.StartsWith($"{comp.Name}.")
-                || f.Path.StartsWith($"{comp.Name}Extern.")))
+        {
+            var prefix = $"{comp.Name}/";
+            if (!bundle.Files.Any(f => f.Path.StartsWith(prefix)))
                 errors.Add($"Carapace: no files for '{comp.Name}'");
+        }
         foreach (var f in bundle.Files)
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(f.Content, @"_module_(\w+)"))
                 if (!names.Contains(m.Groups[1].Value))

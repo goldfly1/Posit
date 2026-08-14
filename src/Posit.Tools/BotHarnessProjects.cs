@@ -10,8 +10,9 @@ internal static class BotHarnessProjects
     /// <summary>
     /// Generate a .csproj file for a component.
     /// isExe is true only for the CLI component.
+    /// projectReferences lists other component projects this one depends on.
     /// </summary>
-    internal static string GenerateCsproj(string projectName, bool isExe)
+    internal static string GenerateCsproj(string projectName, bool isExe, List<string>? projectReferences = null)
     {
         var outputType = isExe ? "Exe" : "Library";
         var sb = new StringBuilder();
@@ -28,8 +29,7 @@ internal static class BotHarnessProjects
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
-        // Include all .cs files from the project directory
-        sb.AppendLine("    <Compile Include=\"*.cs\" />");
+        // Include all .cs files from the project directory recursively (single glob, no duplicates)
         sb.AppendLine("    <Compile Include=\"**\\*.cs\" />");
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
@@ -39,6 +39,16 @@ internal static class BotHarnessProjects
         sb.AppendLine("      <HintPath>..\\DafnyRuntime\\DafnyRuntime.dll</HintPath>");
         sb.AppendLine("    </Reference>");
         sb.AppendLine("  </ItemGroup>");
+        // Add project references for dependencies (Wire.cs calls into other components)
+        if (projectReferences is { Count: > 0 })
+        {
+            sb.AppendLine();
+            sb.AppendLine("  <ItemGroup>");
+            foreach (var dep in projectReferences)
+                if (dep != projectName)
+                    sb.AppendLine($"    <ProjectReference Include=\"..\\{dep}\\{dep}.csproj\" />");
+            sb.AppendLine("  </ItemGroup>");
+        }
         sb.AppendLine();
         sb.AppendLine("</Project>");
         return sb.ToString();

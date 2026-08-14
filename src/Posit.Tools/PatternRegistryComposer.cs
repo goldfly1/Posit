@@ -39,7 +39,9 @@ public sealed partial class PatternRegistry
     }
 
     /// <summary>
-    /// Compose the Dafny skeleton for an io-shell component (stubs only, no pattern).
+    /// Compose the C# stub for an io-shell component from C# templates.
+    /// Substitutes {{ComponentName}} with the actual component name.
+    /// Returns C# code (not Dafny) — used by CSharpImplementationPhase.
     /// </summary>
     public string ComposeIoShellSkeleton(string[] stubNames, string moduleName)
     {
@@ -50,10 +52,19 @@ public sealed partial class PatternRegistry
 
         foreach (var stubName in stubNames)
         {
-            if (_stubs.TryGetValue(stubName, out var stub))
+            if (_csharpStubs.TryGetValue(stubName, out var stub))
             {
                 sb.AppendLine($"// === Stub: {stubName} ===");
-                sb.AppendLine(stub.Body);
+                // Substitute {{ComponentName}} with the actual module name
+                var content = stub.Template.Replace("{{ComponentName}}", moduleName);
+                sb.AppendLine(content);
+                sb.AppendLine();
+            }
+            else if (_stubs.TryGetValue(stubName, out var dafnyStub))
+            {
+                // Fallback: if no C# template, emit a comment (Dafny stubs are not C#)
+                sb.AppendLine($"// === Stub: {stubName} (Dafny only — no C# template) ===");
+                sb.AppendLine($"// {dafnyStub.Body.Split('\n')[0]}");
                 sb.AppendLine();
             }
         }

@@ -99,7 +99,7 @@ public static class WiringGenerator
             var targetSig = targetSigs?.FirstOrDefault(s => s.Name == conn.ToMethod);
             if (targetSig == null) continue;
 
-            var targetClass = ResolveDafnyClass(targetComp, translated);
+            var targetClass = ResolveTargetClass(targetComp, translated, stubs);
             var retVarName = $"ret{retVarCounter++}";
             var retType = targetSig.ReturnType;
 
@@ -122,7 +122,7 @@ public static class WiringGenerator
         var targetSig = targetSigs?.FirstOrDefault(s => s.Name == conn.ToMethod);
         if (targetSig == null) return;
 
-        var targetClass = ResolveDafnyClass(targetComp, translated);
+        var targetClass = ResolveTargetClass(targetComp, translated, stubs);
         var currentVars = new Dictionary<string, VarInfo> { [entryVar] = new(entryVar, "string") };
         var args = BuildArgs(conn, currentVars, targetSig);
 
@@ -132,22 +132,25 @@ public static class WiringGenerator
     private static string BuildArgs(ConnectionSpec conn, Dictionary<string, VarInfo> vars, CsMethodSignature targetSig)
     {
         var parts = new List<string>();
-        for (var i = 0; i < conn.ArgMappings.Length && i < targetSig.ParamNames.Length; i++)
+        // Fill ALL parameters of the target method, not just up to argMappings length
+        for (var i = 0; i < targetSig.ParamNames.Length; i++)
         {
-            var mapping = conn.ArgMappings[i];
-            var arrowIdx = mapping.IndexOf("->");
-            var sourceField = arrowIdx >= 0 ? mapping[..arrowIdx].Trim() : mapping.Trim();
-            var paramName = targetSig.ParamNames[i];
+            // If there's an argMapping for this position, use it
+            if (i < conn.ArgMappings.Length)
+            {
+                var mapping = conn.ArgMappings[i];
+                var arrowIdx = mapping.IndexOf("->");
+                var sourceField = arrowIdx >= 0 ? mapping[..arrowIdx].Trim() : mapping.Trim();
 
-            if (vars.TryGetValue(sourceField, out var varInfo))
-            {
-                var converted = ConvertType(varInfo.CsType, targetSig.ParamTypes[i], varInfo.Name);
-                parts.Add(converted ?? DefaultForType(targetSig.ParamTypes[i]));
+                if (vars.TryGetValue(sourceField, out var varInfo))
+                {
+                    var converted = ConvertType(varInfo.CsType, targetSig.ParamTypes[i], varInfo.Name);
+                    parts.Add(converted ?? DefaultForType(targetSig.ParamTypes[i]));
+                    continue;
+                }
             }
-            else
-            {
-                parts.Add(DefaultForType(targetSig.ParamTypes[i]));
-            }
+            // No mapping or mapping not found: use default for this param type
+            parts.Add(DefaultForType(targetSig.ParamTypes[i]));
         }
         return string.Join(", ", parts);
     }
@@ -170,12 +173,39 @@ public static class WiringGenerator
     /// <summary>Rename 'args' to 'inputArgs' (NOT @args). @ is just a prefix.</summary>
     public static string SafeName(string name) => name == "args" ? "inputArgs" : name;
 
-    /// <summary>Resolve actual class name from scanner (Frame vs __default).</summary>
+    /// <summary>Resolve actual class name from scanner (Frame vs __default vs stub class).</summary>
     private static string ResolveDafnyClass(Component comp, Dictionary<string, List<CsMethodSignature>> sigs)
     {
         if (sigs.TryGetValue(comp.Name, out var methods) && methods.Count > 0)
-            return methods[0].ClassName;
+        {
+            var m = methods[0];
+            // Return fully-qualified name: namespace.class (e.g. "_module.__default")
+            // Without the namespace prefix, the compiler can't find the class.
+            if (!string.IsNullOrEmpty(m.Namespace))
+                return $"{m.Namespace}.{m.ClassName}";
+            return m.ClassName;
+        }
         return comp.Classification == ModuleClassification.IoShell ? comp.Name : "_module." + comp.Name;
+    }
+
+    /// <summary>Resolve target class name, checking stub signatures for io-shell components.</summary>
+    private static string ResolveTargetClass(Component targetComp,
+        Dictionary<string, List<CsMethodSignature>> translated,
+        Dictionary<string, List<CsMethodSignature>> stubs)
+    {
+        // For io-shell: check stub signatures first (class is ConsoleIO, FileIO, etc.)
+        if (targetComp.Classification == ModuleClassification.IoShell &&
+            stubs.TryGetValue(targetComp.Name, out var stubMethods) && stubMethods.Count > 0)
+        {
+            var m = stubMethods[0];
+            // Stub classes are in namespace {comp.Name}, so just use ClassName
+            // e.g. JsonOutput.ConsoleIO
+            if (!string.IsNullOrEmpty(m.Namespace))
+                return $"{m.Namespace}.{m.ClassName}";
+            return $"{targetComp.Name}.{m.ClassName}";
+        }
+        // For dafny: use translated signatures
+        return ResolveDafnyClass(targetComp, translated);
     }
 
     private static List<CsMethodSignature>? GetSignatures(

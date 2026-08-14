@@ -56,7 +56,7 @@ public sealed class CSharpImplementationPhase : IPhase
                         continue;
                     }
                     var stubContent = _registry.ComposeIoShellSkeleton(stubName, comp.Name);
-                    var path = $"{comp.Name}.{stubName}.cs";
+                    var path = $"{comp.Name}/{comp.Name}.{stubName}.cs";
                     files.Add(new SourceCodeFile(path, stubContent));
                 }
             }
@@ -67,13 +67,13 @@ public sealed class CSharpImplementationPhase : IPhase
                 if (vr != null && !string.IsNullOrWhiteSpace(vr.TranslatedCSharpPath) && File.Exists(vr.TranslatedCSharpPath))
                 {
                     var content = File.ReadAllText(vr.TranslatedCSharpPath);
-                    files.Add(new SourceCodeFile($"{comp.Name}.cs", content));
+                    files.Add(new SourceCodeFile($"{comp.Name}/{comp.Name}.cs", content));
 
                     // Sub-step (a): extern portal caps from registry stubs
                     foreach (var stubName in comp.StubNames)
                     {
                         var stubContent = _registry.ComposeIoShellSkeleton(stubName, comp.Name);
-                        var path = $"{comp.Name}Extern.{stubName}.cs";
+                        var path = $"{comp.Name}/{comp.Name}Extern.{stubName}.cs";
                         files.Add(new SourceCodeFile(path, stubContent));
                     }
                 }
@@ -142,7 +142,7 @@ public sealed class CSharpImplementationPhase : IPhase
         var result = new Dictionary<string, List<CsMethodSignature>>();
         foreach (var comp in contract.Components)
         {
-            var file = files.FirstOrDefault(f => f.Path == $"{comp.Name}.cs");
+            var file = files.FirstOrDefault(f => f.Path == $"{comp.Name}/{comp.Name}.cs");
             if (file != null)
                 result[comp.Name] = TranslatedCSharpScanner.ScanContent(file.Content);
         }
@@ -155,7 +155,8 @@ public sealed class CSharpImplementationPhase : IPhase
         var result = new Dictionary<string, List<CsMethodSignature>>();
         foreach (var comp in contract.Components)
         {
-            var stubFiles = files.Where(f => f.Path.StartsWith($"{comp.Name}.") || f.Path.StartsWith($"{comp.Name}Extern."));
+            var prefix = $"{comp.Name}/";
+            var stubFiles = files.Where(f => f.Path.StartsWith(prefix) && f.Path != $"{comp.Name}/{comp.Name}.cs");
             var sigs = new List<CsMethodSignature>();
             foreach (var f in stubFiles)
                 sigs.AddRange(TranslatedCSharpScanner.ScanContent(f.Content));

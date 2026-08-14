@@ -61,8 +61,14 @@ public sealed class BotHarness
             var projName = comp.Name;
             var projDir = Path.Combine(tempDir, projName);
             Directory.CreateDirectory(projDir);
+            // Collect dependencies from connections
+            var deps = comp.Connections
+                .Where(c => c.ToComponent != comp.Name)
+                .Select(c => c.ToComponent)
+                .Distinct()
+                .ToList();
             File.WriteAllText(Path.Combine(projDir, $"{projName}.csproj"),
-                BotHarnessProjects.GenerateCsproj(projName, isExe));
+                BotHarnessProjects.GenerateCsproj(projName, isExe, deps));
             projectNames.Add(projName);
         }
 
