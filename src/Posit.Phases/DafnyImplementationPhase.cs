@@ -213,7 +213,7 @@ public sealed class DafnyImplementationPhase : IPhase
             catch { }
             // Fallback: regex extract first string value after any key
             var jsonMatch = System.Text.RegularExpressions.Regex.Match(
-                text, @"""[^"]+?""\s*:\s*""(.*?)""\s*[,}]",
+                text, "\"[^\"]+?\"\\s*:\\s*\"(.*?)\"\\s*[,}]",
                 System.Text.RegularExpressions.RegexOptions.Singleline);
             if (jsonMatch.Success)
                 return jsonMatch.Groups[1].Value
