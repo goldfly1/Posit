@@ -1,11 +1,12 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace Posit.Tools;
 
 /// <summary>
-/// Runs the Dafny verifier (Z3) on .dfy files and translates verified
-/// Dafny source to C#. This is the deterministic core of the Dafny-first
-/// pipeline — no model calls, no guessing. Z3 proves or it doesn't.
+/// Runs Dafny verification (Z3) and Dafny-to-C# translation.
+/// Post-processes translated C# to extract only the module namespace,
+/// discarding all DafnyRuntime boilerplate.
 /// </summary>
 public sealed class Z3Runner
 {
@@ -13,254 +14,135 @@ public sealed class Z3Runner
     private readonly string _z3SolverPath;
     private readonly int _verificationTimeoutSeconds;
 
-    /// <summary>
-    /// Creates a Z3Runner. Defaults are pulled from environment variables
-    /// or fall back to the known install locations on this machine.
-    /// </summary>
-    /// <param name="dafnyExecutable">Path to the dafny executable (or "dafny" if on PATH).</param>
-    /// <param name="z3SolverPath">Path to z3.exe for --solver-path flag.</param>
-    /// <param name="verificationTimeoutSeconds">Z3 per-method time limit.</param>
-    public Z3Runner(
-        string? dafnyExecutable = null,
-        string? z3SolverPath = null,
-        int verificationTimeoutSeconds = 30)
+    public static string StagingDirectory => Path.Combine(Path.GetTempPath(), "posit-dafny-staging");
+
+    public Z3Runner(string dafnyExecutable, string z3SolverPath, int verificationTimeoutSeconds = 120)
     {
-        _dafnyExecutable = dafnyExecutable
-            ?? Environment.GetEnvironmentVariable("DAFNY_EXE")
-            ?? "dafny";
-        _z3SolverPath = z3SolverPath
-            ?? Environment.GetEnvironmentVariable("DAFNY_Z3_PATH")
-            ?? @"C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe";
+        _dafnyExecutable = dafnyExecutable;
+        _z3SolverPath = z3SolverPath;
         _verificationTimeoutSeconds = verificationTimeoutSeconds;
     }
 
-    /// <summary>
-    /// Runs `dafny verify` on a .dfy file. Returns true if Z3 verified
-    /// with 0 errors, false otherwise. Output contains the full stdout+stderr
-    /// for correction signals on failure.
-    /// </summary>
-    public async Task<(bool Verified, string Output)> VerifyAsync(
-        string dafnyFilePath,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = _dafnyExecutable,
-                Arguments = BuildVerifyArguments(dafnyFilePath),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+    public static string GetDafnyStagingPath(string moduleName) =>
+        Path.Combine(StagingDirectory, moduleName);
 
-            using var process = Process.Start(psi);
-            if (process is null)
-                return (false, "Failed to start dafny process");
+    public static void EnsureStagingDirectory() => Directory.CreateDirectory(StagingDirectory);
 
-            var stdout = await process.StandardOutput.ReadToEndAsync(ct);
-            var stderr = await process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-
-            var output = stdout + "\n" + stderr;
-            var verified = output.Contains("verified, 0 errors") && !output.Contains("errors]");
-            return (verified, output.Trim());
-        }
-        catch (Exception ex)
-        {
-            return (false, $"Dafny execution failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Runs `dafny translate cs` on a verified .dfy file. Writes the translated
-    /// C# to a file in the staging directory and returns the file path.
-    /// Uses default translation (no --include-runtime) — the Dafny runtime is provided by the shared
-    /// Posit.DafnyRuntime project, not embedded in each translated file.
-    /// </summary>
-    public async Task<string?> TranslateToCSharpAsync(
-        string dafnyFilePath,
-        string moduleName,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var outputPath = Path.ChangeExtension(dafnyFilePath, ".cs");
-            var psi = new ProcessStartInfo
-            {
-                FileName = _dafnyExecutable,
-                Arguments = $"{BuildTranslateArguments(dafnyPath: dafnyFilePath)} --output \"{outputPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var process = Process.Start(psi);
-            if (process is null)
-                return null;
-
-            var stdout = await process.StandardOutput.ReadToEndAsync(ct);
-            var stderr = await process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-
-            if (process.ExitCode != 0)
-            {
-                Console.Error.WriteLine(
-                    $"[Posit] dafny translate cs failed (exit {process.ExitCode}):\nSTDOUT:\n{stdout[..Math.Min(500, stdout.Length)]}\nSTDERR:\n{stderr[..Math.Min(500, stderr.Length)]}");
-                return null;
-            }
-
-            // dafny translate cs may produce a directory or multiple files.
-            // Prefer the explicitly requested output, then look for generated .cs files.
-            if (!File.Exists(outputPath))
-            {
-                var dir = Path.GetDirectoryName(dafnyFilePath);
-                if (!string.IsNullOrWhiteSpace(dir))
-                {
-                    var generated = Directory.GetFiles(dir, "*.cs")
-                        .OrderBy(f => f)
-                        .ToList();
-                    if (generated.Count == 1)
-                    {
-                        outputPath = generated[0];
-                    }
-                    else if (generated.Count > 1)
-                    {
-                        var moduleNamed = generated.FirstOrDefault(f =>
-                            Path.GetFileNameWithoutExtension(f).Equals(moduleName, StringComparison.OrdinalIgnoreCase));
-                        outputPath = moduleNamed ?? generated[0];
-                        Console.Error.WriteLine($"[Posit] dafny translate cs produced {generated.Count} files; using {outputPath}");
-                    }
-                }
-            }
-
-            // If still no file, write stdout as fallback
-            if (!File.Exists(outputPath))
-            {
-                await File.WriteAllTextAsync(outputPath, stdout, ct);
-            }
-
-            // Post-process: rename `namespace _module` to `namespace _module_{moduleName}`
-            // so that Wire.cs can use `using _module_{moduleName};` to reference the
-            // correct module. Without this, every Dafny module produces `namespace _module`
-            // and they collide when referenced from C#.
-            // Also update internal fully-qualified references from `_module.` to `_module_{moduleName}.`
-            // Also strip the Dafny runtime helpers (FuncExtensions, ArrayHelpers, DafnyAssembly)
-            // which are provided by DafnyRuntime.dll — including them causes CS0101 duplicates.
-            if (File.Exists(outputPath))
-            {
-                var csharpContent = await File.ReadAllTextAsync(outputPath, ct);
-                // Rename the namespace declaration
-                var renamed = csharpContent.Replace("namespace _module {", $"namespace _module_{moduleName} {{");
-                // Rename internal fully-qualified references to _module.X → _module_{moduleName}.X
-                // Be careful: only replace `_module.` (with the dot), not `_module_` or `_module{`
-                renamed = renamed.Replace("_module.", $"_module_{moduleName}.");
-                // Strip Dafny runtime helpers that conflict with DafnyRuntime.dll:
-                // - [assembly: DafnyAssembly.DafnySourceAttribute(...)] — multi-line attribute
-                // - internal static class FuncExtensions { ... } — entire class
-                // - namespace Dafny { ... } — entire namespace block (contains ArrayHelpers)
-                renamed = StripDafnyRuntimeHelpers(renamed);
-                if (renamed != csharpContent)
-                {
-                    await File.WriteAllTextAsync(outputPath, renamed, ct);
-                    Console.Error.WriteLine($"[Posit] dafny translate cs — renamed namespace + stripped runtime helpers in {Path.GetFileName(outputPath)}");
-                }
-            }
-
-            return outputPath;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[Posit] dafny translate cs failed: {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Staging directory for .dfy files and generated C#. Persists across
-    /// phases so Imp can find skeleton files from a prior phase. Uses
-    /// .posit/staging/ relative to the working directory.
-    /// </summary>
-    public static string StagingDirectory =>
-        Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging");
-
-    /// <summary>
-    /// Ensures the staging directory exists.
-    /// </summary>
-    public static void EnsureStagingDirectory()
-    {
-        Directory.CreateDirectory(StagingDirectory);
-    }
-
-    /// <summary>
-    /// Creates a staging path for a .dfy file.
-    /// </summary>
-    public static string GetDafnyStagingPath(string moduleName)
+    public async Task<Z3VerificationResult> VerifyAsync(string dafnyPath, CancellationToken ct = default)
     {
         EnsureStagingDirectory();
-        var safeName = moduleName.Replace(".", "_").Replace("/", "_").Replace("\\", "_");
-        return Path.Combine(StagingDirectory, $"{safeName}.dfy");
+        var args = $"verify \"{dafnyPath}\""
+                 + $" --solver-path:\"{_z3SolverPath}\""
+                 + $" --verification-time-limit:{_verificationTimeoutSeconds}";
+
+        var (exitCode, stdout, stderr) = await RunDafnyAsync(args, ct);
+        var success = exitCode == 0 && !stdout.Contains("verification errors", StringComparison.OrdinalIgnoreCase);
+        return new Z3VerificationResult(success, exitCode, stdout, stderr, ParseVerificationErrors(stdout, stderr));
     }
 
-    private string BuildVerifyArguments(string dafnyPath) =>
-        $"verify \"{dafnyPath}\" --solver-path \"{_z3SolverPath}\"" +
-        $" --verification-time-limit {_verificationTimeoutSeconds}" +
-        " --standard-libraries";
-
-    private string BuildTranslateArguments(string dafnyPath) =>
-        $"translate cs \"{dafnyPath}\" --no-verify --allow-external-contracts --allow-warnings --translate-standard-library:false";
-
-    /// <summary>
-    /// Strip Dafny runtime helpers from translated C# that are already provided
-    /// by DafnyRuntime.dll. Including them causes CS0101 (duplicate definitions).
-    /// Strips:
-    /// - [assembly: DafnyAssembly.DafnySourceAttribute(...)] — multi-line attribute
-    /// - internal static class FuncExtensions { ... } — entire class block
-    /// - namespace Dafny { ... } — entire namespace block (contains ArrayHelpers)
-    /// </summary>
-    private static string StripDafnyRuntimeHelpers(string content)
+    public async Task<Z3TranslationResult> TranslateAsync(
+        string dafnyPath, string moduleName, CancellationToken ct = default)
     {
-        // Dafny 4.11 translated C# has this structure:
-        //   [assembly: DafnyAssembly...]     ← runtime boilerplate
-        //   namespace Dafny { ... }          ← runtime boilerplate (ArrayHelpers)
-        //   internal static class FuncExtensions { ... }  ← runtime boilerplate
-        //   namespace _module_X { ... }      ← THE MODULE CODE (what we want)
-        //
-        // Instead of stripping individual pieces, extract ONLY the module namespace
-        // and discard everything else. The runtime boilerplate is provided by DafnyRuntime.dll.
-        //
-        // After the namespace rename pass, the module namespace is _module_{moduleName}.
-        // We find it by looking for "namespace _module_" and brace-matching to the end.
+        EnsureStagingDirectory();
 
-        var moduleStart = content.IndexOf("namespace _module_");
-        if (moduleStart < 0)
-            return content;  // can't find module namespace — return as-is
+        var args = $"translate cs \"{dafnyPath}\""
+                 + " --no-verify"
+                 + " --allow-external-contracts"
+                 + " --allow-warnings"
+                 + " --translate-standard-library:false";
 
-        // Find the opening brace of the namespace
-        var braceStart = content.IndexOf('{', moduleStart);
-        if (braceStart < 0)
-            return content;
+        var (exitCode, stdout, stderr) = await RunDafnyAsync(args, ct);
 
-        // Match braces to find the end of the namespace
-        var depth = 0;
-        for (int i = braceStart; i < content.Length; i++)
+        if (exitCode != 0 && !stdout.Contains("namespace _module", StringComparison.Ordinal))
+            return new Z3TranslationResult(false, exitCode, stdout, stderr, null);
+
+        var rawCsharp = stdout;
+        if (string.IsNullOrEmpty(rawCsharp) || !rawCsharp.Contains("namespace _module"))
         {
-            if (content[i] == '{') depth++;
-            if (content[i] == '}') depth--;
-            if (depth == 0)
-            {
-                // Extract just the module namespace + closing brace
-                var moduleCode = content[moduleStart..(i + 1)];
-                // Add using statements that the translated C# needs
-                return "// Translated Dafny C# — runtime boilerplate stripped (provided by DafnyRuntime.dll)\n" +
-                       "using System;\nusing System.Numerics;\nusing System.Collections;\n\n" +
-                       moduleCode + "\n";
-            }
+            var csPath = Path.ChangeExtension(dafnyPath, ".cs");
+            if (File.Exists(csPath))
+                rawCsharp = await File.ReadAllTextAsync(csPath, ct);
         }
 
-        return content;  // brace matching failed — return as-is
+        if (string.IsNullOrEmpty(rawCsharp))
+            return new Z3TranslationResult(false, exitCode, stdout, stderr, null);
+
+        return new Z3TranslationResult(true, 0, stdout, stderr, PostProcessTranslation(rawCsharp, moduleName));
     }
 
+    internal static string PostProcessTranslation(string rawCsharp, string moduleName)
+    {
+        var processed = rawCsharp.Replace("namespace _module {", $"namespace _module_{moduleName} {{");
+        processed = processed.Replace("_module.", $"_module_{moduleName}.");
+
+        var nsStart = processed.IndexOf($"namespace _module_{moduleName}", StringComparison.Ordinal);
+        if (nsStart < 0)
+            return $"// ERROR: could not find namespace _module_{moduleName} in translated output\n{rawCsharp}";
+
+        var braceStart = processed.IndexOf('{', nsStart);
+        if (braceStart < 0)
+            return $"// ERROR: could not find opening brace for namespace _module_{moduleName}\n{rawCsharp}";
+
+        var braceEnd = FindMatchingBrace(processed, braceStart);
+        if (braceEnd < 0)
+            return $"// ERROR: unmatched braces for namespace _module_{moduleName}\n{rawCsharp}";
+
+        var namespaceBlock = processed.Substring(nsStart, braceEnd - nsStart + 1);
+
+        return $"using System;\nusing System.Numerics;\nusing System.Collections;\n\n{namespaceBlock}";
+    }
+
+    private static int FindMatchingBrace(string text, int openIndex)
+    {
+        var depth = 0;
+        for (var i = openIndex; i < text.Length; i++)
+        {
+            if (text[i] == '{') depth++;
+            else if (text[i] == '}') { depth--; if (depth == 0) return i; }
+        }
+        return -1;
+    }
+
+    private async Task<(int exitCode, string stdout, string stderr)> RunDafnyAsync(
+        string arguments, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = _dafnyExecutable,
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        using var process = new Process { StartInfo = psi };
+        process.Start();
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+        await process.WaitForExitAsync(ct);
+
+        return (process.ExitCode, await stdoutTask, await stderrTask);
+    }
+
+    private static string[] ParseVerificationErrors(string stdout, string stderr)
+    {
+        var errors = new List<string>();
+        var combined = stdout + "\n" + stderr;
+        foreach (var line in combined.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Contains("error:", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Contains("verification error", StringComparison.OrdinalIgnoreCase))
+                errors.Add(trimmed);
+        }
+        return [.. errors];
+    }
 }
+
+public sealed record Z3VerificationResult(bool Success, int ExitCode, string Stdout, string Stderr, string[] Errors);
+
+public sealed record Z3TranslationResult(bool Success, int ExitCode, string Stdout, string Stderr, string? CleanCsharp);

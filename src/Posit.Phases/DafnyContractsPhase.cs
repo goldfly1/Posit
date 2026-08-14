@@ -1,235 +1,118 @@
-using System.Text.Json;
-using Posit.Tools;
-using Posit.Contracts.Serialization;
-using static Posit.Contracts.Serialization.PositJson;
-
 namespace Posit.Phases;
 
 /// <summary>
-/// Dafny Contracts phase — the deterministic verification gate between
-/// Design Review and Implementation.
-///
-/// The architect writes .dfy skeletons with requires/ensures during the
-/// Architecture phase. This phase takes those skeletons and runs Z3 to
-/// verify that the SPEC is sound (contracts without bodies). If the skeleton
-/// verifies, the module is marked as having a proven exoskeleton. If it
-/// doesn't verify, a correction signal goes back to the architect with the
-/// exact proof failure.
-///
-/// This is NOT the same as Shepherd's DafnyPhase, which ran AFTER Implementation
-/// and asked the model to write Dafny from C# code. In Posit, the contracts
-/// come FIRST — the exoskeleton before the meat. Z3 is the judge, not the model.
-///
-/// Model calls: NONE. This phase is entirely deterministic.
+/// Phase 2: Dafny Contracts. Z3 verifies each .dfy skeleton composed by
+/// ArchitecturePhase. No model call — purely deterministic. The skeleton
+/// files are on disk (the carapace). Z3 confirms the contracts are sound.
 /// </summary>
 public sealed class DafnyContractsPhase : IPhase
 {
-    private static readonly JsonSerializerOptions JsonOptions = Options;
+    private readonly Z3Runner _z3;
 
-    private readonly Z3Runner _z3Runner;
+    public DafnyContractsPhase(Z3Runner z3) => _z3 = z3;
 
-    public DafnyContractsPhase(Z3Runner z3Runner)
-    {
-        _z3Runner = z3Runner ?? throw new ArgumentNullException(nameof(z3Runner));
-    }
-
-    public PhaseId Id => new("dafny-contracts");
-    public PhaseName Name => new("Dafny Contracts Verification");
-    public PhaseId[] Dependencies => [new PhaseId("design-review")];
-
-    public ArtifactSchema OutputSchema => new()
+    public PhaseId Id { get; } = new("dafny-contracts");
+    public string Name => "Dafny Contracts";
+    public PhaseId[] Dependencies { get; } = [new("architecture")];
+    public ArtifactSchema OutputSchema { get; } = new()
     {
         Kind = ArtifactKind.DafnyContract,
         SchemaVersion = "1.0.0",
-        PayloadClrTypeName = typeof(DafnyContractResult).FullName!
+        PayloadClrTypeName = nameof(DafnyContractResult)
     };
 
-    public Task InitializeAsync(PhaseContext context, CancellationToken ct) => Task.CompletedTask;
+    public Task InitializeAsync(PhaseContext context, CancellationToken ct = default) => Task.CompletedTask;
 
-    public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct)
+    public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
-        // Extract Dafny contract sources from the architecture artifact
-        var contractSources = ExtractContractSources(context);
-
-        if (contractSources.Count == 0)
-        {
-            Console.Error.WriteLine("[Posit] Dafny Contracts — no .dfy skeletons found, skipping");
-            return new PhaseResult
-            {
-                PhaseId = Id,
-                Status = PhaseStatus.Success,
-                Artifacts = CreateEmptyBundle(context),
-                Costs = CostSnapshot.Zero,
-                AttemptNumber = context.AttemptNumber
-            };
-        }
+        var contract = ExtractContract(context);
+        if (contract == null)
+            return Fail(context, "No ArchitectureContract in input artifacts");
 
         var results = new List<DafnyContractResult>();
-        var anyFailed = false;
+        var warnings = new List<string>();
 
-        foreach (var (moduleName, dafnyPath) in contractSources)
+        foreach (var comp in contract.Components)
         {
-            Console.Error.WriteLine($"[Posit] Dafny Contracts — verifying skeleton for '{moduleName}' at {dafnyPath}...");
+            if (comp.Classification == ModuleClassification.IoShell) continue;
 
-            var result = await VerifySkeletonAsync(moduleName, dafnyPath, ct);
-            results.Add(result);
+            var dafnyPath = ResolveDafnyPath(context, comp);
+            if (!File.Exists(dafnyPath))
+            {
+                warnings.Add($"Skeleton file missing: {dafnyPath}");
+                continue;
+            }
 
-            if (!result.IsVerified)
-                anyFailed = true;
+            var verifyResult = await _z3.VerifyAsync(dafnyPath, ct);
 
-            Console.Error.WriteLine(
-                $"[Posit] Dafny Contracts — module '{moduleName}' skeleton verified={result.IsVerified}");
+            results.Add(new DafnyContractResult
+            {
+                ModuleName = comp.Name,
+                DafnySource = await File.ReadAllTextAsync(dafnyPath, ct),
+                DafnyPath = dafnyPath,
+                IsVerified = verifyResult.Success,
+                VerificationOutput = verifyResult.Stdout,
+                ContractSummary = verifyResult.Success ? "Verified" : "Failed"
+            });
+
+            if (!verifyResult.Success)
+                warnings.Add($"Z3 verification failed for '{comp.Name}': {verifyResult.Stdout}");
         }
 
-        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(results, JsonOptions);
-        var bundle = new ArtifactBundle
-        {
-            Id = ArtifactId.New(),
-            SessionId = context.SessionId,
-            SourcePhase = Id,
-            SchemaVersion = OutputSchema.SchemaVersion,
-            Kind = OutputSchema.Kind,
-            ProducedAt = DateTimeOffset.UtcNow,
-            PayloadJson = payloadJson,
-            References = context.InputArtifacts
-                .Select(a => new ArtifactReference(a.Id, a.Kind, a.SchemaVersion))
-                .ToArray()
-        };
+        var allVerified = results.All(r => r.IsVerified);
+        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(results.ToArray(), PositJson.Options);
 
         return new PhaseResult
         {
-            PhaseId = Id,
-            Status = PhaseStatus.Success,
-            Artifacts = bundle,
-            Costs = CostSnapshot.Zero, // No model calls — pure Z3
-            AttemptNumber = context.AttemptNumber,
-            Warnings = anyFailed
-                ? [$"dafny.partial_skeleton_verification: {results.Count(r => r.IsVerified)}/{results.Count} skeletons verified. Unverified skeletons will be sent back to the architect."]
-                : []
+            PhaseId = context.PhaseId,
+            Status = allVerified ? PhaseStatus.Success : PhaseStatus.Failed,
+            Artifacts = new ArtifactBundle
+            {
+                Id = ArtifactId.New(), SessionId = context.SessionId,
+                SourcePhase = context.PhaseId, SchemaVersion = "1.0.0",
+                Kind = ArtifactKind.DafnyContract,
+                PayloadJson = payloadJson, ProducedAt = DateTimeOffset.UtcNow
+            },
+            Costs = CostSnapshot.Zero,
+            Warnings = warnings.ToArray()
         };
     }
 
-    /// <summary>
-    /// Extracts (moduleName, dafnySource) pairs from the architecture artifact
-    /// in the input artifacts. Only modules classified as Dafny or Mixed have
-    /// .dfy skeletons — including io-shell modules (extern portals wrapped in a module).
-    /// </summary>
-    private static List<(string ModuleName, string DafnyPath)> ExtractContractSources(PhaseContext context)
+    public ValidationResult ValidateOutput(PhaseResult result)
     {
-        var sources = new List<(string, string)>();
-
-        // Check DesignContext first (snowballed from Architecture)
-        if (context.DesignContext?.Components is { Length: > 0 } components)
-        {
-            foreach (var comp in components)
-            {
-                if (!string.IsNullOrWhiteSpace(comp.DafnyContractPath)
-                    && File.Exists(comp.DafnyContractPath))
-                {
-                    sources.Add((comp.Name, comp.DafnyContractPath!));
-                }
-            }
-        }
-
-        // Check input artifacts for the architecture contract
-        foreach (var artifact in context.InputArtifacts)
-        {
-            if (artifact.Kind != ArtifactKind.ArchitectureContract)
-                continue;
-
-            try
-            {
-                var json = System.Text.Encoding.UTF8.GetString(artifact.PayloadJson);
-                var archContract = JsonSerializer.Deserialize<ArchitectureContract>(json, JsonOptions);
-                if (archContract?.Components is null)
-                    continue;
-
-                foreach (var comp in archContract.Components)
-                {
-                    if (!string.IsNullOrWhiteSpace(comp.DafnyContractPath)
-                        && File.Exists(comp.DafnyContractPath))
-                    {
-                        sources.Add((comp.Name, comp.DafnyContractPath!));
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[Posit] Dafny Contracts — failed to parse architecture artifact: {ex.Message}");
-            }
-        }
-
-        return sources;
+        if (result.Status != PhaseStatus.Success)
+            return new ValidationResult { IsValid = false, Errors = result.Warnings };
+        return new ValidationResult { IsValid = true };
     }
 
-    /// <summary>
-    /// Writes the .dfy skeleton to a temp file and runs Z3 verification.
-    /// Returns a DafnyContractResult with the verification status.
-    /// </summary>
-    private async Task<DafnyContractResult> VerifySkeletonAsync(
-        string moduleName,
-        string dafnyPath,
-        CancellationToken ct)
+    private static string ResolveDafnyPath(PhaseContext ctx, Component comp) =>
+        !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
+            ? comp.DafnyContractPath!
+            : Path.Combine(GetStagingDir(ctx), $"{comp.Name}.dfy");
+
+    private static ArchitectureContract? ExtractContract(PhaseContext ctx)
     {
-        // Read the skeleton from disk — the file is the authority
-        var dafnySource = await File.ReadAllTextAsync(dafnyPath, ct);
-
-        var (verified, output) = await _z3Runner.VerifyAsync(dafnyPath, ct);
-
-        return new DafnyContractResult
-        {
-            ModuleName = moduleName,
-            DafnySource = dafnySource,
-            DafnyPath = dafnyPath,
-            IsVerified = verified,
-            VerificationOutput = output,
-            ContractSummary = verified
-                ? $"Skeleton verified — spec is sound ({moduleName})"
-                : $"Skeleton verification failed — correction needed ({moduleName})"
-        };
+        foreach (var a in ctx.InputArtifacts)
+            if (a.Kind == ArtifactKind.ArchitectureContract)
+                try { return JsonSerializer.Deserialize<ArchitectureContract>(a.PayloadJson, PositJson.Options); }
+                catch { }
+        return null;
     }
 
-    private static ArtifactBundle CreateEmptyBundle(PhaseContext context)
+    private static string GetStagingDir(PhaseContext ctx) =>
+        Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging", ctx.SessionId.Value, "dafny");
+
+    private static PhaseResult Fail(PhaseContext ctx, string error) => new()
     {
-        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(
-            Array.Empty<DafnyContractResult>(), JsonOptions);
-        return new ArtifactBundle
-        {
-            Id = ArtifactId.New(),
-            SessionId = context.SessionId,
-            SourcePhase = new PhaseId("dafny-contracts"),
-            SchemaVersion = "1.0.0",
-            Kind = ArtifactKind.DafnyContract,
-            ProducedAt = DateTimeOffset.UtcNow,
-            PayloadJson = payloadJson,
-            References = []
-        };
-    }
+        PhaseId = ctx.PhaseId, Status = PhaseStatus.Failed,
+        Artifacts = EmptyBundle(ctx), Costs = CostSnapshot.Zero, Warnings = [error]
+    };
 
-    public Task<ValidationResult> ValidateOutputAsync(ArtifactBundle output, CancellationToken ct)
+    private static ArtifactBundle EmptyBundle(PhaseContext ctx) => new()
     {
-        var errors = new List<string>();
-
-        if (output.Kind != ArtifactKind.DafnyContract)
-            errors.Add("validation.schema_mismatch: Kind");
-        if (output.SchemaVersion != "1.0.0")
-            errors.Add("validation.schema_mismatch: SchemaVersion");
-
-        try
-        {
-            var results = JsonSerializer.Deserialize<DafnyContractResult[]>(output.PayloadJson, JsonOptions);
-            if (results is null)
-                errors.Add("validation.missing_required_field: Payload");
-        }
-        catch (JsonException ex)
-        {
-            errors.Add($"validation.schema_mismatch: {ex.Message}");
-        }
-
-        return Task.FromResult(new ValidationResult
-        {
-            IsValid = errors.Count == 0,
-            Errors = errors.ToArray()
-        });
-    }
+        Id = ArtifactId.New(), SessionId = ctx.SessionId,
+        SourcePhase = ctx.PhaseId, SchemaVersion = "1.0.0",
+        Kind = ArtifactKind.DafnyContract,
+        PayloadJson = [], ProducedAt = DateTimeOffset.UtcNow
+    };
 }

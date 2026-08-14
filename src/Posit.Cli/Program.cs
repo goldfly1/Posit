@@ -1,412 +1,195 @@
-using System.Net.Http;
-using Posit.AI.Models;
 using Posit.Cli.Orchestration;
-using Posit.Core.Graph;
-using Posit.Core.State;
-using Posit.Phases;
-using Posit.Tools;
 
-// === Posit CLI — spec compiler pipeline ===
-// Usage: posit run --spec="build a CSV parser" [--phases=architecture,dafny-contracts,...]
-//        posit status <session-id>
-//        posit artifacts <session-id>
+namespace Posit.Cli;
 
-var cliArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
-
-if (cliArgs.Length == 0)
+/// <summary>Adapter from PatternRegistry to IPatternRegistry.</summary>
+internal sealed class PatternRegistryAdapter : IPatternRegistry
 {
-    Console.Error.WriteLine("Posit — a spec compiler. Nothing ships unproven.");
-    Console.Error.WriteLine();
-    Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  posit run --spec=\"<request>\" [--phases=<phases>]   Run the pipeline");
-    Console.Error.WriteLine("  posit status <session-id>                          Show session status");
-    Console.Error.WriteLine("  posit resume <session-id>                           Resume a failed/unfinished session");
-    Console.Error.WriteLine("  posit artifacts <session-id>                        List artifacts");
-    Console.Error.WriteLine("  posit verify <session-id>                           Verify C# output in Docker");
-    Console.Error.WriteLine("  posit harness <session-id>                          Run bot harness (build + test CLI)");
-    Console.Error.WriteLine();
-    Console.Error.WriteLine("Phases: architecture, dafny-contracts, dafny-implementation,");
-    Console.Error.WriteLine("        csharp-implementation, qa");
-    Console.Error.WriteLine();
-    Console.Error.WriteLine("Models (via Ollama on localhost:11434):");
-    Console.Error.WriteLine("  deepseek-v4-flash:cloud  — All phases (architecture, QA, etc.)");
-    Console.Error.WriteLine("  glm-5.2:cloud            — Alternative architect (more consistent pattern selection)");
-    return 0;
+    private readonly PatternRegistry _inner;
+    public PatternRegistryAdapter(PatternRegistry inner) => _inner = inner;
+
+    public string PatternsDirectory => "patterns";
+    public Dictionary<string, string> CSharpStubs =>
+        _inner.GetAllCSharpStubs().ToDictionary(s => s.Name, s => s.Template);
+    public bool HasPattern(string name) => _inner.HasPattern(name);
+    public string GetPattern(string name) => _inner.GetPattern(name)?.Body ?? "";
+    public string[] GetPatternSignatures(string patternName) =>
+        _inner.GetPatternSignatures(patternName).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    public MethodSignature[] ExtractMethodSignatures(string patternName) => [];
+    public string[] SelectCSharpStubs(string[] stubNames) =>
+        [.. _inner.SelectCSharpStubs("", stubNames).Select(s => s.Name)];
+    public string ComposeSkeleton(string patternName, string[] stubNames, string? parametersJson) =>
+        _inner.ComposeSkeleton(patternName, stubNames, parametersJson ?? patternName);
+    public string ComposeIoShellSkeleton(string stubName, string componentName) =>
+        _inner.ComposeIoShellSkeleton([stubName], componentName);
+    public string[] MaterializeDependencies(string patternName, string stagingDir)
+    { _inner.MaterializeDependencies(stagingDir, patternName); return []; }
 }
 
-var command = cliArgs[0];
-
-try
+/// <summary>CLI entry point: run, harness, status, resume, artifacts.</summary>
+internal static class Program
 {
-    return command switch
+    private static async Task<int> Main(string[] args)
     {
-        "run" => await RunCommand(args.Skip(1).ToArray()),
-        "status" => StatusCommand(args.Skip(1).ToArray()),
-        "resume" => await ResumeCommand(args.Skip(1).ToArray()),
-        "artifacts" => await ArtifactsCommand(args.Skip(1).ToArray()),
-        "verify" => await VerifyCommand(args.Skip(1).ToArray()),
-        "harness" => await HarnessCommand(args.Skip(1).ToArray()),
-        _ => UnknownCommand(command)
-    };
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"[Posit] FATAL: {ex.Message}");
-    Console.Error.WriteLine(ex.StackTrace);
-    return 1;
-}
-
-static string GetRunPatternsDirectory()
-{
-    var candidate = Path.Combine(Directory.GetCurrentDirectory(), "patterns");
-    if (Directory.Exists(candidate))
-        return candidate;
-
-    candidate = Path.Combine(AppContext.BaseDirectory, "patterns");
-    if (Directory.Exists(candidate))
-        return candidate;
-
-    var assemblyLoc = typeof(Program).Assembly.Location;
-    if (!string.IsNullOrEmpty(assemblyLoc))
-    {
-        var root = Directory.GetParent(assemblyLoc);
-        while (root is not null)
+        if (args.Length == 0) { PrintUsage(); return 1; }
+        try
         {
-            var test = Path.Combine(root.FullName, "patterns");
-            if (Directory.Exists(test))
-                return test;
-            root = root.Parent;
+            return args[0].ToLowerInvariant() switch
+            {
+                "run" => await RunCommand(args[1..]),
+                "harness" => await HarnessCommand(args[1..]),
+                "status" => await StatusCommand(),
+                "resume" => await ResumeCommand(args[1..]),
+                "artifacts" => await ArtifactsCommand(args[1..]),
+                _ => UnknownCommand(args[0])
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"FATAL: {ex.Message}\n{ex.StackTrace}");
+            return 1;
         }
     }
 
-    throw new DirectoryNotFoundException(
-        "Pattern registry not found. Run from a directory containing a 'patterns' folder, " +
-        "or ensure patterns/ is copied to the output directory.");
-}
-
-static int UnknownCommand(string cmd)
-{
-    Console.Error.WriteLine($"Unknown command: {cmd}");
-    Console.Error.WriteLine("Use: posit run <request> | posit status <id> | posit artifacts <id> | posit resume <id> | posit verify <id>");
-    return 1;
-}
-
-static int StatusCommand(string[] args)
-{
-    if (args.Length < 1)
+    private static async Task<int> RunCommand(string[] args)
     {
-        Console.Error.WriteLine("Usage: posit status <session-id>");
-        return 1;
+        var spec = ParseStringArg(args, "--spec") ?? "";
+        if (string.IsNullOrWhiteSpace(spec))
+        { Console.Error.WriteLine("Error: --spec is required for 'run'"); return 1; }
+
+        var (orchestrator, stateStore) = BuildOrchestrator();
+        var sessionId = SessionId.New();
+        var state = SessionState.Create(sessionId, CreateProfile(sessionId),
+            new InitialRequest { Prompt = spec, Language = "C#", Framework = ".NET 10" });
+        state = state.WithDependencyGraph(BuildGraph());
+        await stateStore.SaveSessionAsync(sessionId, state);
+        Console.Error.WriteLine($"[posit] session {sessionId} starting: {spec[..Math.Min(80, spec.Length)]}...");
+        state = await orchestrator.RunAsync(state);
+        Console.Error.WriteLine($"[posit] session {sessionId} finished: {state.Status}");
+        return state.Status == SessionStatus.Completed ? 0 : 1;
     }
 
-    var sessionId = new SessionId(args[0]);
-    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
-    var stateStore = new StateStore(dataSource);
-    var state = stateStore.LoadSessionAsync(sessionId).GetAwaiter().GetResult();
-    if (state is null)
+    private static async Task<int> HarnessCommand(string[] args)
     {
-        Console.Error.WriteLine($"[Posit] Session {sessionId.Value} not found.");
-        return 1;
+        var id = args.Length > 0 ? args[0] : "";
+        if (string.IsNullOrWhiteSpace(id))
+        { Console.Error.WriteLine("Error: sessionId is required for 'harness'"); return 1; }
+
+        var harness = new BotHarness(new ArtifactRepository());
+        var result = await harness.RunAsync(new SessionId(id));
+        Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
+        if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
+        foreach (var tc in result.Results)
+            Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output[..Math.Min(60, tc.Output.Length)]}");
+        return result.Success ? 0 : 1;
     }
 
-    Console.Error.WriteLine($"[Posit] Session {sessionId.Value}:");
-    Console.Error.WriteLine($"  Status: {state.Status}");
-    Console.Error.WriteLine($"  Current phase: {state.CurrentPhaseId?.Value ?? "(none)"}");
-    Console.Error.WriteLine($"  Current attempt: {state.CurrentAttempt}");
-    Console.Error.WriteLine($"  Completed phases: {string.Join(", ", state.CompletedPhases.Select(p => p.Value))}");
-    return 0;
-}
-
-static async Task<int> ResumeCommand(string[] args)
-{
-    if (args.Length < 1)
+    private static async Task<int> StatusCommand()
     {
-        Console.Error.WriteLine("Usage: posit resume <session-id>");
-        return 1;
+        var sessions = await new StateStore().ListAllSessionsAsync();
+        if (sessions.Length == 0) { Console.WriteLine("No sessions found."); return 0; }
+        Console.WriteLine($"{"Session",-30} {"Status",-12} {"Phase",-22} {"Att",-4} {"Done",-4}");
+        Console.WriteLine(new string('-', 75));
+        foreach (var s in sessions)
+            Console.WriteLine(
+                $"{s.SessionId.Value,-30} {s.Status,-12} {s.CurrentPhaseId?.Value ?? "-",-22} {s.CurrentAttempt,-4} {s.CompletedPhases.Length,-4}");
+        return 0;
     }
 
-    var sessionId = new SessionId(args[0]);
-    Console.Error.WriteLine($"[Posit] Resuming session {sessionId.Value}...");
-
-    var http = new HttpClient();
-    var gateway = new OllamaModelGateway(http);
-    var z3Runner = new Z3Runner();
-    var reducer = new FsmReducer();
-    var graphEngine = new DependencyGraphEngine();
-    var phaseController = new PhaseController();
-
-    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
-    var migrationRunner = new Posit.Data.Migrations.MigrationRunner(
-        dataSource,
-        Path.Combine(AppContext.BaseDirectory, "migrations"));
-    if (!Directory.Exists(Path.Combine(AppContext.BaseDirectory, "migrations")))
+    private static async Task<int> ResumeCommand(string[] args)
     {
-        migrationRunner = new Posit.Data.Migrations.MigrationRunner(
-            dataSource,
-            Path.Combine(Directory.GetCurrentDirectory(), "migrations"));
+        var id = args.Length > 0 ? args[0] : "";
+        if (string.IsNullOrWhiteSpace(id))
+        { Console.Error.WriteLine("Error: sessionId is required for 'resume'"); return 1; }
+
+        var (orchestrator, stateStore) = BuildOrchestrator();
+        var state = await stateStore.LoadSessionAsync(new SessionId(id));
+        if (state is null) { Console.Error.WriteLine($"Session not found: {id}"); return 1; }
+        state = state.WithStatus(SessionStatus.Planning);
+        Console.Error.WriteLine($"[posit] resuming session {id}");
+        state = await orchestrator.RunAsync(state);
+        Console.Error.WriteLine($"[posit] session {id} finished: {state.Status}");
+        return state.Status == SessionStatus.Completed ? 0 : 1;
     }
 
-    ArtifactRepository? artifactRepo = null;
-    StateStore? stateStore = null;
-    try
+    private static async Task<int> ArtifactsCommand(string[] args)
     {
-        await migrationRunner.ApplyAsync();
-        artifactRepo = new ArtifactRepository(dataSource);
-        stateStore = new StateStore(dataSource);
-        PromptLogger.Initialize(dataSource);
-        AuditRepository.Initialize(dataSource);
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"[Posit] DB not available: {ex.Message}");
-        return 1;
+        var id = args.Length > 0 ? args[0] : "";
+        if (string.IsNullOrWhiteSpace(id))
+        { Console.Error.WriteLine("Error: sessionId is required for 'artifacts'"); return 1; }
+
+        var artifacts = await new ArtifactRepository().ListBySessionAsync(new SessionId(id));
+        if (artifacts.Length == 0) { Console.WriteLine($"No artifacts for session {id}"); return 0; }
+        Console.WriteLine($"Artifacts for session {id} ({artifacts.Length} total):");
+        foreach (var a in artifacts)
+            Console.WriteLine($"  [{a.SourcePhase.Value,-22}] {a.Kind,-22} {a.SchemaVersion} {a.ProducedAt:O}");
+        return 0;
     }
 
-    var phases_impl = new IPhase[]
+    private static (PositOrchestrator, StateStore) BuildOrchestrator()
     {
-        new ArchitecturePhase(gateway, new PatternRegistry(GetRunPatternsDirectory())),
-        new DafnyContractsPhase(z3Runner),
-        new DafnyImplementationPhase(gateway, z3Runner),
-        new CSharpImplementationPhase(gateway),
-        new QaPhase()
-    };
+        var gateway = new OllamaModelGateway(new HttpClient());
+        var z3 = new Z3Runner(
+            @"C:\Users\goldf\.dotnet\tools\dafny.exe",
+            @"C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe");
+        var registry = new PatternRegistry(@"C:\Users\goldf\Posit\patterns");
+        var adapter = new PatternRegistryAdapter(registry);
+        var artifactRepo = new ArtifactRepository();
+        var stateStore = new StateStore();
+        var fsm = new FsmReducer();
+        var graph = new DependencyGraphEngine();
 
-    var orchestrator = new PositOrchestrator(reducer, graphEngine, phaseController, phases_impl, artifactRepo, stateStore);
+        var controller = new PhaseController();
+        controller.Register(new ArchitecturePhase(gateway, registry));
+        controller.Register(new DafnyContractsPhase(z3));
+        controller.Register(new DafnyImplementationPhase(gateway, z3));
+        controller.Register(new CSharpImplementationPhase(gateway, adapter));
+        controller.Register(new QaPhase());
 
-    var loaded = await orchestrator.ResumeAsync(sessionId);
-    if (!loaded)
-        return 1;
-
-    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
-    var finalState = await orchestrator.RunAsync(sessionId, cts.Token);
-
-    Console.Error.WriteLine();
-    Console.Error.WriteLine($"[Posit] === PIPELINE COMPLETE ===");
-    Console.Error.WriteLine($"[Posit] Final status: {finalState.Status}");
-    Console.Error.WriteLine($"[Posit] Completed phases: {string.Join(", ", finalState.CompletedPhases.Select(p => p.Value))}");
-    Console.Error.WriteLine($"[Posit] Total cost: {finalState.RunningCosts.AmountUsd:C}");
-    Console.Error.WriteLine($"[Posit] Input tokens: {finalState.RunningCosts.InputTokens:N0}");
-    Console.Error.WriteLine($"[Posit] Output tokens: {finalState.RunningCosts.OutputTokens:N0}");
-
-    return finalState.Status == SessionStatus.Completed ? 0 : 1;
-}
-
-static async Task<int> ArtifactsCommand(string[] args)
-{
-    if (args.Length < 1)
-    {
-        Console.Error.WriteLine("Usage: posit artifacts <session-id>");
-        return 1;
+        return (new PositOrchestrator(controller, fsm, graph, artifactRepo, stateStore), stateStore);
     }
 
-    var sessionId = new SessionId(args[0]);
-    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
-    var repo = new ArtifactRepository(dataSource);
-    var artifacts = await repo.ListBySessionAsync(sessionId);
-    Console.Error.WriteLine($"[Posit] Artifacts for session {sessionId.Value}: {artifacts.Length}");
-    foreach (var a in artifacts)
+    private static ProjectProfile CreateProfile(SessionId sessionId) => new()
     {
-        Console.Error.WriteLine($"  - {a.Kind} from {a.SourcePhase.Value} ({a.PayloadJson.Length} bytes) at {a.ProducedAt:O}");
-    }
-    return 0;
-}
-
-static async Task<int> VerifyCommand(string[] args)
-{
-    if (args.Length < 1)
-    {
-        Console.Error.WriteLine("Usage: posit verify <session-id>");
-        return 1;
-    }
-
-    var sessionId = new SessionId(args[0]);
-    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
-    var repo = new ArtifactRepository(dataSource);
-    var verifier = new DockerVerifier(repo);
-
-    Console.Error.WriteLine($"[Posit] Verifying session {sessionId.Value} in Docker...");
-    var (success, output) = await verifier.VerifyAsync(sessionId);
-    Console.WriteLine(output);
-    Console.Error.WriteLine(success
-        ? "[Posit] Docker verification succeeded."
-        : "[Posit] Docker verification failed.");
-    return success ? 0 : 1;
-}
-
-static async Task<int> HarnessCommand(string[] args)
-{
-    if (args.Length < 1)
-    {
-        Console.Error.WriteLine("Usage: posit harness <session-id>");
-        return 1;
-    }
-
-    var sessionId = new SessionId(args[0]);
-    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
-    var repo = new ArtifactRepository(dataSource);
-    var harness = new BotHarness(repo);
-
-    Console.Error.WriteLine($"[Posit] Bot Harness — testing session {sessionId.Value}...");
-    var result = await harness.RunAsync(sessionId);
-
-    Console.Error.WriteLine();
-    Console.Error.WriteLine($"=== Bot Harness Result ===");
-    Console.Error.WriteLine($"  Success: {result.Success}");
-    Console.Error.WriteLine($"  Summary: {result.Summary}");
-    Console.Error.WriteLine($"  CLI Component: {result.CliComponent}");
-    Console.Error.WriteLine($"  Tests: {result.TestResults.Count}");
-
-    foreach (var tc in result.TestResults)
-    {
-        var status = tc.Passed ? "PASS" : "FAIL";
-        Console.Error.WriteLine($"  [{status}] {tc.Name} (exit={tc.ExitCode}, {tc.ElapsedMs}ms)");
-        if (!tc.Passed && !string.IsNullOrEmpty(tc.Error))
-            Console.Error.WriteLine($"         error: {tc.Error[..Math.Min(tc.Error.Length, 200)]}");
-    }
-
-    return result.Success ? 0 : 1;
-}
-
-static async Task<int> RunCommand(string[] args)
-{
-    // Parse --spec="..." or --spec "..." and --phases=... from args
-    string? request = null;
-    for (var i = 0; i < args.Length; i++)
-    {
-        if (args[i].StartsWith("--spec="))
-        {
-            request = args[i]["--spec=".Length..];
-        }
-        else if (args[i] == "--spec" && i + 1 < args.Length)
-        {
-            request = args[++i];
-        }
-        else if (args[i].StartsWith("--phases="))
-        {
-            // handled below
-        }
-        else if (request is null && !args[i].StartsWith("--"))
-        {
-            // First non-flag argument is the request (backward compat)
-            request = args[i];
-        }
-    }
-
-    if (string.IsNullOrWhiteSpace(request))
-    {
-        Console.Error.WriteLine("Usage: posit run --spec=\"<request>\" [--phases=<phases>]");
-        Console.Error.WriteLine("Example: posit run --spec=\"Build a CSV parser library\"");
-        return 1;
-    }
-
-    var phaseArg = args.FirstOrDefault(a => a.StartsWith("--phases="));
-    var phases = phaseArg is not null
-        ? phaseArg["--phases=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => new PhaseId(p.Trim())).ToArray()
-        : [KnownPhases.Architecture, KnownPhases.DafnyContracts,
-           KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation,
-           KnownPhases.Qa];
-
-    Console.Error.WriteLine($"[Posit] Request: {request}");
-    Console.Error.WriteLine($"[Posit] Phases: {string.Join(" → ", phases.Select(p => p.Value))}");
-    Console.Error.WriteLine();
-
-    // Wire up the pipeline
-    var http = new HttpClient();
-    var gateway = new OllamaModelGateway(http);
-    var z3Runner = new Z3Runner();
-    var reducer = new FsmReducer();
-    var graphEngine = new DependencyGraphEngine();
-    var phaseController = new PhaseController();
-
-    // Database layer — run migrations, then create repos
-    var dataSource = Posit.Data.Configuration.DbConnectionProvider.CreateDataSource();
-    var migrationRunner = new Posit.Data.Migrations.MigrationRunner(
-        dataSource,
-        Path.Combine(AppContext.BaseDirectory, "migrations"));
-    // Try to find migrations relative to working directory too
-    if (!Directory.Exists(Path.Combine(AppContext.BaseDirectory, "migrations")))
-    {
-        migrationRunner = new Posit.Data.Migrations.MigrationRunner(
-            dataSource,
-            Path.Combine(Directory.GetCurrentDirectory(), "migrations"));
-    }
-
-    ArtifactRepository? artifactRepo = null;
-    StateStore? stateStore = null;
-    try
-    {
-        Console.Error.WriteLine("[Posit] Running migrations...");
-        var applied = await migrationRunner.ApplyAsync();
-        Console.Error.WriteLine($"[Posit] {applied.Count} migrations applied");
-        artifactRepo = new ArtifactRepository(dataSource);
-        stateStore = new StateStore(dataSource);
-        PromptLogger.Initialize(dataSource);
-        AuditRepository.Initialize(dataSource);
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"[Posit] DB not available (running in-memory): {ex.Message}");
-    }
-
-    var phases_impl = new IPhase[]
-    {
-        new ArchitecturePhase(gateway, new PatternRegistry(GetRunPatternsDirectory())),
-        new DafnyContractsPhase(z3Runner),
-        new DafnyImplementationPhase(gateway, z3Runner),
-        new CSharpImplementationPhase(gateway),
-        new QaPhase()
-    };
-
-    var orchestrator = new PositOrchestrator(reducer, graphEngine, phaseController, phases_impl, artifactRepo, stateStore);
-
-    // Create profile
-    var profile = new ProjectProfile
-    {
-        Id = new ProjectId("posit-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")),
+        Id = new ProjectId($"posit-{sessionId.Value[..8]}"),
         Name = "Posit Run",
-        Phases = phases,
-        Budget = new BudgetRemaining { Amount = 1000, Cap = 1000 },
+        Phases = [KnownPhases.Architecture, KnownPhases.DafnyContracts,
+                  KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation, KnownPhases.Qa],
+        MaxRetriesPerPhase = 3,
+        Budget = new BudgetRemaining { Amount = 10m, Cap = 10m },
         Approvals = new ApprovalConfig
         {
-            TimeoutPolicy = GateTimeoutPolicy.AutoReject,
-            GateTimeout = TimeSpan.FromMinutes(10)
+            TimeoutPolicy = GateTimeoutPolicy.AutoApprove,
+            GateTimeout = TimeSpan.FromMinutes(5)
         }
     };
 
-    var initialRequest = new InitialRequest
+    private static DependencyGraph BuildGraph() => new DependencyGraphEngine().Build(
+        [KnownPhases.Architecture, KnownPhases.DafnyContracts,
+         KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation, KnownPhases.Qa],
+        [[], [KnownPhases.Architecture], [KnownPhases.DafnyContracts],
+         [KnownPhases.DafnyImplementation], [KnownPhases.CSharpImplementation]]);
+
+    private static string? ParseStringArg(string[] args, string name)
     {
-        Prompt = request,
-        Language = "C#",
-        Framework = ".NET 10"
-    };
-
-    // Start session
-    var sessionId = await orchestrator.StartSessionAsync(profile, initialRequest);
-    Console.Error.WriteLine($"[Posit] Session: {sessionId.Value}");
-    Console.Error.WriteLine();
-
-    // Run the pipeline
-    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
-    var finalState = await orchestrator.RunAsync(sessionId, cts.Token);
-
-    // Report results
-    Console.Error.WriteLine();
-    Console.Error.WriteLine($"[Posit] === PIPELINE COMPLETE ===");
-    Console.Error.WriteLine($"[Posit] Final status: {finalState.Status}");
-    Console.Error.WriteLine($"[Posit] Completed phases: {string.Join(", ", finalState.CompletedPhases.Select(p => p.Value))}");
-
-    // Cost tracking
-    Console.Error.WriteLine($"[Posit] Total cost: {finalState.RunningCosts.AmountUsd:C}");
-    Console.Error.WriteLine($"[Posit] Input tokens: {finalState.RunningCosts.InputTokens:N0}");
-    Console.Error.WriteLine($"[Posit] Output tokens: {finalState.RunningCosts.OutputTokens:N0}");
-
-    var artifacts = orchestrator.GetArtifacts(sessionId);
-    Console.Error.WriteLine($"[Posit] Artifacts produced: {artifacts.Count}");
-    foreach (var artifact in artifacts)
-    {
-        Console.Error.WriteLine($"  - {artifact.Kind} from {artifact.SourcePhase.Value} ({artifact.PayloadJson.Length} bytes)");
+        foreach (var arg in args)
+            if (arg.StartsWith($"{name}=", StringComparison.OrdinalIgnoreCase))
+                return arg[(name.Length + 1)..].Trim('"');
+        return null;
     }
 
-    return finalState.Status == SessionStatus.Completed ? 0 : 1;
+    private static int UnknownCommand(string command)
+    { Console.Error.WriteLine($"Unknown command: {command}"); PrintUsage(); return 1; }
+
+    private static void PrintUsage()
+    {
+        Console.Error.WriteLine("Usage: posit <command> [options]");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("Commands:");
+        Console.Error.WriteLine("  run --spec=\"<spec text>\"   Run the full pipeline on a spec");
+        Console.Error.WriteLine("  harness <sessionId>         Run the bot harness on a session");
+        Console.Error.WriteLine("  status                      List all sessions");
+        Console.Error.WriteLine("  resume <sessionId>         Resume a paused/failed session");
+        Console.Error.WriteLine("  artifacts <sessionId>       List artifacts for a session");
+    }
 }

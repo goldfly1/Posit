@@ -1,23 +1,17 @@
-using Posit.Contracts.Core;
-
 namespace Posit.Phases;
 
 /// <summary>
-/// Contract every pipeline phase implements. Each phase is a context-reset
-/// boundary: it receives a PhaseContext with accumulated design context and
-/// prior artifacts, executes its work, and produces a PhaseResult with an
-/// ArtifactBundle. The FSM validates the output before advancing.
+/// Contract for a pipeline phase. Each phase initializes, executes,
+/// and validates its output. The PhaseController dispatches by PhaseId.
 /// </summary>
 public interface IPhase
 {
     PhaseId Id { get; }
-    PhaseName Name { get; }
+    string Name { get; }
     PhaseId[] Dependencies { get; }
     ArtifactSchema OutputSchema { get; }
 
-    Task InitializeAsync(PhaseContext context, CancellationToken ct);
-    Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct);
-    Task<ValidationResult> ValidateOutputAsync(ArtifactBundle output, CancellationToken ct);
-    Task<ValidationResult> ValidateOutputAsync(ArtifactBundle output, PhaseContext context, CancellationToken ct)
-        => ValidateOutputAsync(output, ct);
+    Task InitializeAsync(PhaseContext context, CancellationToken ct = default);
+    Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default);
+    ValidationResult ValidateOutput(PhaseResult result);
 }

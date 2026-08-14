@@ -1,17 +1,22 @@
-using Posit.Contracts.Core;
-
 namespace Posit.Phases;
 
-public interface IPhaseController
+/// <summary>
+/// Dispatches execution to the correct phase by PhaseId.
+/// The orchestrator registers phases, then calls ExecuteAsync.
+/// </summary>
+public sealed class PhaseController
 {
-    Task<PhaseResult> ExecuteAsync(IPhase phase, PhaseContext context, CancellationToken ct);
-}
+    private readonly Dictionary<PhaseId, IPhase> _phases = new();
 
-public sealed class PhaseController : IPhaseController
-{
-    public async Task<PhaseResult> ExecuteAsync(IPhase phase, PhaseContext context, CancellationToken ct)
+    public void Register(IPhase phase) => _phases[phase.Id] = phase;
+
+    public IPhase? Resolve(PhaseId id) =>
+        _phases.TryGetValue(id, out var p) ? p : null;
+
+    public Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
-        await phase.InitializeAsync(context, ct);
-        return await phase.ExecuteAsync(context, ct);
+        if (!_phases.TryGetValue(context.PhaseId, out var phase))
+            throw new InvalidOperationException($"No phase registered for '{context.PhaseId}'");
+        return phase.ExecuteAsync(context, ct);
     }
 }
