@@ -68,7 +68,13 @@ public sealed class ArchitecturePhase : IPhase
 
     private ArchitectureContract? ParseContract(string text)
     {
-        try { return JsonSerializer.Deserialize<ArchitectureContract>(text, PositJson.Options); }
+        try
+        {
+            // Strip markdown fences and reasoning tags before deserialization
+            var cleaned = OllamaModelGateway.StripReasoningTags(text);
+            cleaned = OllamaModelGateway.ExtractJson(cleaned);
+            return JsonSerializer.Deserialize<ArchitectureContract>(cleaned, PositJson.Options);
+        }
         catch { return null; }
     }
 
