@@ -22,6 +22,7 @@ public static class WiringGenerator
         var sb = new StringBuilder();
         sb.AppendLine($"// {comp.Name}/Wire.cs — auto-generated wiring");
         sb.AppendLine("using System;");
+        sb.AppendLine("using System.Linq;");
         sb.AppendLine("using Dafny;");
         sb.AppendLine();
 
@@ -87,17 +88,65 @@ public static class WiringGenerator
         Dictionary<string, List<CsMethodSignature>> translated, Dictionary<string, List<CsMethodSignature>> stubs,
         string entryVar, string className)
     {
-        var currentVars = new Dictionary<string, VarInfo> { [entryVar] = new(entryVar, "string") };
+        // Variable registry: maps semantic names → actual C# variable names
+        // The entry var is registered under both its own name and common aliases
+        var currentVars = new Dictionary<string, VarInfo>(StringComparer.OrdinalIgnoreCase)
+        {
+            [entryVar] = new(entryVar, "string"),
+            ["input"] = new(entryVar, "string"),
+            ["args"] = new(entryVar, "string"),
+        };
         var retVarCounter = 0;
 
-        foreach (var conn in comp.Connections)
+        // Build a map of argMapping source names → which ret var they refer to
+        // by scanning ahead: each connection's return value gets registered
+        // under the source names that future connections expect
+
+        for (var ci = 0; ci < comp.Connections.Length; ci++)
         {
+            var conn = comp.Connections[ci];
             var targetComp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
             if (targetComp == null) continue;
 
+            // Find the actual C# method signature — try exact name match, then patternMethod
             var targetSigs = GetSignatures(targetComp, translated, stubs);
-            var targetSig = targetSigs?.FirstOrDefault(s => s.Name == conn.ToMethod);
-            if (targetSig == null) continue;
+            if (targetSigs == null || targetSigs.Count == 0)
+            {
+                sb.AppendLine($"            // SKIP: no signatures found for {conn.ToComponent}.{conn.ToMethod}");
+                continue;
+            }
+
+            // Try exact match on toMethod
+            var targetSig = targetSigs.FirstOrDefault(s => s.Name == conn.ToMethod);
+            // If not found, try matching via the contract's MethodSignatures patternMethod
+            if (targetSig == null)
+            {
+                var contractSig = targetComp.MethodSignatures.FirstOrDefault(
+                    m => m.Name == conn.ToMethod && !string.IsNullOrWhiteSpace(m.PatternMethod));
+                if (contractSig != null)
+                    targetSig = targetSigs.FirstOrDefault(s => s.Name == contractSig.PatternMethod);
+            }
+            // If still not found, try fuzzy match: toMethod contains or is contained in actual method name
+            if (targetSig == null)
+            {
+                var toMethodLower = conn.ToMethod.ToLowerInvariant();
+                targetSig = targetSigs.FirstOrDefault(s =>
+                    s.Name.ToLowerInvariant().Contains(toMethodLower) ||
+                    toMethodLower.Contains(s.Name.ToLowerInvariant()));
+            }
+            // If still not found, prefer non-factory methods (skip Default, _TypeDescriptor, create_*)
+            if (targetSig == null)
+            {
+                targetSig = targetSigs.FirstOrDefault(s =>
+                    !s.Name.StartsWith("create_") && !s.Name.StartsWith("_") &&
+                    s.Name != "Default" && s.Name != "_TypeDescriptor");
+            }
+            // Last resort: first available
+            if (targetSig == null)
+                targetSig = targetSigs[0];
+
+            // Determine the actual method name to call in C#
+            var actualMethodName = targetSig.Name;
 
             var targetClass = ResolveTargetClass(targetComp, translated, stubs);
             var retVarName = $"ret{retVarCounter++}";
@@ -106,8 +155,34 @@ public static class WiringGenerator
             // Build arguments from arg mappings
             var args = BuildArgs(conn, currentVars, targetSig);
 
-            sb.AppendLine($"            var {retVarName} = {targetClass}.{conn.ToMethod}({args});");
-            currentVars[retVarName] = new VarInfo(retVarName, retType);
+            // Emit the call with the ACTUAL C# method name, not the model's semantic name
+            if (retType == "void" || retType == "Void")
+            {
+                sb.AppendLine($"            {targetClass}.{actualMethodName}({args});");
+            }
+            else
+            {
+                sb.AppendLine($"            var {retVarName} = {targetClass}.{actualMethodName}({args});");
+                // Register return value under retN AND under the source names that
+                // future connections will use to reference this return
+                currentVars[retVarName] = new VarInfo(retVarName, retType);
+                // Look ahead: find the source field names in the NEXT connections
+                // that would reference this return value
+                for (var ni = ci + 1; ni < comp.Connections.Length; ni++)
+                {
+                    var nextConn = comp.Connections[ni];
+                    foreach (var mapping in nextConn.ArgMappings)
+                    {
+                        var arrowIdx = mapping.IndexOf("->");
+                        var sourceField = arrowIdx >= 0 ? mapping[..arrowIdx].Trim() : mapping.Trim();
+                        // If this source field isn't already a known var, register retVar under it
+                        if (!currentVars.ContainsKey(sourceField))
+                        {
+                            currentVars[sourceField] = new VarInfo(retVarName, retType);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -159,12 +234,21 @@ public static class WiringGenerator
     public static string? ConvertType(string fromType, string toType, string varName)
     {
         if (fromType == toType) return varName;
-        // string -> ISequence<Rune>: UnicodeFromString
-        if (toType.Contains("ISequence") && toType.Contains("Rune") && fromType == "string")
+        // string -> ISequence<Rune> (but NOT ISequence<ISequence<Rune>>): UnicodeFromString
+        if (toType.Contains("ISequence") && toType.Contains("Rune") && toType.IndexOf("ISequence", 1) < 0
+            && fromType == "string")
             return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName})";
-        // ISequence<Rune> -> string: SequenceToString
+        // ISequence<Rune> -> string: iterate runes to build string
         if (fromType.Contains("ISequence") && fromType.Contains("Rune") && toType == "string")
-            return $"Dafny.Helpers.SequenceToString({varName})";
+            return $"new string({varName}.Select(r => (char)r.Value).ToArray())";
+        // string -> ISequence<ISequence<Rune>>: wrap string as single-element seq of seqs
+        if (toType.Contains("ISequence") && toType.Contains("ISequence") && toType.Contains("Rune")
+            && fromType == "string")
+            return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromElements(Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName}))";
+        // ISequence<Rune> -> ISequence<ISequence<Rune>>: wrap as single-element seq
+        if (fromType.Contains("ISequence") && fromType.Contains("Rune") && fromType.IndexOf("ISequence", 1) < 0
+            && toType.Contains("ISequence") && toType.Contains("ISequence") && toType.Contains("Rune"))
+            return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromElements({varName})";
         // Compatible if same base type
         if (fromType == toType) return varName;
         return null; // incompatible
