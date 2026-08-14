@@ -70,7 +70,6 @@ public sealed class ArchitecturePhase : IPhase
     {
         try
         {
-            // Strip markdown fences and reasoning tags before deserialization
             var cleaned = OllamaModelGateway.StripReasoningTags(text);
             cleaned = OllamaModelGateway.ExtractJson(cleaned);
             return JsonSerializer.Deserialize<ArchitectureContract>(cleaned, PositJson.Options);
