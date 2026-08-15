@@ -183,3 +183,6 @@ retries with the error message. 2-3 tries is expected and acceptable.
 - **Type chain check belongs after Dafny translation**, not during Architecture
 - **2-3 retries is acceptable** — the FSM handles it, the model learns from correction signals
 - **The contract KNOWS the chain** — it's not a mystery, we just haven't used that information yet
+- **Orchestrator is a routing table, not a worker** — it has connections, no pattern needed.
+  The wiring IS its implementation. The pipeline pattern body on the orchestrator is dead code.
+  Scanner rule: a component with connections doesn't require patternName. The connections are the spec.
