@@ -186,3 +186,25 @@ retries with the error message. 2-3 tries is expected and acceptable.
 - **Orchestrator is a routing table, not a worker** — it has connections, no pattern needed.
   The wiring IS its implementation. The pipeline pattern body on the orchestrator is dead code.
   Scanner rule: a component with connections doesn't require patternName. The connections are the spec.
+
+## Additional Decisions (Weekend Notes)
+
+- **Pseudo data for test cases (#5):** AI generates test data with edge cases (empty files,
+  mismatched columns, quoted fields). Deterministic bot runs them. QA AI analyzes failures.
+  Architect's testCases are behavioral descriptions — we need actual files.
+  Flow: AI seeds → bot tests → QA AI analyzes. This is the proof methodology.
+
+- **Monster trials (#6):** Design monster trials NOW as north-star targets. Get T1 passing first.
+  Monsters that fail on plumbing tell us nothing. Monsters that fail on missing cut-outs
+  give us a roadmap. Build cut-outs to reach the monsters.
+
+- **Docker runtime DLLs (#7):** Detail. dotnet build with ProjectReference copies deps to CLI
+  output. If it breaks, container crashes with clear error. See it Monday.
+
+- **DafnyDB flywheel (#8):** Successful trials feed the catalog. Only Z3-verified + Docker-passing
+  solutions go in the DB. Filter: compiles + Z3 green + Docker tests pass = add to DafnyDB.
+  The architect sees proven solutions in the prompt and uses them.
+
+- **No silent fallback (#10):** When ConvertType can't convert, FAIL — don't pass default(type).
+  Emit a warning with the type mismatch details. Kick back to the architect with
+  "type mismatch at step N: X returns Y but Z expects W." No silent garbage. Fail, warn, retry.
