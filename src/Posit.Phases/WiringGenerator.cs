@@ -123,9 +123,29 @@ public static class WiringGenerator
             // remaining params use argMappings as hints, then defaults
             var args = BuildChainedArgs(conn, prevRet, prevType, targetSig);
 
+            // Dafny multi-return translates to void + out params.
+            // The first out param is the data return (chained to next step).
             if (retType == "void" || retType == "Void")
             {
-                sb.AppendLine($"            {targetClass}.{actualMethodName}({args});");
+                if (targetSig.OutParamTypes.Length > 0)
+                {
+                    // Emit out variables for each out param
+                    var outVars = new List<string>();
+                    for (var oi = 0; oi < targetSig.OutParamTypes.Length; oi++)
+                    {
+                        var outVar = $"out{retVarCounter}_{oi}";
+                        outVars.Add($"out {targetSig.OutParamTypes[oi]} {outVar}");
+                    }
+                    sb.AppendLine($"            {targetClass}.{actualMethodName}({args}, {string.Join(", ", outVars)});");
+                    // Chain the first out param as the return for next step
+                    prevRet = $"out{retVarCounter}_0";
+                    prevType = targetSig.OutParamTypes[0];
+                    retVarCounter++;
+                }
+                else
+                {
+                    sb.AppendLine($"            {targetClass}.{actualMethodName}({args});");
+                }
             }
             else
             {
