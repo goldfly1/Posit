@@ -267,9 +267,16 @@ public static class WiringGenerator
         // ISequence<Rune> -> string: iterate runes to build string
         if (fromType.Contains("ISequence") && fromType.Contains("Rune") && toType == "string")
             return $"new string({varName}.Select(r => (char)r.Value).ToArray())";
-        // Dimensionality upgrades are SEMANTICALLY WRONG — wrapping a string as a
-        // 1-element seq is not splitting by newlines. Stubs must return the right
-        // shape (ReadLines not ReadFile). Fail loudly, don't silently wrap.
+        // string[] (io-shell ReadLines) -> ISequence<ISequence<Rune>> (Dafny seq<seq<string>>)
+        // Natural array→seq mapping: each string element becomes a UnicodeFromString seq.
+        if (fromType == "string[]" && toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0
+            && toType.Contains("Rune"))
+            return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray({varName}.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())";
+        // ISequence<ISequence<Rune>> -> string[] (Dafny seq<seq<string>> → io-shell)
+        if (toType == "string[]" && fromType.Contains("ISequence") && fromType.IndexOf("ISequence", 1) > 0
+            && fromType.Contains("Rune"))
+            return $"{varName}.Select(seq => new string(seq.Select(r => (char)r.Value).ToArray())).ToArray()";
+        // Dimensionality upgrades from scalar string are SEMANTICALLY WRONG.
         if (toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0 && fromType == "string")
             throw new InvalidOperationException(
                 $"ConvertType: dimensionality upgrade {fromType} -> {toType} not supported. "

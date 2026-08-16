@@ -57,7 +57,14 @@ public static class TypeChainChecker
         {
             var m = methods.FirstOrDefault(x => x.Name == conn.ToMethod)
                      ?? methods.FirstOrDefault(x => x.Name.Contains(conn.ToMethod) || conn.ToMethod.Contains(x.Name));
-            if (m != null) return m.ReturnType;
+            if (m != null)
+            {
+                // Dafny multi-return translates to void + out params.
+                // The first out param is the "data return" (e.g. outRows).
+                if (m.ReturnType == "void" && m.OutParamTypes.Length > 0)
+                    return m.OutParamTypes[0];
+                return m.ReturnType;
+            }
         }
         // Fall back to contract's declared method signatures
         var comp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
@@ -89,17 +96,30 @@ public static class TypeChainChecker
 
     /// <summary>
     /// Two types are compatible if they're equal, or ConvertType handles them.
-    /// string ↔ ISequence&lt;Rune&gt;: convertible. Everything else must match.
+    /// Mirrors WiringGenerator.ConvertType's conversion table.
     /// </summary>
     private static bool AreCompatible(string from, string to)
     {
         if (from == to) return true;
-        // string ↔ ISequence<Rune> (but NOT dimensionality upgrades)
+        // string ↔ ISequence<Rune> (1D — UnicodeFromString / rune iteration)
         if (from == "string" && to.Contains("ISequence") && to.Contains("Rune")
             && to.IndexOf("ISequence", 1) < 0)
             return true;
         if (to == "string" && from.Contains("ISequence") && from.Contains("Rune")
             && from.IndexOf("ISequence", 1) < 0)
+            return true;
+        // string[] (io-shell ReadLines) ↔ ISequence<ISequence<Rune>> (Dafny seq<seq<string>>)
+        // This is a natural array→seq mapping, not a dimensionality upgrade.
+        if (from == "string[]" && to.Contains("ISequence") && to.IndexOf("ISequence", 1) > 0
+            && to.Contains("Rune"))
+            return true;
+        if (to == "string[]" && from.Contains("ISequence") && from.IndexOf("ISequence", 1) > 0
+            && from.Contains("Rune"))
+            return true;
+        // ISequence<ISequence<Rune>> ↔ ISequence<ISequence<Rune>> (same type, different nesting depth notation)
+        if (from.Contains("ISequence") && to.Contains("ISequence")
+            && from.Contains("Rune") && to.Contains("Rune")
+            && from.IndexOf("ISequence", 1) > 0 && to.IndexOf("ISequence", 1) > 0)
             return true;
         return false;
     }

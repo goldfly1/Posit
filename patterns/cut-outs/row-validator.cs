@@ -9,35 +9,32 @@ using System;
 using System.Numerics;
 using System.Collections;
 [assembly: DafnyAssembly.DafnySourceAttribute(@"// dafny 4.11.0.0
-// Command-line arguments: translate cs C:\Users\goldf\Posit\patterns\cut-outs\row-validator.dfy --no-verify --allow-external-contracts --allow-warnings --test-assumptions Externs --translate-standard-library false
+// Command-line arguments: translate cs --solver-path C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe --no-verify patterns/cut-outs/row-validator.dfy
 // row-validator.dfy
 
-method ValidateRows(rows: seq<seq<string>>) returns (result: ValidationResult)
+method ValidateRows(rows: seq<seq<string>>) returns (outRows: seq<seq<string>>, isValid: bool)
   requires |rows| >= 0
+  ensures outRows == rows
   decreases |rows|
 {
-  var errors := [];
+  outRows := rows;
   if |rows| == 0 {
-    result := Valid;
+    isValid := true;
     return;
   }
   var expected := |rows[0]|;
   var i := 1;
+  var allValid := true;
   while i < |rows|
     invariant 0 <= i <= |rows|
-    invariant |errors| >= 0
     decreases |rows| - i
   {
     if |rows[i]| != expected {
-      errors := errors + [""field count mismatch""];
+      allValid := false;
     }
     i := i + 1;
   }
-  if |errors| == 0 {
-    result := Valid;
-  } else {
-    result := Invalid(errors);
-  }
+  isValid := allValid;
 }
 
 datatype ValidationResult = Valid | Invalid(errors: seq<string>)
@@ -67,31 +64,28 @@ internal static class FuncExtensions {
 namespace _module {
 
   public partial class __default {
-    public static _IValidationResult ValidateRows(Dafny.ISequence<Dafny.ISequence<Dafny.ISequence<Dafny.Rune>>> rows)
+    public static void ValidateRows(Dafny.ISequence<Dafny.ISequence<Dafny.ISequence<Dafny.Rune>>> rows, out Dafny.ISequence<Dafny.ISequence<Dafny.ISequence<Dafny.Rune>>> outRows, out bool isValid)
     {
-      _IValidationResult result = ValidationResult.Default();
-      Dafny.ISequence<Dafny.ISequence<Dafny.Rune>> _0_errors;
-      _0_errors = Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromElements();
+      outRows = Dafny.Sequence<Dafny.ISequence<Dafny.ISequence<Dafny.Rune>>>.Empty;
+      isValid = false;
+      outRows = rows;
       if ((new BigInteger((rows).Count)).Sign == 0) {
-        result = _module.ValidationResult.create_Valid();
-        return result;
+        isValid = true;
+        return ;
       }
-      BigInteger _1_expected;
-      _1_expected = new BigInteger(((rows).Select(BigInteger.Zero)).Count);
-      BigInteger _2_i;
-      _2_i = BigInteger.One;
-      while ((_2_i) < (new BigInteger((rows).Count))) {
-        if ((new BigInteger(((rows).Select(_2_i)).Count)) != (_1_expected)) {
-          _0_errors = Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.Concat(_0_errors, Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromElements(Dafny.Sequence<Dafny.Rune>.UnicodeFromString("field count mismatch")));
+      BigInteger _0_expected;
+      _0_expected = new BigInteger(((rows).Select(BigInteger.Zero)).Count);
+      BigInteger _1_i;
+      _1_i = BigInteger.One;
+      bool _2_allValid;
+      _2_allValid = true;
+      while ((_1_i) < (new BigInteger((rows).Count))) {
+        if ((new BigInteger(((rows).Select(_1_i)).Count)) != (_0_expected)) {
+          _2_allValid = false;
         }
-        _2_i = (_2_i) + (BigInteger.One);
+        _1_i = (_1_i) + (BigInteger.One);
       }
-      if ((new BigInteger((_0_errors).Count)).Sign == 0) {
-        result = _module.ValidationResult.create_Valid();
-      } else {
-        result = _module.ValidationResult.create_Invalid(_0_errors);
-      }
-      return result;
+      isValid = _2_allValid;
     }
   }
 

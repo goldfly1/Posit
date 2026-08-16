@@ -8,6 +8,7 @@ public record CsMethodSignature(
     string ReturnType,
     string[] ParamTypes,
     string[] ParamNames,
+    string[] OutParamTypes,
     string[] GenericParams,
     string ClassName,
     string Namespace);
@@ -117,17 +118,19 @@ public static class TranslatedCSharpScanner
         // Extract parameter types and names from parenthesized section
         var paramTypes = new List<string>();
         var paramNames = new List<string>();
+        var outParamTypes = new List<string>();
         var paramSection = stripped[parenIdx..];
         var closeParen = FindMatchingParen(paramSection);
         if (closeParen > 1)
         {
             var paramText = paramSection[1..closeParen];
             if (!string.IsNullOrWhiteSpace(paramText))
-                ParseParams(paramText, paramTypes, paramNames);
+                ParseParams(paramText, paramTypes, paramNames, outParamTypes);
         }
 
         return new CsMethodSignature(methodName, returnType,
-            paramTypes.ToArray(), paramNames.ToArray(), genericParams, cls, ns);
+            paramTypes.ToArray(), paramNames.ToArray(), outParamTypes.ToArray(),
+            genericParams, cls, ns);
     }
 
     private static int FindMatchingParen(string s)
@@ -141,15 +144,24 @@ public static class TranslatedCSharpScanner
         return -1;
     }
 
-    private static void ParseParams(string text, List<string> types, List<string> names)
+    private static void ParseParams(string text, List<string> types, List<string> names, List<string> outTypes)
     {
         foreach (var part in text.Split(',', StringSplitOptions.TrimEntries))
         {
             if (string.IsNullOrWhiteSpace(part)) continue;
-            var lastSpace = part.LastIndexOf(' ');
-            if (lastSpace < 0) continue;
-            types.Add(part[..lastSpace].Trim());
-            names.Add(part[(lastSpace + 1)..].Trim());
+            // Detect "out Type name" — out params are the real return for void methods
+            if (part.StartsWith("out "))
+            {
+                var outPart = part[4..].Trim();
+                var lastSpace = outPart.LastIndexOf(' ');
+                if (lastSpace >= 0)
+                    outTypes.Add(outPart[..lastSpace].Trim());
+                continue;
+            }
+            var lastSpace2 = part.LastIndexOf(' ');
+            if (lastSpace2 < 0) continue;
+            types.Add(part[..lastSpace2].Trim());
+            names.Add(part[(lastSpace2 + 1)..].Trim());
         }
     }
 }
