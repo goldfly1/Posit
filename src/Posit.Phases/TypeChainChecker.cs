@@ -100,28 +100,37 @@ public static class TypeChainChecker
     /// </summary>
     private static bool AreCompatible(string from, string to)
     {
-        if (from == to) return true;
-        // string ↔ ISequence<Rune> (1D — UnicodeFromString / rune iteration)
-        if (from == "string" && to.Contains("ISequence") && to.Contains("Rune")
-            && to.IndexOf("ISequence", 1) < 0)
-            return true;
-        if (to == "string" && from.Contains("ISequence") && from.Contains("Rune")
-            && from.IndexOf("ISequence", 1) < 0)
-            return true;
-        // string[] (io-shell ReadLines) ↔ ISequence<ISequence<Rune>> (Dafny seq<seq<string>>)
-        // This is a natural array→seq mapping, not a dimensionality upgrade.
-        if (from == "string[]" && to.Contains("ISequence") && to.IndexOf("ISequence", 1) > 0
-            && to.Contains("Rune"))
-            return true;
-        if (to == "string[]" && from.Contains("ISequence") && from.IndexOf("ISequence", 1) > 0
-            && from.Contains("Rune"))
-            return true;
-        // ISequence<ISequence<Rune>> ↔ ISequence<ISequence<Rune>> (same type, different nesting depth notation)
-        if (from.Contains("ISequence") && to.Contains("ISequence")
-            && from.Contains("Rune") && to.Contains("Rune")
-            && from.IndexOf("ISequence", 1) > 0 && to.IndexOf("ISequence", 1) > 0)
-            return true;
+        // Normalize: strip "Dafny." prefixes for comparison
+        var f = from.Replace("Dafny.", "");
+        var t = to.Replace("Dafny.", "");
+        if (f == t) return true;
+        // Count ISequence nesting depth
+        int fDepth = CountOccurrences(f, "ISequence");
+        int tDepth = CountOccurrences(t, "ISequence");
+        bool fHasRune = f.Contains("Rune");
+        bool tHasRune = t.Contains("Rune");
+        // string ↔ ISequence<Rune> (1D)
+        if (f == "string" && tDepth == 1 && tHasRune) return true;
+        if (t == "string" && fDepth == 1 && fHasRune) return true;
+        // string[] ↔ ISequence<ISequence<Rune>> (2D — array to seq of seqs)
+        if (f == "string[]" && tDepth == 2 && tHasRune) return true;
+        if (t == "string[]" && fDepth == 2 && fHasRune) return true;
+        // seq<string> (Dafny notation) ↔ ISequence<ISequence<Rune>> (C# notation)
+        if (f == "seq<string>" && tDepth == 2 && tHasRune) return true;
+        if (t == "seq<string>" && fDepth == 2 && fHasRune) return true;
+        // seq<seq<string>> ↔ ISequence<ISequence<ISequence<Rune>>>
+        if (f == "seq<seq<string>>" && tDepth == 3 && tHasRune) return true;
+        if (t == "seq<seq<string>>" && fDepth == 3 && fHasRune) return true;
+        // Same ISequence depth with Rune = compatible (same type, different notation)
+        if (fDepth > 0 && fDepth == tDepth && fHasRune && tHasRune) return true;
         return false;
+    }
+
+    private static int CountOccurrences(string s, string sub)
+    {
+        int count = 0, idx = 0;
+        while ((idx = s.IndexOf(sub, idx)) >= 0) { count++; idx += sub.Length; }
+        return count;
     }
 
     public static string FormatErrors(List<TypeChainError> errors)
