@@ -70,6 +70,19 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
                 }
             }
 
+            // Post-Dafny type chain check: after dafny-implementation, before C# impl.
+            // Real C# types exist now. If the chain breaks, kick back to Architecture.
+            if (validation.IsValid && phaseId.Value == "dafny-implementation")
+            {
+                var chainErrors = await CheckTypeChain(result, state, ct);
+                if (chainErrors.Count > 0)
+                {
+                    var msgs = TypeChainChecker.FormatErrors(chainErrors);
+                    validation = new ValidationResult { IsValid = false, Errors = [msgs] };
+                    result = result with { Status = PhaseStatus.Failed, Warnings = [msgs] };
+                }
+            }
+
             var ok = validation.IsValid;
             state = _fsm.Apply(state, ok ? "phase.success" : "phase.failed", result).State;
             if (ok)
@@ -167,6 +180,36 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         var a = (await _artifactRepo.GetByPhaseAsync(state.SessionId, new PhaseId("architecture"), ct))
             .FirstOrDefault();
         return a is null ? null : Deserialize<ArchitectureContract>(a.PayloadJson);
+    }
+
+    /// <summary>
+    /// Post-Dafny type chain check. Reads scanned C# signatures from the Dafny
+    /// Implementation result and checks that consecutive connections have
+    /// compatible types. Returns errors if the chain breaks.
+    /// </summary>
+    private async Task<List<TypeChainError>> CheckTypeChain(PhaseResult result, SessionState state, CancellationToken ct)
+    {
+        var contract = await GetContract(state, ct);
+        if (contract is null) return [];
+
+        // The Dafny implementation result contains DafnyVerificationResult[] with
+        // TranslatedCSharpPath for each component. Scan those files.
+        var scannedSigs = new Dictionary<string, List<CsMethodSignature>>();
+        var dafnyResults = Deserialize<DafnyVerificationResult[]>(result.Artifacts.PayloadJson);
+        if (dafnyResults is null) return [];
+
+        foreach (var dr in dafnyResults)
+        {
+            if (dr.IsVerified && !string.IsNullOrWhiteSpace(dr.TranslatedCSharpPath) && File.Exists(dr.TranslatedCSharpPath))
+            {
+                var content = await File.ReadAllTextAsync(dr.TranslatedCSharpPath, ct);
+                var sigs = TranslatedCSharpScanner.ScanContent(content);
+                if (sigs.Count > 0)
+                    scannedSigs[dr.ModuleName] = sigs;
+            }
+        }
+
+        return TypeChainChecker.Check(contract, scannedSigs);
     }
 
     private static T? Deserialize<T>(byte[] payload) where T : class

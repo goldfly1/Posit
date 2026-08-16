@@ -33,8 +33,10 @@ public static class ContractScanner
 
         foreach (var comp in contract.Components)
         {
-            // Check patternName for dafny/mixed modules
-            if (comp.Classification != ModuleClassification.IoShell)
+            // Check patternName for dafny/mixed modules.
+            // Components WITH connections don't need a patternName — the connections
+            // ARE the spec, the wiring IS the implementation. No dead pattern body.
+            if (comp.Classification != ModuleClassification.IoShell && comp.Connections.Length == 0)
             {
                 if (string.IsNullOrWhiteSpace(comp.PatternName))
                 {
@@ -126,25 +128,27 @@ public static class ContractScanner
             }
 
             // Declaration/use consistency: every declared method should be used in a
-            // connection (as fromMethod on this component or toMethod targeting this
-            // component). A method that appears only once — declared but never called,
-            // or called but never declared — is suspicious and kicked back to the model.
-            var allCalledMethods = new HashSet<string>();
-            // Methods called ON this component (via other components' connections)
-            foreach (var other in contract.Components)
-                foreach (var conn in other.Connections)
-                    if (conn.ToComponent == comp.Name)
-                        allCalledMethods.Add(conn.ToMethod);
-            // Methods called FROM this component
-            foreach (var conn in comp.Connections)
-                allCalledMethods.Add(conn.FromMethod);
-
-            foreach (var declared in ownMethods)
+            // connection. Skip for connection-bearing components (orchestrators) —
+            // their wiring calls other components, not their own methods.
+            if (comp.Connections.Length == 0)
             {
-                if (!allCalledMethods.Contains(declared))
-                    errors.Add(new ScanError(comp.Name, "methodSignature.name",
-                        declared, "is declared but never used in any connection",
-                        [.. allCalledMethods]));
+                var allCalledMethods = new HashSet<string>();
+                // Methods called ON this component (via other components' connections)
+                foreach (var other in contract.Components)
+                    foreach (var conn in other.Connections)
+                        if (conn.ToComponent == comp.Name)
+                            allCalledMethods.Add(conn.ToMethod);
+                // Methods called FROM this component
+                foreach (var conn in comp.Connections)
+                    allCalledMethods.Add(conn.FromMethod);
+
+                foreach (var declared in ownMethods)
+                {
+                    if (!allCalledMethods.Contains(declared))
+                        errors.Add(new ScanError(comp.Name, "methodSignature.name",
+                            declared, "is declared but never used in any connection",
+                            [.. allCalledMethods]));
+                }
             }
         }
 

@@ -267,14 +267,18 @@ public static class WiringGenerator
         // ISequence<Rune> -> string: iterate runes to build string
         if (fromType.Contains("ISequence") && fromType.Contains("Rune") && toType == "string")
             return $"new string({varName}.Select(r => (char)r.Value).ToArray())";
-        // string -> ISequence<ISequence<Rune>>: wrap string as single-element seq of seqs
-        if (toType.Contains("ISequence") && toType.Contains("ISequence") && toType.Contains("Rune")
-            && fromType == "string")
-            return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromElements(Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName}))";
-        // ISequence<Rune> -> ISequence<ISequence<Rune>>: wrap as single-element seq
+        // Dimensionality upgrades are SEMANTICALLY WRONG — wrapping a string as a
+        // 1-element seq is not splitting by newlines. Stubs must return the right
+        // shape (ReadLines not ReadFile). Fail loudly, don't silently wrap.
+        if (toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0 && fromType == "string")
+            throw new InvalidOperationException(
+                $"ConvertType: dimensionality upgrade {fromType} -> {toType} not supported. "
+                + $"Use ReadLines stub (returns seq<string>) instead of ReadFile. Variable: {varName}");
         if (fromType.Contains("ISequence") && fromType.Contains("Rune") && fromType.IndexOf("ISequence", 1) < 0
-            && toType.Contains("ISequence") && toType.Contains("ISequence") && toType.Contains("Rune"))
-            return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromElements({varName})";
+            && toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0)
+            throw new InvalidOperationException(
+                $"ConvertType: dimensionality upgrade {fromType} -> {toType} not supported. "
+                + $"Stubs must return the right shape. Variable: {varName}");
         // Compatible if same base type
         if (fromType == toType) return varName;
         return null; // incompatible

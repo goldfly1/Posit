@@ -3,41 +3,40 @@
 // Domain: data processing
 // Params: none (fully self-contained)
 // responsibility: validate that all rows have the same number of fields
-// test: ValidateRows([["a","b"],["c","d"]]) returns Valid
-// test: ValidateRows([["a","b"],["c"]]) returns Invalid
+// test: ValidateRows([["a","b"],["c","d"]]) returns (rows, true)
+// test: ValidateRows([["a","b"],["c"]]) returns (rows, false)
 
 // ValidationResult datatype
 datatype ValidationResult =
   | Valid
   | Invalid(errors: seq<string>)
 
-// Validate that all rows have the same field count
-method ValidateRows(rows: seq<seq<string>>) returns (result: ValidationResult)
+// Validate that all rows have the same field count.
+// Returns the rows AND the verdict — data rides alongside, not instead of.
+// The chain continues with the rows (first return value).
+method ValidateRows(rows: seq<seq<string>>) returns (outRows: seq<seq<string>>, isValid: bool)
   requires |rows| >= 0
+  ensures outRows == rows
   decreases |rows|
 {
-  var errors := [];
+  outRows := rows;
   if |rows| == 0 {
-    result := Valid;
+    isValid := true;
     return;
   }
   
   var expected := |rows[0]|;
   var i := 1;
+  var allValid := true;
   while i < |rows|
     invariant 0 <= i <= |rows|
-    invariant |errors| >= 0
     decreases |rows| - i
   {
     if |rows[i]| != expected {
-      errors := errors + ["field count mismatch"];
+      allValid := false;
     }
     i := i + 1;
   }
   
-  if |errors| == 0 {
-    result := Valid;
-  } else {
-    result := Invalid(errors);
-  }
+  isValid := allValid;
 }
