@@ -1,23 +1,16 @@
 namespace Posit.Phases;
 
-using System.Text;
-
 /// <summary>
-/// Phase 3: Dafny Implementation. For each dafny component, call the LLM to
-/// write a spec-specific Dafny body that satisfies the pattern's contracts.
-/// Z3 verifies the new body. If it fails, the correction signal (Z3 errors)
-/// goes back to the model on retry. On success, translate to C#.
+/// Phase 3: Dafny Implementation. Purely deterministic — NO model call.
+/// Pre-verified pattern skeletons are translated directly to C#.
+/// If a skeleton fails Z3, the correction signal routes back to Architecture.
+/// (Spec: "Code (no model): Dafny Verify → Dafny Translate")
 /// </summary>
 public sealed class DafnyImplementationPhase : IPhase
 {
-    private readonly IModelGateway _model;
     private readonly Z3Runner _z3;
 
-    public DafnyImplementationPhase(IModelGateway model, Z3Runner z3)
-    {
-        _model = model;
-        _z3 = z3;
-    }
+    public DafnyImplementationPhase(Z3Runner z3) => _z3 = z3;
 
     public PhaseId Id { get; } = new("dafny-implementation");
     public string Name => "Dafny Implementation";
@@ -50,56 +43,32 @@ public sealed class DafnyImplementationPhase : IPhase
             if (!File.Exists(skeletonPath))
             {
                 warnings.Add($"Skeleton file missing: {skeletonPath}");
+                results.Add(FailResult(comp.Name, skeletonPath, "Skeleton file missing"));
                 continue;
             }
 
-            var skeleton = await File.ReadAllTextAsync(skeletonPath, ct);
-
-            // Call LLM to write a spec-specific Dafny body
-            var prompt = BuildImplPrompt(comp, skeleton, context);
-            var gen = await _model.GenerateAsync(context.ModelRoute, prompt, context, ct);
-
-            if (string.IsNullOrWhiteSpace(gen.Text))
-            {
-                warnings.Add($"LLM returned empty Dafny for '{comp.Name}'");
-                results.Add(FailResult(comp.Name, skeletonPath, "Empty LLM output"));
-                continue;
-            }
-
-            // Extract Dafny code from the response
-            var dafnyCode = ExtractDafny(gen.Text);
-            if (string.IsNullOrWhiteSpace(dafnyCode))
-            {
-                warnings.Add($"No Dafny code in LLM response for '{comp.Name}'");
-                results.Add(FailResult(comp.Name, skeletonPath, "No Dafny code extracted"));
-                continue;
-            }
-
-            // Write the new Dafny implementation to staging
-            var implPath = Path.Combine(stagingDir, $"{comp.Name}.impl.dfy");
-            await File.WriteAllTextAsync(implPath, dafnyCode, ct);
-
-            // Z3 verify the new body
-            var verifyResult = await _z3.VerifyAsync(implPath, ct);
+            // Step 1: Verify the skeleton with Z3
+            var verifyResult = await _z3.VerifyAsync(skeletonPath, ct);
             if (!verifyResult.Success)
             {
-                warnings.Add($"Z3 verification failed for '{comp.Name}': {verifyResult.Stdout[..Math.Min(200, verifyResult.Stdout.Length)]}");
+                var msg = verifyResult.Stdout[..Math.Min(300, verifyResult.Stdout.Length)];
+                warnings.Add($"Z3 verification failed for '{comp.Name}': {msg}");
                 results.Add(new DafnyVerificationResult
                 {
-                    ModuleName = comp.Name, DafnyPath = implPath,
+                    ModuleName = comp.Name, DafnyPath = skeletonPath,
                     IsVerified = false, VerificationOutput = verifyResult.Stdout
                 });
                 continue;
             }
 
-            // Translate verified Dafny to C#
-            var translation = await _z3.TranslateAsync(implPath, comp.Name, ct);
+            // Step 2: Translate verified Dafny to C#
+            var translation = await _z3.TranslateAsync(skeletonPath, comp.Name, ct);
             if (!translation.Success || string.IsNullOrWhiteSpace(translation.CleanCsharp))
             {
                 warnings.Add($"C# translation failed for '{comp.Name}': {translation.Stderr}");
                 results.Add(new DafnyVerificationResult
                 {
-                    ModuleName = comp.Name, DafnyPath = implPath,
+                    ModuleName = comp.Name, DafnyPath = skeletonPath,
                     IsVerified = false, VerificationOutput = translation.Stderr
                 });
                 continue;
@@ -107,15 +76,14 @@ public sealed class DafnyImplementationPhase : IPhase
 
             var csPath = Path.Combine(stagingDir, $"{comp.Name}.cs");
             await File.WriteAllTextAsync(csPath, translation.CleanCsharp, ct);
-
             results.Add(new DafnyVerificationResult
             {
-                ModuleName = comp.Name, DafnyPath = implPath,
+                ModuleName = comp.Name, DafnyPath = skeletonPath,
                 IsVerified = true, TranslatedCSharpPath = csPath
             });
         }
 
-        var allOk = results.All(r => r.IsVerified && !string.IsNullOrWhiteSpace(r.TranslatedCSharpPath));
+        var allOk = results.Count > 0 && results.All(r => r.IsVerified && !string.IsNullOrWhiteSpace(r.TranslatedCSharpPath));
         var payloadJson = JsonSerializer.SerializeToUtf8Bytes(results.ToArray(), PositJson.Options);
 
         return new PhaseResult
@@ -139,115 +107,6 @@ public sealed class DafnyImplementationPhase : IPhase
         if (result.Status != PhaseStatus.Success)
             return new ValidationResult { IsValid = false, Errors = result.Warnings };
         return new ValidationResult { IsValid = true };
-    }
-
-    private static PromptTemplate BuildImplPrompt(Component comp, string skeleton, PhaseContext ctx)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("You are writing a Dafny implementation for a component in a spec compiler pipeline.");
-        sb.AppendLine("The architect has decomposed the spec and selected a pattern skeleton.");
-        sb.AppendLine("Your job: write a COMPLETE Dafny module that implements the SPEC's requirements,");
-        sb.AppendLine("using the skeleton's contracts and method signatures as the starting point.");
-        sb.AppendLine();
-        sb.AppendLine($"Component: {comp.Name}");
-        sb.AppendLine($"Responsibility: {comp.Responsibility}");
-        sb.AppendLine($"Pattern: {comp.PatternName}");
-        sb.AppendLine($"Classification: {comp.Classification}");
-        sb.AppendLine();
-        sb.AppendLine($"Write ONLY the Dafny module for '{comp.Name}'. Do NOT include other components.");
-        sb.AppendLine($"Output a single Dafny module named '{comp.Name}' — nothing else.");
-        if (comp.ParametersJson is { Length: > 0 })
-            sb.AppendLine($"Parameters: {comp.ParametersJson}");
-        if (comp.TestCases is { Length: > 0 })
-        {
-            sb.AppendLine("Test cases (your implementation MUST satisfy these):");
-            foreach (var tc in comp.TestCases)
-                sb.AppendLine($"  - {tc.Name}: {tc.Description} → {tc.ExpectedBehavior}");
-        }
-        sb.AppendLine();
-        sb.AppendLine("Rules:");
-        sb.AppendLine("1. Output ONLY raw Dafny code. No JSON wrapper, no markdown fences, no explanations.");
-        sb.AppendLine("2. Keep the same module name and method signatures as the skeleton.");
-        sb.AppendLine("3. Keep all {:extern} declarations unchanged — these are I/O portals.");
-        sb.AppendLine("4. Write real method bodies that implement the spec's logic, not generic algorithm code.");
-        sb.AppendLine("5. Ensure all requires/ensures clauses from the skeleton are preserved or strengthened.");
-        sb.AppendLine("6. The code must pass Z3 verification.");
-        sb.AppendLine();
-        sb.AppendLine("Pattern skeleton (reference — adapt this to the spec):");
-        sb.AppendLine(skeleton);
-
-        return new PromptTemplate
-        {
-            PhaseId = ctx.PhaseId, Version = new PromptVersion("1.0.0"),
-            SystemPrompt = sb.ToString(),
-            OutputFormatSpec = "Dafny source code only",
-            ModelTier = ModelTier.Fast, Temperature = 0.2, MaxOutputTokens = 8192,
-            OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "DafnyModule",
-            Status = PromptStatus.Active
-        };
-    }
-
-    private static string ExtractDafny(string text)
-    {
-        text = OllamaModelGateway.StripReasoningTags(text);
-        text = text.Trim();
-        // Strip markdown code fences
-        var fenceMatch = System.Text.RegularExpressions.Regex.Match(
-            text, @"```(?:dafny)?\s*\n?(.*?)\n?```", System.Text.RegularExpressions.RegexOptions.Singleline);
-        if (fenceMatch.Success)
-            return CleanDafny(fenceMatch.Groups[1].Value);
-        // If it starts with { try JSON extraction
-        if (text.StartsWith('{'))
-        {
-            // Try JSON deserialization — handle any key shape, look for the value
-            // that contains Dafny code (starts with // or include or method etc.)
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(text);
-                foreach (var prop in doc.RootElement.EnumerateObject())
-                {
-                    if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
-                    {
-                        var val = prop.Value.GetString() ?? "";
-                        if (LooksLikeDafny(val))
-                            return CleanDafny(val);
-                    }
-                }
-                // No value looked like Dafny — try first string value anyway
-                foreach (var prop in doc.RootElement.EnumerateObject())
-                {
-                    if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
-                        return CleanDafny(prop.Value.GetString() ?? text);
-                }
-            }
-            catch { }
-            // Fallback: regex extract value after "dafnySource" or any key
-            var jsonMatch = System.Text.RegularExpressions.Regex.Match(
-                text, "\"(?:dafnySource|code|source)\"\\s*:\\s*\"(.*?)(?<!\\\\)\")",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
-            if (jsonMatch.Success)
-                return CleanDafny(jsonMatch.Groups[1].Value
-                    .Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\"", "\"")
-                    .Replace("\\r", ""));
-        }
-        return CleanDafny(text);
-    }
-
-    private static bool LooksLikeDafny(string code)
-    {
-        if (string.IsNullOrWhiteSpace(code)) return false;
-        var trimmed = code.TrimStart();
-        return trimmed.StartsWith("//") || trimmed.StartsWith("include ") ||
-               trimmed.StartsWith("module ") || trimmed.StartsWith("method ") ||
-               trimmed.StartsWith("function ") || trimmed.StartsWith("class ") ||
-               trimmed.StartsWith("datatype ") || trimmed.StartsWith("predicate ") ||
-               trimmed.StartsWith("abstract ");
-    }
-
-    private static string CleanDafny(string code)
-    {
-        // Normalize line endings — Dafny on Windows can choke on \r\n
-        return code.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
     }
 
     private static DafnyVerificationResult FailResult(string name, string path, string error) => new()

@@ -42,7 +42,7 @@ internal static class BotHarnessDocker
         if (!File.Exists(dockerfilePath))
             return new DockerResult(false, "Dockerfile.run not found");
 
-        var args = $"build -f \"{dockerfilePath}\" -t posit-run-{tag} \"{contextDir}\"";
+        var args = $"build -f \"{dockerfilePath}\" -t posit-run-{tag.ToLowerInvariant()} \"{contextDir}\"";
         return await RunDockerAsync(dockerPath, args, ct);
     }
 
@@ -53,7 +53,7 @@ internal static class BotHarnessDocker
         string dockerPath, string tag, string cliComponentName, string input, CancellationToken ct = default)
     {
         // Pass input via stdin if non-empty, otherwise just run
-        var args = $"run --rm posit-run-{tag}";
+        var args = $"run --rm posit-run-{tag.ToLowerInvariant()}";
         if (!string.IsNullOrEmpty(input))
             args += $" {EscapeShellArg(input)}";
 

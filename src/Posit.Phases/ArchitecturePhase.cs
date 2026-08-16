@@ -74,7 +74,12 @@ public sealed class ArchitecturePhase : IPhase
             cleaned = OllamaModelGateway.ExtractJson(cleaned);
             return JsonSerializer.Deserialize<ArchitectureContract>(cleaned, PositJson.Options);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[architecture PARSE] {ex.Message}");
+            Console.Error.WriteLine($"[architecture PARSE] raw length={text.Length}, first 200={text[..Math.Min(200, text.Length)]}");
+            return null;
+        }
     }
 
     private List<string> ComposeSkeletons(ArchitectureContract contract, PhaseContext context)

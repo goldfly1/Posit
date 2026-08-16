@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Posit.Contracts.Artifacts;
 
 public record ArchitectureContract
