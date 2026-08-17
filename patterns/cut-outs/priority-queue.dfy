@@ -6,7 +6,6 @@
 // test: Enqueue([], 1, "task1") returns [["1","task1"]]
 // test: ListAll([["1","task1"],["2","task2"]]) returns ["task1","task2"]
 
-module PriorityQueue {
 
 // Convert non-negative int to string
 function IntToString(n: int): (s: string)
@@ -98,4 +97,3 @@ method ListAll(items: seq<seq<string>>) returns (tasks: seq<string>)
   }
 }
 
-}

@@ -7,7 +7,6 @@
 // test: FilterByLevel(["2024-01-01 INFO hello", "2024-01-01 ERROR world"], "ERROR") returns ["2024-01-01 ERROR world"]
 // test: CountByLevel(["2024-01-01 INFO hello", "2024-01-01 ERROR world", "2024-01-01 INFO foo"]) returns [["INFO","2"],["ERROR","1"]]
 
-module LogParser {
 
 // Convert non-negative int to string
 function IntToString(n: int): (s: string)
@@ -133,4 +132,3 @@ method CountByLevel(lines: seq<string>) returns (result: seq<seq<string>>)
   }
 }
 
-}

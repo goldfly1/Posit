@@ -5,7 +5,6 @@
 // responsibility: group rows by category and count
 // test: GroupByCategory([["fruit","apple"],["fruit","banana"],["veg","carrot"]], 0) returns [["fruit","2"],["veg","1"]]
 
-module CategoryGrouper {
 
 // Convert non-negative int to string
 function IntToString(n: int): (s: string)
@@ -72,4 +71,3 @@ method GroupByCategory(rows: seq<seq<string>>, categoryIndex: int) returns (resu
   }
 }
 
-}

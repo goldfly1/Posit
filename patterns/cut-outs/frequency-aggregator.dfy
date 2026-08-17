@@ -5,7 +5,6 @@
 // responsibility: count word frequencies and sort by count descending
 // test: CountFrequency(["a","b","a","c","a","b"]) returns [["3","a"],["2","b"],["1","c"]]
 
-module FrequencyAggregator {
 
 // Convert non-negative int to string
 function IntToString(n: int): (s: string)
@@ -118,4 +117,3 @@ method CountFrequency(words: seq<string>) returns (result: seq<seq<string>>)
   }
 }
 
-}
