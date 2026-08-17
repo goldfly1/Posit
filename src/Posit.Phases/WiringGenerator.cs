@@ -304,9 +304,12 @@ public static class WiringGenerator
         // string -> ISequence<Rune> (1D): UnicodeFromString
         if (toDepth == 1 && toHasRune && fromType == "string")
             return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName})";
-        // ISequence<Rune> -> string: iterate runes to build string
+        // ISequence<Rune> (1D) -> string: iterate runes to build string
         if (fromDepth == 1 && fromHasRune && toType == "string")
             return $"new string({varName}.Select(r => (char)r.Value).ToArray())";
+        // ISequence<ISequence<Rune>> (2D) -> string: join rows with newline, elements with space
+        if (fromDepth == 2 && fromHasRune && toType == "string")
+            return $"string.Join(\"\\n\", {varName}.Select(row => string.Join(\" \", row.Select(r => (char)r.Value))))";
         // string[] (io-shell ReadLines) -> ISequence<ISequence<Rune>> (2D): array→seq mapping
         if (fromType == "string[]" && toDepth == 2 && toHasRune)
             return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray({varName}.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())";
