@@ -23,6 +23,7 @@ public static class WiringGenerator
         sb.AppendLine($"// {comp.Name}/Wire.cs — auto-generated wiring");
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Numerics;");
         sb.AppendLine("using Dafny;");
         sb.AppendLine();
 
