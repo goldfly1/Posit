@@ -201,6 +201,11 @@ public sealed class BotHarness
         if (expected.Contains("CSV", StringComparison.OrdinalIgnoreCase)
             && actual.Contains(",") && actual.Contains("\n"))
             return true;
+        // Empty output check: if expected mentions "empty" or "no output"
+        if ((expected.Contains("empty", StringComparison.OrdinalIgnoreCase)
+             || expected.Contains("no output", StringComparison.OrdinalIgnoreCase))
+            && string.IsNullOrWhiteSpace(actual))
+            return true;
         return false;
     }
 
@@ -214,7 +219,12 @@ public sealed class BotHarness
         // Match test case names to generate appropriate data
         var name = tcName.ToLowerInvariant();
         if (name.Contains("empty") || name.Contains("no data") || name.Contains("emptyarray"))
+        {
+            // For JSON tests, empty array is "[]". For CSV tests, empty is "".
+            if (name.Contains("json") || name.Contains("array"))
+                return "[]";
             return "";
+        }
         if (name.Contains("invalid") || name.Contains("inconsistent") || name.Contains("mismatch"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA,extra\nCarol,35,SF";
         if (name.Contains("filenotfound") || name.Contains("missing") || name.Contains("not found"))
