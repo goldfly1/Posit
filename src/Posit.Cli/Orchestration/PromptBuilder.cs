@@ -52,6 +52,9 @@ public static class PromptBuilder
         sb.AppendLine("  - connections: array of {fromMethod, toComponent, toMethod, argMappings:[\"sourceField->paramName\", ...]}");
         sb.AppendLine("    argMappings MUST be an array of STRINGS in \"source->target\" format, e.g. [\"parsedData->input\", \"config->settings\"].");
         sb.AppendLine("    Do NOT put objects in argMappings. Each string maps a source field to a target parameter.");
+        sb.AppendLine("    CONNECTIONS MUST FORM A LINEAR CHAIN. Each step's output feeds the next step's input.");
+        sb.AppendLine("    Do NOT add extra steps (sort, format, transform, output) between cut-outs — the cut-outs already do everything.");
+        sb.AppendLine("    The last connection should be to a Print/WriteLine stub that outputs the result.");
         sb.AppendLine("  - testCases: array of {id, name, targetType, description, expectedBehavior}");
         sb.AppendLine();
         sb.AppendLine("═══ STUB USAGE RULES ═══");
