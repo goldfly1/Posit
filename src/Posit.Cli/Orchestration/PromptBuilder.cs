@@ -75,15 +75,29 @@ public static class PromptBuilder
                 sb.AppendLine("Cut-outs are pre-written, Z3-verified Dafny modules that do REAL work.");
                 sb.AppendLine("If a cut-out matches the component's responsibility, USE IT (set patternName to the cut-out name).");
                 sb.AppendLine("Each cut-out has REAL method names — use those EXACT names in methodSignatures and connections.");
-                sb.AppendLine("The method signatures are listed below — match them EXACTLY (name, params, return type).");
+                sb.AppendLine("CHAIN BY TYPES: the output type of one cut-out must match the input type of the next.");
+                sb.AppendLine("Type vocabulary: string, seq<string>, seq<seq<string>>, int, bool");
+                sb.AppendLine("  string = one string (file content, JSON, text)");
+                sb.AppendLine("  seq<string> = list of strings (lines, words, tokens)");
+                sb.AppendLine("  seq<seq<string>> = rows of fields (CSV rows, key-value pairs, [count,word] pairs)");
+                sb.AppendLine();
+                sb.AppendLine("Example chain: ReadFile(string) → Tokenize(string→seq<string>) → CountFrequency(seq<string>→seq<seq<string>>) → Print(seq<seq<string>>→string)");
+                sb.AppendLine();
                 foreach (var p in cutOuts)
                 {
-                    sb.AppendLine($"  - {p.Name}: {p.Responsibility}");
-                    // List actual method signatures from the Dafny source
-                    var sigs = registry.GetPatternSignatures(p.Name);
+                    sb.AppendLine($"  {p.Name}: {p.Responsibility}");
+                    // List method signatures as input_type → output_type for chaining
+                    var sigs = registry.GetMethodSignatures(p.Name);
                     foreach (var sig in sigs)
-                        sb.AppendLine($"      {sig}");
+                    {
+                        var inputType = ExtractInputType(sig.Params);
+                        var outputType = sig.ReturnType ?? "void";
+                        sb.AppendLine($"    {sig.Name}: {inputType} → {outputType}");
+                    }
                 }
+                sb.AppendLine();
+                sb.AppendLine("RULE: Do NOT add intermediate steps (sort, format, transform) if a cut-out already does that.");
+                sb.AppendLine("      CountFrequency already sorts. SerializeToJson already formats. Only chain cut-outs that transform the data.");
                 sb.AppendLine();
             }
             sb.AppendLine("═══ UNIVERSAL STARTER PATTERN ═══");
@@ -117,4 +131,17 @@ public static class PromptBuilder
 
     private static string BuildArchitectureFormat() =>
         "{ \"systemContext\": \"...\", \"components\": [{ \"id\": \"...\", \"name\": \"...\", ... }], \"deploymentTopology\": \"...\" }";
+
+    /// <summary>
+    /// Extract the primary input type from a method's param string.
+    /// E.g., "lines: seq<string>, delimiter: string" → "seq<string>"
+    /// </summary>
+    private static string ExtractInputType(string paramsStr)
+    {
+        if (string.IsNullOrWhiteSpace(paramsStr)) return "void";
+        // First param before comma
+        var firstParam = paramsStr.Contains(',') ? paramsStr[..paramsStr.IndexOf(',')] : paramsStr;
+        var colonIdx = firstParam.IndexOf(':');
+        return colonIdx >= 0 ? firstParam[(colonIdx + 1)..].Trim() : firstParam.Trim();
+    }
 }
