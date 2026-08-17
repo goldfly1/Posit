@@ -296,29 +296,29 @@ public static class WiringGenerator
     public static string? ConvertType(string fromType, string toType, string varName)
     {
         if (fromType == toType) return varName;
-        // string -> ISequence<Rune> (but NOT ISequence<ISequence<Rune>>): UnicodeFromString
-        if (toType.Contains("ISequence") && toType.Contains("Rune") && toType.IndexOf("ISequence", 1) < 0
-            && fromType == "string")
+        // Count ISequence nesting depth (not IndexOf — that breaks on "Dafny." prefix)
+        int toDepth = CountSeq(toType);
+        int fromDepth = CountSeq(fromType);
+        bool toHasRune = toType.Contains("Rune");
+        bool fromHasRune = fromType.Contains("Rune");
+        // string -> ISequence<Rune> (1D): UnicodeFromString
+        if (toDepth == 1 && toHasRune && fromType == "string")
             return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName})";
         // ISequence<Rune> -> string: iterate runes to build string
-        if (fromType.Contains("ISequence") && fromType.Contains("Rune") && toType == "string")
+        if (fromDepth == 1 && fromHasRune && toType == "string")
             return $"new string({varName}.Select(r => (char)r.Value).ToArray())";
-        // string[] (io-shell ReadLines) -> ISequence<ISequence<Rune>> (Dafny seq<seq<string>>)
-        // Natural array→seq mapping: each string element becomes a UnicodeFromString seq.
-        if (fromType == "string[]" && toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0
-            && toType.Contains("Rune"))
+        // string[] (io-shell ReadLines) -> ISequence<ISequence<Rune>> (2D): array→seq mapping
+        if (fromType == "string[]" && toDepth == 2 && toHasRune)
             return $"Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray({varName}.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())";
-        // ISequence<ISequence<Rune>> -> string[] (Dafny seq<seq<string>> → io-shell)
-        if (toType == "string[]" && fromType.Contains("ISequence") && fromType.IndexOf("ISequence", 1) > 0
-            && fromType.Contains("Rune"))
+        // ISequence<ISequence<Rune>> (2D) -> string[]: seq→array mapping
+        if (toType == "string[]" && fromDepth == 2 && fromHasRune)
             return $"{varName}.Select(seq => new string(seq.Select(r => (char)r.Value).ToArray())).ToArray()";
         // Dimensionality upgrades from scalar string are SEMANTICALLY WRONG.
-        if (toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0 && fromType == "string")
+        if (toDepth >= 2 && fromType == "string")
             throw new InvalidOperationException(
                 $"ConvertType: dimensionality upgrade {fromType} -> {toType} not supported. "
                 + $"Use ReadLines stub (returns seq<string>) instead of ReadFile. Variable: {varName}");
-        if (fromType.Contains("ISequence") && fromType.Contains("Rune") && fromType.IndexOf("ISequence", 1) < 0
-            && toType.Contains("ISequence") && toType.IndexOf("ISequence", 1) > 0)
+        if (fromDepth == 1 && fromHasRune && toDepth >= 2)
             throw new InvalidOperationException(
                 $"ConvertType: dimensionality upgrade {fromType} -> {toType} not supported. "
                 + $"Stubs must return the right shape. Variable: {varName}");
@@ -329,6 +329,14 @@ public static class WiringGenerator
 
     /// <summary>Rename 'args' to 'inputArgs' (NOT @args). @ is just a prefix.</summary>
     public static string SafeName(string name) => name == "args" ? "inputArgs" : name;
+
+    /// <summary>Count ISequence nesting depth (not IndexOf — that breaks on "Dafny." prefix).</summary>
+    private static int CountSeq(string type)
+    {
+        int count = 0, idx = 0;
+        while ((idx = type.IndexOf("ISequence", idx)) >= 0) { count++; idx += 9; }
+        return count;
+    }
 
     /// <summary>Resolve actual class name from scanner (Frame vs __default vs stub class).</summary>
     private static string ResolveDafnyClass(Component comp, Dictionary<string, List<CsMethodSignature>> sigs)
