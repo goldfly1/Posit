@@ -91,17 +91,22 @@ public sealed class BotHarness
         // Use AI-generated test data from QA artifact if available, else stopgap.
         var testCases = ExtractTestCases(cliComponent, testSuite);
         var aiTestData = testSuite?.TestFiles ?? [];
+        // Build a spec hint from component pattern names for test data generation
+        var specHint = string.Join(" ", contract.Components
+            .Where(c => c.PatternName != null)
+            .Select(c => c.PatternName!));
         foreach (var tc in testCases)
         {
             // Try AI-generated test data first (from QA phase)
             var aiFile = aiTestData.FirstOrDefault(f =>
                 f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
-            var testData = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name);
+            var testData = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
 
             // Skip file creation for file-not-found tests — pass a bad path instead
             if (testData == "__NONEXISTENT_FILE__") continue;
-            // Use .json extension for JSON test data, .csv for CSV
-            var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json" : ".csv";
+            // Use .json extension for JSON test data, .csv for CSV, .txt for text
+            var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
+                : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
             var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}{ext}");
             File.WriteAllText(testFile, testData);
         }
@@ -125,8 +130,9 @@ public sealed class BotHarness
             else
             {
                 // Determine extension from test data content
-                var testData = GenerateTestData(tc.Id, tc.Name);
-                var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json" : ".csv";
+                var testData = GenerateTestData(tc.Id, tc.Name, specHint);
+                var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
+                    : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
                 cliArg = $"testdata_{tc.Id}{ext}";
             }
             var runResult = await BotHarnessDocker.RunContainerAsync(
@@ -232,10 +238,10 @@ public sealed class BotHarness
     /// pseudo-data generation system (#5) is built. Creates CSV content based
     /// on the test case name — valid CSV, empty file, or invalid CSV.
     /// </summary>
-    internal static string GenerateTestData(string tcId, string tcName)
+    internal static string GenerateTestData(string tcId, string tcName, string? specHint = null)
     {
-        // Match test case names to generate appropriate data
-        var name = tcName.ToLowerInvariant();
+        // Match test case names OR spec hints to generate appropriate data
+        var name = (tcName + " " + (specHint ?? "")).ToLowerInvariant();
         if (name.Contains("empty") || name.Contains("no data") || name.Contains("emptyarray"))
         {
             // For JSON tests, empty array is "[]". For CSV tests, empty is "".
