@@ -106,3 +106,24 @@ method {:axiom} Process(input: string) returns (output: string)
 // 7. type is a reserved keyword — don't use as parameter name
 // 8. char comparison: use == (works), string comparison: use SeqEqual or
 //    compare element-by-element
+
+// ─── Seq composition (NO cut-out needed for these) ────────────────────
+// Concatenation: rows1 + rows2 joins two sequences
+method MergeRows(rows1: seq<seq<string>>, rows2: seq<seq<string>>) returns (merged: seq<seq<string>>)
+  ensures merged == rows1 + rows2
+{
+  merged := rows1 + rows2;
+}
+
+// Append one element: seq + [element]
+method AddRow(rows: seq<seq<string>>, row: seq<string>) returns (result: seq<seq<string>>)
+  ensures result == rows + [row]
+{
+  result := rows + [row];
+}
+
+// String concatenation: s1 + s2
+// Length: |s|
+// Element access: s[i] (requires 0 <= i < |s|)
+// Slice: s[a..b] (requires 0 <= a <= b <= |s|)
+// Empty seq: [] (with type annotation: var x: seq<string> := [])

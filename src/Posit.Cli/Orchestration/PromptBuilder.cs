@@ -102,6 +102,17 @@ public static class PromptBuilder
                 sb.AppendLine("RULE: Do NOT add intermediate steps (sort, format, transform) if a cut-out already does that.");
                 sb.AppendLine("      CountFrequency already sorts. SerializeToJson already formats. Only chain cut-outs that transform the data.");
                 sb.AppendLine();
+                        sb.AppendLine("═══ DAFNY COMPOSITION REFERENCE ═══");
+                        sb.AppendLine("You can use Dafny built-in operations WITHOUT a cut-out for simple logic:");
+                        sb.AppendLine("  Seq concat:    rows1 + rows2  (merge two sequences)");
+                        sb.AppendLine("  Append element: rows + [row]   (add one row)");
+                        sb.AppendLine("  String concat: s1 + s2         (join strings)");
+                        sb.AppendLine("  Length:         |s|             (number of elements)");
+                        sb.AppendLine("  Element access: s[i]            (requires 0 <= i < |s|)");
+                        sb.AppendLine("  Slice:          s[a..b]         (requires 0 <= a <= b <= |s|)");
+                        sb.AppendLine("  Empty seq:      var x: seq<string> := []");
+                        sb.AppendLine("If a needed operation is just seq concat or string join, write it inline — do NOT look for a cut-out.");
+                        sb.AppendLine();
             }
             sb.AppendLine("═══ UNIVERSAL STARTER PATTERN ═══");
             var pipe = registry.GetPattern("pipeline");
