@@ -114,6 +114,12 @@ public static class TypeChainChecker
         // string ↔ ISequence<Rune> (1D)
         if (f == "string" && tDepth == 1 && tHasRune) return true;
         if (t == "string" && fDepth == 1 && fHasRune) return true;
+        // seq<string> (Dafny notation) ↔ ISequence<Rune> (1D) — join lines into one string
+        if (f == "seq<string>" && tDepth == 1 && tHasRune) return true;
+        if (t == "seq<string>" && fDepth == 1 && fHasRune) return true;
+        // string[] ↔ ISequence<Rune> (1D) — join lines into one string
+        if (f == "string[]" && tDepth == 1 && tHasRune) return true;
+        if (t == "string[]" && fDepth == 1 && fHasRune) return true;
         // string[] ↔ ISequence<ISequence<Rune>> (2D — array to seq of seqs)
         if (f == "string[]" && tDepth == 2 && tHasRune) return true;
         if (t == "string[]" && fDepth == 2 && fHasRune) return true;
