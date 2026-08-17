@@ -90,10 +90,20 @@ public sealed class BotHarness
         var testCases = ExtractTestCases(cliComponent, testSuite);
         var results = new List<TestCaseResult>();
 
+        // Create test data files in the temp dir for each test case.
+        // The program takes a file path as input, so we need actual files.
+        // For now, generate basic CSV test data based on test case description.
         foreach (var tc in testCases)
         {
+            // Create a test data file in temp dir
+            var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}.csv");
+            var testData = GenerateTestData(tc.Id, tc.Name);
+            File.WriteAllText(testFile, testData);
+
+            // Pass the filename (relative to temp dir) as the CLI arg.
+            // Docker copies temp dir contents to /src, so the file is at /src/testdata_{tc.Id}.csv
             var runResult = await BotHarnessDocker.RunContainerAsync(
-                _dockerPath, sessionId.Value, cliComponent.Name, tc.Input, ct);
+                _dockerPath, sessionId.Value, cliComponent.Name, $"testdata_{tc.Id}.csv", ct);
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedBehavior, CompareOutput(runResult.Output, tc.ExpectedBehavior)));
         }
@@ -146,6 +156,25 @@ public sealed class BotHarness
         return actual.Contains(expected, StringComparison.OrdinalIgnoreCase)
             || (actual.Contains("exit code 0", StringComparison.OrdinalIgnoreCase)
                 && expected.Contains("exit code 0", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Generate basic test data for a test case. This is a stopgap until the
+    /// pseudo-data generation system (#5) is built. Creates CSV content based
+    /// on the test case name — valid CSV, empty file, or invalid CSV.
+    /// </summary>
+    internal static string GenerateTestData(string tcId, string tcName)
+    {
+        // Match test case names to generate appropriate data
+        var name = tcName.ToLowerInvariant();
+        if (name.Contains("empty") || name.Contains("no data") || name.Contains("emptyarray"))
+            return "";
+        if (name.Contains("invalid") || name.Contains("inconsistent") || name.Contains("mismatch"))
+            return "name,age,city\nAlice,30,NYC\nBob,25,LA,extra\nCarol,35,SF";
+        if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
+            return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
+        // Default: simple valid CSV
+        return "name,age\nAlice,30\nBob,25";
     }
 
     internal static T? Deserialize<T>(byte[] payloadJson) where T : class
