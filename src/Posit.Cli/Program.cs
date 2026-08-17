@@ -66,7 +66,20 @@ internal static class Program
         Console.Error.WriteLine($"[posit] session {sessionId} starting: {spec[..Math.Min(80, spec.Length)]}...");
         state = await orchestrator.RunAsync(state);
         Console.Error.WriteLine($"[posit] session {sessionId} finished: {state.Status}");
-        return state.Status == SessionStatus.Completed ? 0 : 1;
+
+        if (state.Status != SessionStatus.Completed)
+            return 1;
+
+        // Auto-run Docker harness after pipeline completes
+        Console.Error.WriteLine($"[posit] auto-launching Docker harness for {sessionId}...");
+        var gateway = new OllamaModelGateway(new HttpClient());
+        var harness = new BotHarness(new ArtifactRepository(), model: gateway);
+        var result = await harness.RunAsync(sessionId);
+        Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
+        if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
+        foreach (var tc in result.Results)
+            Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
+        return result.Success ? 0 : 1;
     }
 
     private static async Task<int> HarnessCommand(string[] args)
