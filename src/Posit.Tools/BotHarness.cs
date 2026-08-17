@@ -249,6 +249,8 @@ public sealed class BotHarness
             return "__NONEXISTENT_FILE__"; // sentinel — harness should pass a bad path instead
         if (name.Contains("json"))
             return "[{\"name\":\"Alice\",\"age\":\"30\"},{\"name\":\"Bob\",\"age\":\"25\"}]";
+        if (name.Contains("word") || name.Contains("text") || name.Contains("frequency") || name.Contains("log"))
+            return "the cat sat on the mat the cat\nthe dog ran fast\n";
         if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
         // Default: simple valid CSV
