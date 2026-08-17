@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Posit.AI.Models;
 using Posit.Contracts.Artifacts;
 using Posit.Contracts.Core;
 using Posit.Contracts.Serialization;
@@ -15,11 +16,13 @@ public sealed class BotHarness
 {
     private readonly ArtifactRepository _repo;
     private readonly string _dockerPath;
+    private readonly IModelGateway? _model;
 
-    public BotHarness(ArtifactRepository repo, string? dockerPath = null)
+    public BotHarness(ArtifactRepository repo, string? dockerPath = null, IModelGateway? model = null)
     {
         _repo = repo;
         _dockerPath = dockerPath ?? "docker";
+        _model = model;
     }
 
     public async Task<BotHarnessResult> RunAsync(SessionId sessionId, CancellationToken ct = default)
@@ -85,10 +88,16 @@ public sealed class BotHarness
             BotHarnessDocker.GenerateDockerfileRun(cliComponent.Name));
 
         // Create test data files BEFORE Docker build so they're in the build context.
+        // Use AI-generated test data from QA artifact if available, else stopgap.
         var testCases = ExtractTestCases(cliComponent, testSuite);
+        var aiTestData = testSuite?.TestFiles ?? [];
         foreach (var tc in testCases)
         {
-            var testData = GenerateTestData(tc.Id, tc.Name);
+            // Try AI-generated test data first (from QA phase)
+            var aiFile = aiTestData.FirstOrDefault(f =>
+                f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
+            var testData = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name);
+
             // Skip file creation for file-not-found tests — pass a bad path instead
             if (testData == "__NONEXISTENT_FILE__") continue;
             // Use .json extension for JSON test data, .csv for CSV
@@ -124,6 +133,15 @@ public sealed class BotHarness
                 _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct);
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedBehavior, CompareOutput(runResult.Output, tc.ExpectedBehavior)));
+        }
+
+        // LLM failure analysis: if any tests failed, ask the model to classify
+        var failures = results.Where(r => !r.Matches).ToList();
+        if (failures.Count > 0 && _model != null)
+        {
+            var analysis = await AnalyzeFailuresAsync(failures, cliComponent, ct);
+            if (!string.IsNullOrEmpty(analysis))
+                Console.Error.WriteLine($"[harness] LLM failure analysis:\n{analysis}");
         }
 
         return new BotHarnessResult(results.All(r => r.Matches), [.. results], tempDir, null);
@@ -244,6 +262,70 @@ public sealed class BotHarness
     }
 
     private static BotHarnessResult Fail(string error) => new(false, [], null, error);
+
+    /// <summary>
+    /// LLM failure analysis. Asks the model to classify why tests failed
+    /// and suggest fixes. Output is for diagnostics, not automated action.
+    /// </summary>
+    private async Task<string> AnalyzeFailuresAsync(List<TestCaseResult> failures, Component cliComp, CancellationToken ct)
+    {
+        var failureDesc = string.Join("\n", failures.Select(f =>
+            $"  {f.Id}: expected={f.Expected}, actual={f.Output[..Math.Min(200, f.Output.Length)]}"));
+
+        var systemPrompt = $"""
+            You are the QA failure analyzer for the Posit spec compiler.
+            The following test cases failed. Classify each failure and suggest a fix.
+
+            Component: {cliComp.Name}
+            Failures:
+            {failureDesc}
+
+            For each failure, output one line:
+            - FAILURE_TYPE: brief description (e.g. "wrong output format", "crash on empty input", "type mismatch")
+            - SUGGESTED_FIX: what to change (e.g. "add null check", "convert type at boundary")
+            """;
+
+        var prompt = new PromptTemplate
+        {
+            PhaseId = new PhaseId("qa"),
+            Version = new PromptVersion("1.0.0"),
+            SystemPrompt = systemPrompt,
+            OutputFormatSpec = "One line per failure",
+            ModelTier = ModelTier.Fast,
+            Temperature = 0.2,
+            MaxOutputTokens = 2048,
+            OutputFormat = OutputFormat.PlainText,
+            OutputSchemaRef = "FailureAnalysis",
+            Status = PromptStatus.Active
+        };
+
+        try
+        {
+            var route = new ModelRoute
+            {
+                Tier = ModelTier.Fast, ProviderId = "ollama",
+                ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 2048, Temperature = 0.2
+            };
+            var gen = await _model!.GenerateAsync(route, prompt, new PhaseContext
+            {
+                SessionId = SessionId.New(),
+                PhaseId = new PhaseId("qa"),
+                Prompt = prompt,
+                UserRequest = "",
+                InputArtifacts = [],
+                ModelRoute = route,
+                BudgetRemaining = new BudgetRemaining { Amount = 1000, Cap = 1000 },
+                AttemptNumber = 1,
+                CorrectionSignal = null,
+                DesignContext = null
+            }, ct);
+            return gen.Text;
+        }
+        catch (Exception ex)
+        {
+            return $"[analysis failed: {ex.Message}]";
+        }
+    }
 }
 
 public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error);

@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
     <ProjectReference Include="..\Posit.Data\Posit.Data.csproj" />
+    <ProjectReference Include="..\Posit.AI\Posit.AI.csproj" />
   </ItemGroup>
 
 </Project>

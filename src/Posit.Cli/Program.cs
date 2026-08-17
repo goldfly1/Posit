@@ -75,7 +75,8 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(id))
         { Console.Error.WriteLine("Error: sessionId is required for 'harness'"); return 1; }
 
-        var harness = new BotHarness(new ArtifactRepository());
+        var gateway = new OllamaModelGateway(new HttpClient());
+        var harness = new BotHarness(new ArtifactRepository(), model: gateway);
         var result = await harness.RunAsync(new SessionId(id));
         Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
@@ -144,7 +145,7 @@ internal static class Program
         controller.Register(new DafnyContractsPhase(z3));
         controller.Register(new DafnyImplementationPhase(z3));
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
-        controller.Register(new QaPhase());
+        controller.Register(new QaPhase(gateway));
 
         return (new PositOrchestrator(controller, fsm, graph, artifactRepo, stateStore, registry), stateStore);
     }
