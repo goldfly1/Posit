@@ -66,11 +66,18 @@ public sealed class ModelWiringGenerator
             if (fenceMatch.Success)
                 return fenceMatch.Groups[1].Value.Trim();
 
-            // If the model returned a full file, use it. Otherwise wrap in boilerplate.
-            if (text.Contains("namespace") && text.Contains("class Wire"))
+            // If the model returned a full file (has class Wire), use it as-is
+            if (text.Contains("class Wire") || text.Contains("static class Wire"))
+            {
+                // Ensure it has the required using statements
+                if (!text.Contains("using System.Numerics"))
+                    text = "using System.Numerics;\n" + text;
+                if (!text.Contains("using Dafny"))
+                    text = "using Dafny;\n" + text;
                 return text;
+            }
 
-            // Wrap in boilerplate
+            // Otherwise wrap in boilerplate
             return $@"using System;
 using System.Linq;
 using System.Numerics;
