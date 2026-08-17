@@ -46,6 +46,19 @@ public sealed class ModelWiringGenerator
                 return null;
 
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+
+            // If model returned JSON, extract the code field
+            if (text.StartsWith('{'))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(text);
+                    if (doc.RootElement.TryGetProperty("code", out var codeProp))
+                        text = codeProp.GetString() ?? text;
+                }
+                catch { }
+            }
+
             // Strip markdown fences if present
             var fenceMatch = System.Text.RegularExpressions.Regex.Match(
                 text, @"```(?:csharp|cs)?\s*\n?(.*?)\n?```",
