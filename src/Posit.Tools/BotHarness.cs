@@ -101,8 +101,19 @@ public sealed class BotHarness
         // Run each test case — test data files already created above
         foreach (var tc in testCases)
         {
+            // For file-not-found tests, pass a non-existent path
+            string cliArg;
+            if (tc.Name.Contains("FileNotFound", StringComparison.OrdinalIgnoreCase)
+                || tc.Name.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                cliArg = "nonexistent_file.csv";
+            }
+            else
+            {
+                cliArg = $"testdata_{tc.Id}.csv";
+            }
             var runResult = await BotHarnessDocker.RunContainerAsync(
-                _dockerPath, sessionId.Value, cliComponent.Name, $"testdata_{tc.Id}.csv", ct);
+                _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct);
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedBehavior, CompareOutput(runResult.Output, tc.ExpectedBehavior)));
         }
@@ -167,10 +178,12 @@ public sealed class BotHarness
         if (expected.Contains("JSON object", StringComparison.OrdinalIgnoreCase)
             && actual.TrimStart().StartsWith('{') && actual.TrimEnd().EndsWith('}'))
             return true;
-        // Error check: if expected mentions "error" and output contains error or non-zero exit
-        if (expected.Contains("error", StringComparison.OrdinalIgnoreCase)
+        // Error check: if expected mentions "error" or "non-zero" and output contains error/failed/exception
+        if ((expected.Contains("error", StringComparison.OrdinalIgnoreCase)
+             || expected.Contains("non-zero", StringComparison.OrdinalIgnoreCase))
             && (actual.Contains("error", StringComparison.OrdinalIgnoreCase)
-                || actual.Contains("exception", StringComparison.OrdinalIgnoreCase)))
+                || actual.Contains("exception", StringComparison.OrdinalIgnoreCase)
+                || actual.Contains("failed", StringComparison.OrdinalIgnoreCase)))
             return true;
         // Successful run with no specific expected output = pass
         if (expected.Contains("valid", StringComparison.OrdinalIgnoreCase)
@@ -192,6 +205,8 @@ public sealed class BotHarness
             return "";
         if (name.Contains("invalid") || name.Contains("inconsistent") || name.Contains("mismatch"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA,extra\nCarol,35,SF";
+        if (name.Contains("filenotfound") || name.Contains("missing") || name.Contains("not found"))
+            return "__NONEXISTENT_FILE__"; // sentinel — harness should pass a bad path instead
         if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
         // Default: simple valid CSV
