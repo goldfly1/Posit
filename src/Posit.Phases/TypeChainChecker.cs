@@ -30,6 +30,8 @@ public static class TypeChainChecker
                 // Get the return type of the current step's target method
                 var curRetType = GetReturnType(cur, contract, scannedSigs);
                 if (curRetType == null) continue;
+                // Skip void returns — terminal actions (Print, WriteStdout) don't chain
+                if (curRetType == "void" || curRetType == "Void") continue;
 
                 // Get the first param type of the next step's target method
                 var nextParamType = GetFirstParamType(next, contract, scannedSigs);
