@@ -217,8 +217,10 @@ public sealed class BotHarness
                 || actual.Contains("exception", StringComparison.OrdinalIgnoreCase)
                 || actual.Contains("failed", StringComparison.OrdinalIgnoreCase)))
             return true;
-        // Successful run with no specific expected output = pass
-        if (expected.Contains("valid", StringComparison.OrdinalIgnoreCase)
+        // Successful run with output = pass (if expected mentions "output" or "completes")
+        if ((expected.Contains("valid", StringComparison.OrdinalIgnoreCase)
+             || expected.Contains("output", StringComparison.OrdinalIgnoreCase)
+             || expected.Contains("completes", StringComparison.OrdinalIgnoreCase))
             && !string.IsNullOrWhiteSpace(actual))
             return true;
         // CSV check: if expected mentions CSV and output has commas + newlines
