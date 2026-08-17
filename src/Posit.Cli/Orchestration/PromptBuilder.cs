@@ -70,26 +70,18 @@ public static class PromptBuilder
         sb.AppendLine();
         if (registry != null)
         {
-            // List cut-outs first — PREFER these over generic patterns
+            // List cut-outs as optional shortcuts (not required)
             var cutOuts = registry.GetAllPatterns().Where(p => p.IsCutOut).OrderBy(p => p.Name).ToList();
             if (cutOuts.Count > 0)
             {
-                sb.AppendLine("═══ AVAILABLE CUT-OUTS (pre-cut domain modules — PREFER THESE over generic patterns) ═══");
-                sb.AppendLine("Cut-outs are pre-written, Z3-verified Dafny modules that do REAL work.");
-                sb.AppendLine("If a cut-out matches the component's responsibility, USE IT (set patternName to the cut-out name).");
-                sb.AppendLine("Each cut-out has REAL method names — use those EXACT names in methodSignatures and connections.");
-                sb.AppendLine("CHAIN BY TYPES: the output type of one cut-out must match the input type of the next.");
-                sb.AppendLine("Type vocabulary: string, seq<string>, seq<seq<string>>, int, bool");
-                sb.AppendLine("  string = one string (file content, JSON, text)");
-                sb.AppendLine("  seq<string> = list of strings (lines, words, tokens)");
-                sb.AppendLine("  seq<seq<string>> = rows of fields (CSV rows, key-value pairs, [count,word] pairs)");
-                sb.AppendLine();
-                sb.AppendLine("Example chain: ReadFile(string) → Tokenize(string→seq<string>) → CountFrequency(seq<string>→seq<seq<string>>) → Print(seq<seq<string>>→string)");
+                sb.AppendLine("═══ OPTIONAL CUT-OUTS (pre-written Dafny modules — use ONLY if one matches exactly) ═══");
+                sb.AppendLine("Cut-outs are shortcuts. If one matches your component's responsibility exactly, use it.");
+                sb.AppendLine("If none matches, WRITE YOUR OWN Dafny method using the reference card below — Z3 will verify it.");
+                sb.AppendLine("Do NOT force a cut-out to fit — write custom Dafny instead.");
                 sb.AppendLine();
                 foreach (var p in cutOuts)
                 {
                     sb.AppendLine($"  {p.Name}: {p.Responsibility}");
-                    // List method signatures as input_type → output_type for chaining
                     var sigs = registry.GetMethodSignatures(p.Name);
                     foreach (var sig in sigs)
                     {
@@ -99,25 +91,21 @@ public static class PromptBuilder
                     }
                 }
                 sb.AppendLine();
-                sb.AppendLine("RULE: Do NOT add intermediate steps (sort, format, transform) if a cut-out already does that.");
-                sb.AppendLine("      CountFrequency already sorts. SerializeToJson already formats. Only chain cut-outs that transform the data.");
-                sb.AppendLine();
-                        sb.AppendLine("═══ DAFNY COMPOSITION REFERENCE ═══");
-                        sb.AppendLine("You can use Dafny built-in operations WITHOUT a cut-out for simple logic:");
-                        sb.AppendLine("  Seq concat:    rows1 + rows2  (merge two sequences)");
-                        sb.AppendLine("  Append element: rows + [row]   (add one row)");
-                        sb.AppendLine("  String concat: s1 + s2         (join strings)");
-                        sb.AppendLine("  Length:         |s|             (number of elements)");
-                        sb.AppendLine("  Element access: s[i]            (requires 0 <= i < |s|)");
-                        sb.AppendLine("  Slice:          s[a..b]         (requires 0 <= a <= b <= |s|)");
-                        sb.AppendLine("  Empty seq:      var x: seq<string> := []");
-                        sb.AppendLine("If a needed operation is just seq concat or string join, write it inline — do NOT look for a cut-out.");
-                        sb.AppendLine();
             }
             sb.AppendLine("═══ UNIVERSAL STARTER PATTERN ═══");
             var pipe = registry.GetPattern("pipeline");
             if (pipe != null)
                 sb.AppendLine($"  - pipeline: {pipe.Responsibility}  ← USE THIS for the main orchestrator component");
+            sb.AppendLine();
+            sb.AppendLine("═══ DAFNY REFERENCE (for writing your own methods) ═══");
+            sb.AppendLine("Write Dafny methods directly — Z3 will verify them. Key syntax:");
+            sb.AppendLine("  method Name(params) returns (result: type) { body }");
+            sb.AppendLine("  Types: string, int, bool, seq<T>, seq<seq<T>>");
+            sb.AppendLine("  Seq concat: rows1 + rows2    String concat: s1 + s2");
+            sb.AppendLine("  Length: |s|    Element: s[i] (needs 0 <= i < |s|)    Slice: s[a..b]");
+            sb.AppendLine("  Empty seq: var x: seq<string> := []");
+            sb.AppendLine("  Loops: while i < |s| invariant 0 <= i <= |s| decreases |s| - i { ... }");
+            sb.AppendLine("  Assignment: := (not =)    If/else: if cond { } else { }");
             sb.AppendLine();
             sb.AppendLine("═══ SPECIALIST PATTERNS (ONLY if no cut-out matches — cut-outs are PREFERRED) ═══");
             sb.AppendLine("WARNING: These are GENERIC patterns with GENERIC methods. They rarely match the spec exactly.");
