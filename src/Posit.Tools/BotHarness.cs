@@ -84,24 +84,23 @@ public sealed class BotHarness
         File.WriteAllText(Path.Combine(tempDir, "Dockerfile.run"),
             BotHarnessDocker.GenerateDockerfileRun(cliComponent.Name));
 
-        var buildResult = await BotHarnessDocker.BuildAsync(_dockerPath, tempDir, sessionId.Value, ct);
-        if (!buildResult.Success) return Fail($"Docker build failed: {buildResult.Output}");
-
+        // Create test data files BEFORE Docker build so they're in the build context.
         var testCases = ExtractTestCases(cliComponent, testSuite);
-        var results = new List<TestCaseResult>();
-
-        // Create test data files in the temp dir for each test case.
-        // The program takes a file path as input, so we need actual files.
-        // For now, generate basic CSV test data based on test case description.
         foreach (var tc in testCases)
         {
-            // Create a test data file in temp dir
             var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}.csv");
             var testData = GenerateTestData(tc.Id, tc.Name);
             File.WriteAllText(testFile, testData);
+        }
 
-            // Pass the filename (relative to temp dir) as the CLI arg.
-            // Docker copies temp dir contents to /src, so the file is at /src/testdata_{tc.Id}.csv
+        var buildResult = await BotHarnessDocker.BuildAsync(_dockerPath, tempDir, sessionId.Value, ct);
+        if (!buildResult.Success) return Fail($"Docker build failed: {buildResult.Output}");
+
+        var results = new List<TestCaseResult>();
+
+        // Run each test case — test data files already created above
+        foreach (var tc in testCases)
+        {
             var runResult = await BotHarnessDocker.RunContainerAsync(
                 _dockerPath, sessionId.Value, cliComponent.Name, $"testdata_{tc.Id}.csv", ct);
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
