@@ -140,6 +140,22 @@ public static class WiringGenerator
                     // Chain the first out param as the return for next step
                     prevRet = $"out{retVarCounter}_0";
                     prevType = targetSig.OutParamTypes[0];
+
+                    // If there is a bool out param (isValid), emit a validation branch.
+                    // If validation fails, print error to stderr and exit non-zero.
+                    for (var bi = 0; bi < targetSig.OutParamTypes.Length; bi++)
+                    {
+                        if (targetSig.OutParamTypes[bi] == "bool")
+                        {
+                            var boolVar = $"out{retVarCounter}_{bi}";
+                            sb.AppendLine($"            if (!{boolVar})");
+                            sb.AppendLine("            {");
+                            sb.AppendLine("                Console.Error.WriteLine(\"Validation failed\");");
+                            sb.AppendLine("                return 1;");
+                            sb.AppendLine("            }");
+                            break;
+                        }
+                    }
                     retVarCounter++;
                 }
                 else
