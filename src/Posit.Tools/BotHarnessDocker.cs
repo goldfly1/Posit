@@ -44,7 +44,7 @@ internal static class BotHarnessDocker
         if (!File.Exists(dockerfilePath))
             return new DockerResult(false, "Dockerfile.run not found");
 
-        var args = $"build -f \"{dockerfilePath}\" -t posit-run-{tag.ToLowerInvariant()} \"{contextDir}\"";
+        var args = $"build --no-cache -f \"{dockerfilePath}\" -t posit-run-{tag.ToLowerInvariant()} \"{contextDir}\"";
         return await RunDockerAsync(dockerPath, args, ct);
     }
 

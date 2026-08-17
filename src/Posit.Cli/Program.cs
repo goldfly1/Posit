@@ -80,7 +80,7 @@ internal static class Program
         Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
         foreach (var tc in result.Results)
-            Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output[..Math.Min(60, tc.Output.Length)]}");
+            Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
         return result.Success ? 0 : 1;
     }
 
