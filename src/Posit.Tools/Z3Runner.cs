@@ -96,16 +96,19 @@ public sealed class Z3Runner
 
     private static int FindMatchingBrace(string text, int openIndex)
     {
+        // Dafny's C# translation can have unbalanced braces (goto labels produce
+        // extra closing braces). So we can't rely on depth==0 alone.
+        // Strategy: find "} // end of namespace" marker (Dafny always emits this).
+        var endMarker = text.IndexOf("} // end of namespace", openIndex, StringComparison.Ordinal);
+        if (endMarker >= 0) return endMarker;
+        // Fallback: find last } that brings depth to 0 or below
         var depth = 0;
         var lastZero = -1;
         for (var i = openIndex; i < text.Length; i++)
         {
             if (text[i] == '{') depth++;
-            else if (text[i] == '}') { depth--; if (depth == 0) lastZero = i; }
+            else if (text[i] == '}') { depth--; if (depth <= 0) lastZero = i; }
         }
-        // Return the LAST position where depth hit 0 — this is the namespace closing brace.
-        // Dafny's goto labels can produce unbalanced braces, so the first depth==0
-        // may be the method close, not the namespace close.
         return lastZero;
     }
 
