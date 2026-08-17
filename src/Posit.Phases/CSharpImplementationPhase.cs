@@ -31,13 +31,13 @@ public sealed class CSharpImplementationPhase : IPhase
 
     public Task InitializeAsync(PhaseContext context, CancellationToken ct = default) => Task.CompletedTask;
 
-    public Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
+    public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
         try
         {
         var contract = ExtractContract(context);
         if (contract == null)
-            return Task.FromResult(Fail(context, "No ArchitectureContract in input artifacts"));
+            return Fail(context, "No ArchitectureContract in input artifacts");
 
         var verificationResults = ExtractVerificationResults(context);
         var files = new List<SourceCodeFile>();
@@ -84,13 +84,19 @@ public sealed class CSharpImplementationPhase : IPhase
             }
         }
 
-        // Sub-step (c): wiring via WiringGenerator
+        // Sub-step (c): wiring via ModelWiringGenerator (model writes Wire.cs)
         var translatedSigs = ScanTranslatedSignatures(files, contract);
         var stubSigs = ScanStubSignatures(files, contract);
+        var modelWirer = new ModelWiringGenerator(_model);
         foreach (var comp in contract.Components)
         {
             if (comp.Connections.Length == 0) continue;
-            var wireContent = WiringGenerator.Generate(comp, contract, translatedSigs, stubSigs);
+            var wireContent = await modelWirer.GenerateAsync(comp, contract, translatedSigs, stubSigs, context, ct);
+            if (string.IsNullOrWhiteSpace(wireContent))
+            {
+                // Fallback to rule-based generator if model fails
+                wireContent = WiringGenerator.Generate(comp, contract, translatedSigs, stubSigs);
+            }
             files.Add(new SourceCodeFile($"{comp.Name}/Wire.cs", wireContent));
         }
 
@@ -105,7 +111,7 @@ public sealed class CSharpImplementationPhase : IPhase
         };
         var payloadJson = JsonSerializer.SerializeToUtf8Bytes(bundle, PositJson.Options);
 
-        return Task.FromResult(new PhaseResult
+        return new PhaseResult
         {
             PhaseId = context.PhaseId,
             Status = PhaseStatus.Success,
@@ -121,11 +127,11 @@ public sealed class CSharpImplementationPhase : IPhase
             },
             Costs = CostSnapshot.Zero,
             Warnings = warnings.ToArray()
-        });
+        };
         }
         catch (Exception ex)
         {
-            return Task.FromResult(Fail(context, $"C# impl exception: {ex.Message}"));
+            return Fail(context, $"C# impl exception: {ex.Message}");
         }
     }
 
