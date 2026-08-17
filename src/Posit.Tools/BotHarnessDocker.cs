@@ -30,6 +30,7 @@ internal static class BotHarnessDocker
         sb.AppendLine("COPY DafnyRuntime/DafnyRuntime.dll ./");
         // Copy test data files so the program can read them at runtime
         sb.AppendLine("COPY testdata_*.csv ./");
+        sb.AppendLine("COPY testdata_*.json ./");
         sb.AppendLine($"ENTRYPOINT [\"dotnet\", \"{cliComponentName}.dll\"]");
         return sb.ToString();
     }

@@ -88,8 +88,12 @@ public sealed class BotHarness
         var testCases = ExtractTestCases(cliComponent, testSuite);
         foreach (var tc in testCases)
         {
-            var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}.csv");
             var testData = GenerateTestData(tc.Id, tc.Name);
+            // Skip file creation for file-not-found tests — pass a bad path instead
+            if (testData == "__NONEXISTENT_FILE__") continue;
+            // Use .json extension for JSON test data, .csv for CSV
+            var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json" : ".csv";
+            var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}{ext}");
             File.WriteAllText(testFile, testData);
         }
 
@@ -104,13 +108,17 @@ public sealed class BotHarness
             // For file-not-found tests, pass a non-existent path
             string cliArg;
             if (tc.Name.Contains("FileNotFound", StringComparison.OrdinalIgnoreCase)
-                || tc.Name.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                || tc.Name.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                || tc.Name.Contains("missing", StringComparison.OrdinalIgnoreCase))
             {
                 cliArg = "nonexistent_file.csv";
             }
             else
             {
-                cliArg = $"testdata_{tc.Id}.csv";
+                // Determine extension from test data content
+                var testData = GenerateTestData(tc.Id, tc.Name);
+                var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json" : ".csv";
+                cliArg = $"testdata_{tc.Id}{ext}";
             }
             var runResult = await BotHarnessDocker.RunContainerAsync(
                 _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct);
@@ -207,6 +215,8 @@ public sealed class BotHarness
             return "name,age,city\nAlice,30,NYC\nBob,25,LA,extra\nCarol,35,SF";
         if (name.Contains("filenotfound") || name.Contains("missing") || name.Contains("not found"))
             return "__NONEXISTENT_FILE__"; // sentinel — harness should pass a bad path instead
+        if (name.Contains("json"))
+            return "[{\"name\":\"Alice\",\"age\":\"30\"},{\"name\":\"Bob\",\"age\":\"25\"}]";
         if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
         // Default: simple valid CSV
