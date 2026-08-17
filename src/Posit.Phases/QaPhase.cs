@@ -57,9 +57,16 @@ public sealed class QaPhase : IPhase
                 });
             }
 
+            // Read verified status from DesignContext (snowballed after Z3), not ArchitectureContract
+            var verifiedModules = new HashSet<string>(
+                (context.DesignContext?.DafnyContracts ?? [])
+                    .Where(c => c.IsVerified)
+                    .Select(c => c.ModuleName));
+
             foreach (var comp in contract.Components)
             {
-                var isVerified = comp.Classification != ModuleClassification.IoShell && comp.IsVerified;
+                var isVerified = comp.Classification != ModuleClassification.IoShell
+                    && verifiedModules.Contains(comp.Name);
                 moduleResults.Add(new QaModuleResult
                 {
                     ModuleName = comp.Name,
