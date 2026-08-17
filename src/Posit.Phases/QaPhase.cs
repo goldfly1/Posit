@@ -82,8 +82,8 @@ public sealed class QaPhase : IPhase
                     IsVerified = isVerified,
                     TestCount = isVerified ? 0 : testDataFiles.Count,
                     Notes = isVerified
-                        ? "proof IS the test"
-                        : $"bot harness will test with {testDataFiles.Count} AI-generated test data file(s)"
+                        ? "Z3-verified (proof IS the test) — Dafny cut-out, no tests needed"
+                        : "io-shell stub (bot harness tests I/O) — C# portal, not Z3-proven by design"
                 });
             }
         }
@@ -92,10 +92,10 @@ public sealed class QaPhase : IPhase
         {
             TestFiles = testDataFiles.Select(t => new SourceCodeFile(t.FileName, t.Content)).ToArray(),
             ModuleResults = moduleResults.ToArray(),
-            Summary = $"QA: {moduleResults.Count} modules, " +
-                      $"{moduleResults.Count(m => m.IsVerified)} verified, " +
-                      $"{moduleResults.Count(m => !m.IsVerified)} unverified. " +
-                      $"{testDataFiles.Count} test data file(s) generated. " +
+            Summary = $"QA: {moduleResults.Count} modules — " +
+                      $"{moduleResults.Count(m => m.IsVerified)} Z3-verified (proof IS the test), " +
+                      $"{moduleResults.Count(m => !m.IsVerified)} io-shell (bot harness tests I/O). " +
+                      $"{testDataFiles.Count} test data file(s). " +
                       $"{newCutoutCandidates} new cut-out candidate(s) for DafnyDB."
         };
 
