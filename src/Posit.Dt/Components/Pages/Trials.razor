@@ -1,0 +1,120 @@
+@page "/trials"
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@inject PositDashboardRepository Repo
+
+<PageTitle>Trials — Posit</PageTitle>
+
+<div class="page-header">
+    <h1 style="color:#89b4fa; margin:0;">Trials</h1>
+    <button @onclick="RefreshAsync" class="btn btn-primary" accesskey="r" title="Refresh (Alt+R)">↻ Refresh</button>
+</div>
+
+<p style="color:#6c7086; font-size:0.85rem;">
+    Hotkeys: <b>F1</b>–<b>F12</b> for T1–T12, <b>Ctrl+F1</b>–<b>Ctrl+F12</b> for T13–T24. Tab to cycle.
+</p>
+
+@if (loading)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="trial-grid">
+        @foreach (var t in trialSpecs)
+        {
+            var session = sessions.FirstOrDefault(s => (s.Description ?? "").Contains(t.Key, StringComparison.OrdinalIgnoreCase));
+            var status = session?.Status ?? "Not Run";
+            var url = session != null ? $"/trial/{session.SessionId}" : null;
+            <div class="trial-card @(url != null ? "trial-card-passed" : "")" 
+                 tabindex="0"
+                 @onclick="() => Navigate(url)"
+                 @onkeypress="() => Navigate(url)"
+                 style="@GetCardStyle(status)">
+                <div class="trial-card-key">@t.Hotkey</div>
+                <div class="trial-card-id">@t.Id</div>
+                <div class="trial-card-name">@t.Name</div>
+                <div class="trial-card-status">
+                    @if (url != null)
+                    {
+                        <span class="badge" style="@GetStatusStyle(status)">@status</span>
+                    }
+                    else
+                    {
+                        <span class="badge" style="background:#313244; color:#6c7086;">Not Run</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<script>
+    document.addEventListener('keydown', function(e) {
+        if (e.key.startsWith('F') && e.key.length <= 3) {
+            var fNum = parseInt(e.key.substring(1));
+            if (isNaN(fNum) || fNum < 1 || fNum > 12) return;
+            var idx = e.ctrlKey ? fNum + 11 : fNum - 1;
+            var cards = document.querySelectorAll('.trial-card');
+            if (idx < cards.length) {
+                cards[idx].click();
+                e.preventDefault();
+            }
+        }
+    });
+</script>
+
+@code {
+    private List<PositSessionSummary> sessions = new();
+    private bool loading = true;
+
+    private static readonly List<TrialSpec> trialSpecs =
+    [
+        new("T1", "F1", "CSV→JSON", "reads a CSV file, parses each line"),
+        new("T2", "F2", "JSON→CSV", "reads a JSON file containing an array"),
+        new("T3", "F3", "Filtered CSV", "validates that all rows have the same number of fields, writes valid rows"),
+        new("T4", "F4", "Word Counter", "splits into words by whitespace, counts frequency"),
+        new("T5", "F5", "Multi-File Merge", "takes two CSV file paths as arguments, reads both"),
+        new("T6", "F6", "Temperature", "reads a temperature and unit from stdin"),
+        new("T7", "F7", "Task Queue", "manages a priority queue"),
+        new("T8", "F8", "Log Analyzer", "reads a log file"),
+        new("T9", "F9", "CSV Validator", "validates each row for field count"),
+        new("T10", "F10", "Data Pipeline", "reads a CSV of products, filters out"),
+        new("T11", "F11", "Link Extractor", "reads a Markdown file, extracts all links"),
+        new("T12", "F12", "Config Merger", "reads two INI-style config files"),
+        new("T13", "Ctrl+F1", "REST API", "CRUD endpoints"),
+        new("T14", "Ctrl+F2", "KV Store", "Key-Value Store with TTL"),
+        new("T15", "Ctrl+F3", "Rate Limiter", "Token bucket or sliding window"),
+        new("T16", "Ctrl+F4", "Event Sourcing", "Append-only event log"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        loading = true;
+        try { sessions = await Repo.GetSessionsAsync(); }
+        catch { sessions = new(); }
+        loading = false;
+    }
+
+    private void Navigate(string? url)
+    {
+        if (url != null)
+            Nav.NavigateTo(url);
+    }
+
+    [Inject] NavigationManager Nav { get; set; } = default!;
+
+    private static string GetCardStyle(string status) => "";
+    private static string GetStatusStyle(string status) => status.ToLowerInvariant() switch
+    {
+        "completed" => "background:#a6e3a1; color:#1e1e2e;",
+        "aborted" or "failed" => "background:#f38ba8; color:#1e1e2e;",
+        _ => "background:#313244; color:#cdd6f4;"
+    };
+
+    private record TrialSpec(string Id, string Hotkey, string Name, string Key);
+}
