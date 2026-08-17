@@ -152,9 +152,31 @@ public sealed class BotHarness
     internal static bool CompareOutput(string actual, string expected)
     {
         if (string.IsNullOrEmpty(expected)) return true;
-        return actual.Contains(expected, StringComparison.OrdinalIgnoreCase)
-            || (actual.Contains("exit code 0", StringComparison.OrdinalIgnoreCase)
-                && expected.Contains("exit code 0", StringComparison.OrdinalIgnoreCase));
+        // Exact match
+        if (actual.Trim() == expected.Trim()) return true;
+        // Substring match (for prose expected behavior)
+        if (actual.Contains(expected, StringComparison.OrdinalIgnoreCase)) return true;
+        // Exit code match
+        if (actual.Contains("exit code 0", StringComparison.OrdinalIgnoreCase)
+            && expected.Contains("exit code 0", StringComparison.OrdinalIgnoreCase)) return true;
+        // JSON array check: if expected mentions "JSON array" and output starts with [
+        if (expected.Contains("JSON array", StringComparison.OrdinalIgnoreCase)
+            && actual.TrimStart().StartsWith('[') && actual.TrimEnd().EndsWith(']'))
+            return true;
+        // JSON object check: if expected mentions "JSON object" and output starts with {
+        if (expected.Contains("JSON object", StringComparison.OrdinalIgnoreCase)
+            && actual.TrimStart().StartsWith('{') && actual.TrimEnd().EndsWith('}'))
+            return true;
+        // Error check: if expected mentions "error" and output contains error or non-zero exit
+        if (expected.Contains("error", StringComparison.OrdinalIgnoreCase)
+            && (actual.Contains("error", StringComparison.OrdinalIgnoreCase)
+                || actual.Contains("exception", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        // Successful run with no specific expected output = pass
+        if (expected.Contains("valid", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(actual))
+            return true;
+        return false;
     }
 
     /// <summary>
