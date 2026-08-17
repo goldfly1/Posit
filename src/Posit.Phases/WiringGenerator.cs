@@ -362,6 +362,12 @@ public static class WiringGenerator
             "int" or "BigInteger" or "long" => "0",
             "bool" => "false",
             "string" => "\"\"",
+            // Dafny string type — empty string, not null
+            _ when type.Contains("ISequence") && type.Contains("Rune") && type.IndexOf("ISequence", type.IndexOf("ISequence") + 1) < 0
+                => "Dafny.Sequence<Dafny.Rune>.UnicodeFromString(\"\")",
+            // Dafny seq<seq<string>> — empty sequence
+            _ when type.Contains("ISequence") && type.IndexOf("ISequence", type.IndexOf("ISequence") + 1) > 0
+                => "Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.Empty",
             _ => $"default({type})"
         };
 }
