@@ -119,7 +119,11 @@ public static class PromptBuilder
             if (pipe != null)
                 sb.AppendLine($"  - pipeline: {pipe.Responsibility}  ← USE THIS for the main orchestrator component");
             sb.AppendLine();
-            sb.AppendLine("═══ SPECIALIST PATTERNS (add alongside pipeline for specific modules) ═══");
+            sb.AppendLine("═══ SPECIALIST PATTERNS (ONLY if no cut-out matches — cut-outs are PREFERRED) ═══");
+            sb.AppendLine("WARNING: These are GENERIC patterns with GENERIC methods. They rarely match the spec exactly.");
+            sb.AppendLine("Only use these if NO cut-out covers the component's responsibility.");
+            sb.AppendLine("If a cut-out matches even partially, USE THE CUT-OUT — not a generic pattern.");
+            sb.AppendLine();
             foreach (var p in registry.GetAllPatterns().OrderBy(p => p.Name))
                 if (p.Name != "pipeline" && !p.IsCutOut)
                     sb.AppendLine($"  - {p.Name}: {p.Responsibility}");
