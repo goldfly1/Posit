@@ -91,6 +91,24 @@ public sealed class Z3Runner
 
         var namespaceBlock = processed.Substring(nsStart, braceEnd - nsStart + 1);
 
+        // Some Dafny translations put the real code in "namespace {ModuleName}" not
+        // "namespace _module_{ModuleName}". If the _module block is empty, fall back.
+        if (!namespaceBlock.Contains("public static") && !namespaceBlock.Contains("__default"))
+        {
+            var altStart = processed.IndexOf($"namespace {moduleName} {{", StringComparison.Ordinal);
+            if (altStart >= 0)
+            {
+                var altBraceStart = processed.IndexOf('{', altStart);
+                var altBraceEnd = FindMatchingBrace(processed, altBraceStart);
+                if (altBraceEnd > altBraceStart)
+                {
+                    var altBlock = processed.Substring(altStart, altBraceEnd - altStart + 1);
+                    if (altBlock.Contains("public static") || altBlock.Contains("__default"))
+                        namespaceBlock = altBlock;
+                }
+            }
+        }
+
         return $"using System;\nusing System.Numerics;\nusing System.Collections;\n\n{namespaceBlock}";
     }
 

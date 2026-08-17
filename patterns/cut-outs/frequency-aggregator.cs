@@ -9,7 +9,7 @@ using System;
 using System.Numerics;
 using System.Collections;
 [assembly: DafnyAssembly.DafnySourceAttribute(@"// dafny 4.11.0.0
-// Command-line arguments: translate cs --solver-path C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe --no-verify patterns/cut-outs/frequency-aggregator.dfy
+// Command-line arguments: translate cs --no-verify --solver-path C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe patterns/cut-outs/frequency-aggregator.dfy
 // frequency-aggregator.dfy
 
 
