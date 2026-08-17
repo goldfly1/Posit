@@ -14,6 +14,7 @@ builder.Services.AddSingleton<ArtifactRepository>(sp => new ArtifactRepository(s
 builder.Services.AddScoped<PositDashboardRepository>(sp => new PositDashboardRepository(sp.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddScoped<PositPromptRepository>(sp => new PositPromptRepository(sp.GetRequiredService<NpgsqlDataSource>()));
 builder.Services.AddScoped<PositImplTraceRepository>(sp => new PositImplTraceRepository(sp.GetRequiredService<NpgsqlDataSource>()));
+builder.Services.AddScoped<PositTrialRepository>(sp => new PositTrialRepository(sp.GetRequiredService<NpgsqlDataSource>()));
 
 var app = builder.Build();
 
