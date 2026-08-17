@@ -46,7 +46,10 @@ internal static class BotHarnessDocker
         if (!File.Exists(dockerfilePath))
             return new DockerResult(false, "Dockerfile.run not found");
 
-        var args = $"build --no-cache -f \"{dockerfilePath}\" -t posit-run-{tag.ToLowerInvariant()} \"{contextDir}\"";
+        // Sanitize tag: Docker tags can't start with _ or contain invalid chars
+        var safeTag = new string(tag.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '.' ? c : '-').ToArray());
+        if (safeTag.StartsWith('-')) safeTag = "p" + safeTag[1..];
+        var args = $"build --no-cache -f \"{dockerfilePath}\" -t posit-run-{safeTag.ToLowerInvariant()} \"{contextDir}\"";
         return await RunDockerAsync(dockerPath, args, ct);
     }
 
@@ -56,8 +59,10 @@ internal static class BotHarnessDocker
     internal static async Task<DockerResult> RunContainerAsync(
         string dockerPath, string tag, string cliComponentName, string input, CancellationToken ct = default)
     {
-        // Pass input via stdin if non-empty, otherwise just run
-        var args = $"run --rm posit-run-{tag.ToLowerInvariant()}";
+        // Sanitize tag (same as BuildAsync)
+        var safeTag = new string(tag.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '.' ? c : '-').ToArray());
+        if (safeTag.StartsWith('-')) safeTag = "p" + safeTag[1..];
+        var args = $"run --rm posit-run-{safeTag.ToLowerInvariant()}";
         if (!string.IsNullOrEmpty(input))
             args += $" {EscapeShellArg(input)}";
 
