@@ -158,7 +158,7 @@ internal static class Program
         var controller = new PhaseController();
         controller.Register(new ArchitecturePhase(gateway, registry));
         controller.Register(new DafnyContractsPhase(z3));
-        controller.Register(new DafnyImplementationPhase(z3));
+        controller.Register(new DafnyImplementationPhase(z3, gateway));
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
         controller.Register(new QaPhase(gateway, adapter));
 

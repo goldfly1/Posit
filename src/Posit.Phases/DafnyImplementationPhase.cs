@@ -1,16 +1,21 @@
 namespace Posit.Phases;
 
+using System.Text;
+using Posit.AI.Models;
+
 /// <summary>
-/// Phase 3: Dafny Implementation. Purely deterministic — NO model call.
-/// Pre-verified pattern skeletons are translated directly to C#.
-/// If a skeleton fails Z3, the correction signal routes back to Architecture.
-/// (Spec: "Code (no model): Dafny Verify → Dafny Translate")
+/// Phase 3: Dafny Implementation. Hybrid — deterministic for cut-outs, model-generated for custom logic.
+/// - Cut-out components: skeleton exists on disk → Z3 verify → translate (no model call)
+/// - Custom components: no skeleton → model writes Dafny from spec + reference card → Z3 verify → translate
+/// Z3 is the judge in both paths. Design Review is the QA.
 /// </summary>
 public sealed class DafnyImplementationPhase : IPhase
 {
     private readonly Z3Runner _z3;
+    private readonly IModelGateway? _model;
 
-    public DafnyImplementationPhase(Z3Runner z3) => _z3 = z3;
+    public DafnyImplementationPhase(Z3Runner z3) { _z3 = z3; _model = null; }
+    public DafnyImplementationPhase(Z3Runner z3, IModelGateway model) { _z3 = z3; _model = model; }
 
     public PhaseId Id { get; } = new("dafny-implementation");
     public string Name => "Dafny Implementation";
@@ -40,14 +45,29 @@ public sealed class DafnyImplementationPhase : IPhase
             if (comp.Classification == ModuleClassification.IoShell) continue;
 
             var skeletonPath = ResolveDafnyPath(context, comp);
-            if (!File.Exists(skeletonPath))
+            var isCutOut = File.Exists(skeletonPath);
+
+            // If no skeleton (not a cut-out), generate Dafny with the model
+            if (!isCutOut && _model != null)
             {
-                warnings.Add($"Skeleton file missing: {skeletonPath}");
-                results.Add(FailResult(comp.Name, skeletonPath, "Skeleton file missing"));
+                var generated = await GenerateDafnyAsync(comp, context, ct);
+                if (string.IsNullOrWhiteSpace(generated))
+                {
+                    warnings.Add($"Model returned empty Dafny for '{comp.Name}'");
+                    results.Add(FailResult(comp.Name, skeletonPath, "Empty model output"));
+                    continue;
+                }
+                skeletonPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
+                await File.WriteAllTextAsync(skeletonPath, generated, ct);
+            }
+            else if (!isCutOut)
+            {
+                warnings.Add($"No skeleton and no model for '{comp.Name}' — cannot generate Dafny");
+                results.Add(FailResult(comp.Name, skeletonPath, "No skeleton and no model"));
                 continue;
             }
 
-            // Step 1: Verify the skeleton with Z3
+            // Step 1: Verify the Dafny with Z3 (works for both cut-outs and generated)
             var verifyResult = await _z3.VerifyAsync(skeletonPath, ct);
             if (!verifyResult.Success)
             {
@@ -101,6 +121,100 @@ public sealed class DafnyImplementationPhase : IPhase
             Warnings = warnings.ToArray()
         };
     }
+
+    /// <summary>
+    /// Generate Dafny code for a component using the model.
+    /// Includes the Dafny reference card and the component's spec/responsibility/test cases.
+    /// </summary>
+    private async Task<string?> GenerateDafnyAsync(Component comp, PhaseContext context, CancellationToken ct)
+    {
+        var referenceCard = LoadReferenceCard();
+        var testCases = comp.TestCases.Length > 0
+            ? string.Join("\n", comp.TestCases.Select(tc => $"  // test: {tc.Description} → {tc.ExpectedBehavior}"))
+            : "";
+
+        var sigs = comp.MethodSignatures.Length > 0
+            ? string.Join("\n", comp.MethodSignatures.Select(m =>
+                $"  method {m.Name}({string.Join(", ", m.Params.Select(p => $"{p.Name}: {p.Type}"))}) returns ({m.ReturnType})"))
+            : "";
+
+        var systemPrompt = new StringBuilder();
+        systemPrompt.AppendLine("You are writing a Dafny module for the Posit spec compiler.");
+        systemPrompt.AppendLine("Write a COMPLETE Dafny module that implements the spec.");
+        systemPrompt.AppendLine("Z3 will verify your code — it must pass verification.");
+        systemPrompt.AppendLine();
+        systemPrompt.AppendLine($"Component: {comp.Name}");
+        systemPrompt.AppendLine($"Responsibility: {comp.Responsibility}");
+        systemPrompt.AppendLine($"Pattern: {comp.PatternName ?? "custom"}");
+        systemPrompt.AppendLine();
+        systemPrompt.AppendLine("Method signatures to implement:");
+        systemPrompt.AppendLine(sigs);
+        systemPrompt.AppendLine();
+        systemPrompt.AppendLine("Test cases (your implementation MUST satisfy these):");
+        systemPrompt.AppendLine(testCases);
+        systemPrompt.AppendLine();
+        systemPrompt.AppendLine("Dafny Reference Card:");
+        systemPrompt.AppendLine(referenceCard);
+        systemPrompt.AppendLine();
+        systemPrompt.AppendLine("Rules:");
+        systemPrompt.AppendLine("1. Output ONLY raw Dafny code. No JSON, no markdown fences, no explanations.");
+        systemPrompt.AppendLine("2. Keep method signatures as specified above.");
+        systemPrompt.AppendLine("3. Keep all {:extern} declarations unchanged.");
+        systemPrompt.AppendLine("4. Write real method bodies that implement the spec's logic.");
+        systemPrompt.AppendLine("5. The code must pass Z3 verification.");
+        systemPrompt.AppendLine("6. Use Dafny built-ins: seq concat (+), string concat (+), |s| for length, s[i] for access.");
+        systemPrompt.AppendLine("7. Simple operations (parse, format, concat) do NOT need a pattern — write them inline.");
+
+        var prompt = new PromptTemplate
+        {
+            PhaseId = context.PhaseId,
+            Version = new PromptVersion("1.0.0"),
+            SystemPrompt = systemPrompt.ToString(),
+            OutputFormatSpec = "Dafny source code only",
+            ModelTier = ModelTier.Fast,
+            Temperature = 0.2,
+            MaxOutputTokens = 8192,
+            OutputFormat = OutputFormat.PlainText,
+            OutputSchemaRef = "DafnyModule",
+            Status = PromptStatus.Active
+        };
+
+        try
+        {
+            var gen = await _model!.GenerateAsync(context.ModelRoute, prompt, context, ct);
+            if (string.IsNullOrWhiteSpace(gen.Text))
+                return null;
+
+            // Extract Dafny from response (strip markdown fences if present)
+            var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+            var fenceMatch = System.Text.RegularExpressions.Regex.Match(
+                text, @"```(?:dafny)?\s*\n?(.*?)\n?```",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (fenceMatch.Success)
+                return CleanDafny(fenceMatch.Groups[1].Value);
+            return CleanDafny(text);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[dafny-impl] Model generation failed for '{comp.Name}': {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string LoadReferenceCard()
+    {
+        var paths = new[] {
+            Path.Combine(Directory.GetCurrentDirectory(), "patterns", "dafny-reference-card.dfy"),
+            "C:/Users/goldf/Posit/patterns/dafny-reference-card.dfy"
+        };
+        foreach (var p in paths)
+            if (File.Exists(p))
+                return File.ReadAllText(p);
+        return "// Dafny reference card not found";
+    }
+
+    private static string CleanDafny(string code) =>
+        code.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
 
     public ValidationResult ValidateOutput(PhaseResult result)
     {
