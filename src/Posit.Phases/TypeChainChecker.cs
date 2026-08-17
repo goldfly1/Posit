@@ -111,6 +111,9 @@ public static class TypeChainChecker
         int tDepth = CountOccurrences(t, "ISequence");
         bool fHasRune = f.Contains("Rune");
         bool tHasRune = t.Contains("Rune");
+        // string ↔ BigInteger/int — model handles parsing/formatting in wiring
+        if (f == "string" && (t == "BigInteger" || t == "int")) return true;
+        if (t == "string" && (f == "BigInteger" || f == "int")) return true;
         // string ↔ ISequence<Rune> (1D)
         if (f == "string" && tDepth == 1 && tHasRune) return true;
         if (t == "string" && fDepth == 1 && fHasRune) return true;
