@@ -22,6 +22,8 @@ internal sealed class PatternRegistryAdapter : IPatternRegistry
         _inner.ComposeSkeleton(patternName, stubNames, parametersJson ?? patternName);
     public string ComposeIoShellSkeleton(string stubName, string componentName) =>
         _inner.ComposeIoShellSkeleton([stubName], componentName);
+    public (string Name, string Responsibility)[] GetAllPatterns() =>
+        _inner.GetAllPatterns().Select(p => (p.Name, p.Responsibility ?? "")).ToArray();
     public string[] MaterializeDependencies(string patternName, string stagingDir)
     { _inner.MaterializeDependencies(stagingDir, patternName); return []; }
 }
@@ -158,7 +160,7 @@ internal static class Program
         controller.Register(new DafnyContractsPhase(z3));
         controller.Register(new DafnyImplementationPhase(z3));
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
-        controller.Register(new QaPhase(gateway));
+        controller.Register(new QaPhase(gateway, adapter));
 
         return (new PositOrchestrator(controller, fsm, graph, artifactRepo, stateStore, registry), stateStore);
     }

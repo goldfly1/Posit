@@ -19,6 +19,7 @@ public interface IPatternRegistry
     string ComposeSkeleton(string patternName, string[] stubNames, string? parametersJson);
     string ComposeIoShellSkeleton(string stubName, string componentName);
     string[] MaterializeDependencies(string patternName, string stagingDir);
+    (string Name, string Responsibility)[] GetAllPatterns();
 }
 
 /// <summary>

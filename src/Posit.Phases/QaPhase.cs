@@ -14,9 +14,10 @@ namespace Posit.Phases;
 public sealed class QaPhase : IPhase
 {
     private readonly IModelGateway? _model;
+    private readonly IPatternRegistry? _registry;
 
-    public QaPhase() { _model = null; }
-    public QaPhase(IModelGateway model) { _model = model; }
+    public QaPhase() { _model = null; _registry = null; }
+    public QaPhase(IModelGateway model, IPatternRegistry? registry = null) { _model = model; _registry = registry; }
 
     public PhaseId Id { get; } = new("qa");
     public string Name => "QA";
@@ -35,6 +36,7 @@ public sealed class QaPhase : IPhase
         var contract = ExtractContract(context);
         var moduleResults = new List<QaModuleResult>();
         var testDataFiles = new List<TestDataFile>();
+        var newCutoutCandidates = 0;
 
         if (contract != null)
         {
@@ -63,10 +65,17 @@ public sealed class QaPhase : IPhase
                     .Where(c => c.IsVerified)
                     .Select(c => c.ModuleName));
 
+            // Count registry candidates: verified modules NOT already in the registry
+            var registryNames = _registry?.GetAllPatterns().Select(p => p.Name).ToHashSet() ?? new HashSet<string>();
+
             foreach (var comp in contract.Components)
             {
                 var isVerified = comp.Classification != ModuleClassification.IoShell
                     && verifiedModules.Contains(comp.Name);
+
+                // Track new cut-out candidates for DafnyDB flywheel
+                if (isVerified && comp.PatternName != null && !registryNames.Contains(comp.PatternName))
+                    newCutoutCandidates++;
                 moduleResults.Add(new QaModuleResult
                 {
                     ModuleName = comp.Name,
@@ -86,7 +95,8 @@ public sealed class QaPhase : IPhase
             Summary = $"QA: {moduleResults.Count} modules, " +
                       $"{moduleResults.Count(m => m.IsVerified)} verified, " +
                       $"{moduleResults.Count(m => !m.IsVerified)} unverified. " +
-                      $"{testDataFiles.Count} test data file(s) generated."
+                      $"{testDataFiles.Count} test data file(s) generated. " +
+                      $"{newCutoutCandidates} new cut-out candidate(s) for DafnyDB."
         };
 
         var payloadJson = JsonSerializer.SerializeToUtf8Bytes(testSuite, PositJson.Options);
