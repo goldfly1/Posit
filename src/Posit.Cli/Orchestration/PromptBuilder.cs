@@ -55,10 +55,10 @@ public static class PromptBuilder
         sb.AppendLine("  - testCases: array of {id, name, targetType, description, expectedBehavior}");
         sb.AppendLine();
         sb.AppendLine("═══ STUB USAGE RULES ═══");
-        sb.AppendLine("For CSV or line-based file input, use ReadLines (returns seq<string> = lines) NOT ReadFile.");
-        sb.AppendLine("For JSON or whole-file input, use ReadFile (returns string = whole file content) NOT ReadLines.");
-        sb.AppendLine("ReadLines returns the right shape for line-by-line processing: lines → ParseLines → ValidateRows → SerializeToJson.");
-        sb.AppendLine("ReadFile returns the right shape for whole-file parsing: file content → ParseJson → SerializeToCsv.");
+        sb.AppendLine("For CSV or line-by-line processing, use ReadLines (returns seq<string> = lines) NOT ReadFile.");
+        sb.AppendLine("For JSON, text, or whole-file parsing (where the file is one unit), use ReadFile (returns string) NOT ReadLines.");
+        sb.AppendLine("ReadLines returns the right shape for line-by-line: lines → ParseLines → ValidateRows → SerializeToJson.");
+        sb.AppendLine("ReadFile returns the right shape for whole-file: content → ParseJson/Tokenize/ParseIni → SerializeToCsv.");
         sb.AppendLine();
         sb.AppendLine("CRITICAL: Every component must have EITHER a patternName (if dafny) OR at least one stubName (if io-shell).");
         sb.AppendLine("A component with empty patternName AND empty stubNames is INVALID and will be rejected.");
