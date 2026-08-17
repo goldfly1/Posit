@@ -97,12 +97,16 @@ public sealed class Z3Runner
     private static int FindMatchingBrace(string text, int openIndex)
     {
         var depth = 0;
+        var lastZero = -1;
         for (var i = openIndex; i < text.Length; i++)
         {
             if (text[i] == '{') depth++;
-            else if (text[i] == '}') { depth--; if (depth == 0) return i; }
+            else if (text[i] == '}') { depth--; if (depth == 0) lastZero = i; }
         }
-        return -1;
+        // Return the LAST position where depth hit 0 — this is the namespace closing brace.
+        // Dafny's goto labels can produce unbalanced braces, so the first depth==0
+        // may be the method close, not the namespace close.
+        return lastZero;
     }
 
     private async Task<(int exitCode, string stdout, string stderr)> RunDafnyAsync(
