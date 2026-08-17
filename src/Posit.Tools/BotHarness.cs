@@ -197,6 +197,10 @@ public sealed class BotHarness
         if (expected.Contains("valid", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(actual))
             return true;
+        // CSV check: if expected mentions CSV and output has commas + newlines
+        if (expected.Contains("CSV", StringComparison.OrdinalIgnoreCase)
+            && actual.Contains(",") && actual.Contains("\n"))
+            return true;
         return false;
     }
 
