@@ -100,9 +100,9 @@ internal static class BotHarnessDocker
 
     private static string EscapeShellArg(string arg)
     {
-        // For Docker, arguments are passed as-is in the Arguments string.
-        // Wrap in quotes and escape inner quotes.
-        return $"\"{arg.Replace("\"", "\\\"")}\"";
+        // Docker passes args to the ENTRYPOINT directly. Don't add quotes —
+        // they become part of the argument value, causing FileNotFoundException.
+        return arg;
     }
 }
 
