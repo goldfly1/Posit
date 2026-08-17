@@ -310,6 +310,9 @@ public static class WiringGenerator
         // ISequence<ISequence<Rune>> (2D) -> string: join rows with newline, elements with space
         if (fromDepth == 2 && fromHasRune && toType == "string")
             return $"string.Join(\"\\n\", {varName}.Select(row => string.Join(\" \", row.Select(r => (char)r.Value))))";
+        // ISequence<ISequence<ISequence<Rune>>> (3D, seq<seq<string>>) -> string: join rows, each row's fields by space
+        if (fromDepth == 3 && fromHasRune && toType == "string")
+            return $"string.Join(\"\\n\", {varName}.Select(row => string.Join(\" \", row.Select(field => new string(field.Select(r => (char)r.Value).ToArray())))))";
         // string[] (io-shell ReadLines) -> ISequence<Rune> (1D): join lines into one string
         if (fromType == "string[]" && toDepth == 1 && toHasRune)
             return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString(string.Join(\"\\n\", {varName}))";
