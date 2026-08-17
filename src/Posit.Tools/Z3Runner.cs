@@ -98,8 +98,9 @@ public sealed class Z3Runner
     {
         // Dafny's C# translation can have unbalanced braces (goto labels produce
         // extra closing braces). So we can't rely on depth==0 alone.
-        // Strategy: find "} // end of namespace" marker (Dafny always emits this).
-        var endMarker = text.IndexOf("} // end of namespace", openIndex, StringComparison.Ordinal);
+        // Strategy: find "} // end of namespace _module" marker (Dafny always emits this as the last namespace).
+        // Some translations have multiple nested namespaces (Dafny, FrequencyAggregator, _module).
+        var endMarker = text.IndexOf("} // end of namespace _module", openIndex, StringComparison.Ordinal);
         if (endMarker >= 0) return endMarker;
         // Fallback: find last } that brings depth to 0 or below
         var depth = 0;
