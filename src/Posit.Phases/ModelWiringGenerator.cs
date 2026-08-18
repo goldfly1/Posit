@@ -60,9 +60,9 @@ public sealed class ModelWiringGenerator
 
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
 
-            // If model returned JSON, extract the code field.
-            // The model wraps C# code in JSON with varying field names.
-            // Try to find JSON in the text (might have leading whitespace or tags).
+            // If model returned JSON, extract the code — universally scan for
+            // any string property that looks like C# code.
+            // Don't enumerate field names — the model uses unpredictable names.
             var jsonStart = text.IndexOf('{');
             if (jsonStart >= 0)
             {
@@ -70,35 +70,18 @@ public sealed class ModelWiringGenerator
                 {
                     var jsonText = text[jsonStart..];
                     using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
-                    var root = doc.RootElement;
-                    string? extracted = null;
-                    // Try known field names in order of likelihood
-                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content",
-                        "file", "output", "result", "main", "fixed_file", "fixedFile", "answer", "solution", "cs" })
+                    foreach (var prop in doc.RootElement.EnumerateObject())
                     {
-                        if (root.TryGetProperty(fieldName, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String)
+                        if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
                         {
-                            extracted = prop.GetString();
-                            break;
-                        }
-                    }
-                    // Fallback: find the first string property that looks like C# code
-                    if (extracted is null)
-                    {
-                        foreach (var prop in root.EnumerateObject())
-                        {
-                            if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String
-                                && (prop.Value.GetString()?.Contains("class") == true
-                                    || prop.Value.GetString()?.Contains("static") == true
-                                    || prop.Value.GetString()?.Contains("void") == true))
+                            var s = prop.Value.GetString();
+                            if (s != null && (s.Contains("class ") || s.Contains("static ") || s.Contains("void ")))
                             {
-                                extracted = prop.Value.GetString();
+                                text = s;
                                 break;
                             }
                         }
                     }
-                    if (extracted is not null)
-                        text = extracted;
                 }
                 catch { }
             }

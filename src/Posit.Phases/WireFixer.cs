@@ -53,36 +53,15 @@ public sealed class WireFixer
 
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
 
-            // The fixer should return raw C# — but handle JSON wrapping just in case
-            var jsonStart = text.IndexOf('{');
-            if (jsonStart >= 0)
-            {
-                try
-                {
-                    var jsonText = text[jsonStart..];
-                    using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
-                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content",
-                        "file", "output", "result", "main", "fixed_code", "fixed_file", "fixedFile", "fixedWire",
-                        "answer", "solution", "cs", "fixed" })
-                    {
-                        if (doc.RootElement.TryGetProperty(fieldName, out var prop)
-                            && prop.ValueKind == System.Text.Json.JsonValueKind.String)
-                        {
-                            text = prop.GetString() ?? text;
-                            break;
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            // Fallback: if the text still has JSON wrapper (starts with {), try finding
-            // ANY string property that looks like C# code — same as DafnyFixer/ModelWiringGenerator
+            // The model wraps C# in JSON despite being told "raw code only."
+            // Don't enumerate field names (whack-a-mole). Instead, universally
+            // extract: find ANY string property that looks like C# code.
             if (text.TrimStart().StartsWith('{'))
             {
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(text.TrimStart()[text.TrimStart().IndexOf('{')..]);
+                    var jsonText = text.TrimStart()[text.TrimStart().IndexOf('{')..];
+                    using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
                     foreach (var prop in doc.RootElement.EnumerateObject())
                     {
                         if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)

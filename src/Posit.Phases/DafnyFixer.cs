@@ -210,24 +210,13 @@ public sealed class DafnyFixer
         if (jsonStart < 0)
             return text.Trim();
 
-        // Try to parse as JSON and extract a code field
+        // Try to parse as JSON and extract the code — universally scan for
+        // any string property that looks like Dafny (contains 'method' or 'module').
+        // Don't enumerate field names — the model uses unpredictable names.
         try
         {
             var jsonText = text[jsonStart..];
             using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
-            // Try known field names (same list as WireFixer/ModelWiringGenerator)
-            foreach (var fieldName in new[] { "code", "fixed_code", "fixedCode", "dafny", "source",
-                "content", "file", "output", "result", "answer", "solution", "module", "dafnyCode" })
-            {
-                if (doc.RootElement.TryGetProperty(fieldName, out var prop)
-                    && prop.ValueKind == System.Text.Json.JsonValueKind.String)
-                {
-                    var code = prop.GetString();
-                    if (!string.IsNullOrWhiteSpace(code) && code.Contains("method ") || code?.Contains("module ") == true)
-                        return code.Trim();
-                }
-            }
-            // Fallback: find first string property that looks like Dafny
             foreach (var prop in doc.RootElement.EnumerateObject())
             {
                 if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
