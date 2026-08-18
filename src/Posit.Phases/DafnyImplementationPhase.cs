@@ -48,17 +48,45 @@ public sealed class DafnyImplementationPhase : IPhase
             var isCutOut = File.Exists(skeletonPath);
 
             // If no skeleton (not a cut-out), generate Dafny with the model
+            // using a Z3 correction loop: generate → Z3 reject → feed previous
+            // Dafny + Z3 errors back → fix → verify. Max 3 attempts.
+            // This is what a human does: write code, compiler says "error", look
+            // at the error, look at the code, fix one line, recompile.
             if (!isCutOut && _model != null)
             {
-                var generated = await GenerateDafnyAsync(comp, context, ct);
-                if (string.IsNullOrWhiteSpace(generated))
+                var (generatedDafny, verifyOk, verifyOutput, translateOutput, translatePath) =
+                    await GenerateAndVerifyDafnyAsync(comp, context, stagingDir, ct);
+
+                if (!verifyOk)
                 {
-                    warnings.Add($"Model returned empty Dafny for '{comp.Name}'");
-                    results.Add(FailResult(comp.Name, skeletonPath, "Empty model output"));
+                    warnings.Add($"Z3 verification failed for '{comp.Name}' after correction loop: {verifyOutput?[..Math.Min(300, verifyOutput.Length)]}");
+                    results.Add(new DafnyVerificationResult
+                    {
+                        ModuleName = comp.Name, DafnyPath = translatePath ?? skeletonPath,
+                        IsVerified = false, VerificationOutput = verifyOutput ?? "Z3 rejected"
+                    });
                     continue;
                 }
-                skeletonPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
-                await File.WriteAllTextAsync(skeletonPath, generated, ct);
+
+                if (string.IsNullOrWhiteSpace(translateOutput))
+                {
+                    warnings.Add($"C# translation failed for '{comp.Name}' after Z3 verification");
+                    results.Add(new DafnyVerificationResult
+                    {
+                        ModuleName = comp.Name, DafnyPath = translatePath!,
+                        IsVerified = false, VerificationOutput = "C# translation failed"
+                    });
+                    continue;
+                }
+
+                var csPath = Path.Combine(stagingDir, $"{comp.Name}.cs");
+                await File.WriteAllTextAsync(csPath, translateOutput!, ct);
+                results.Add(new DafnyVerificationResult
+                {
+                    ModuleName = comp.Name, DafnyPath = translatePath!,
+                    IsVerified = true, TranslatedCSharpPath = csPath
+                });
+                continue;
             }
             else if (!isCutOut)
             {
@@ -67,7 +95,7 @@ public sealed class DafnyImplementationPhase : IPhase
                 continue;
             }
 
-            // Step 1: Verify the Dafny with Z3 (works for both cut-outs and generated)
+            // Cut-out path: skeleton exists on disk → Z3 verify → translate
             var verifyResult = await _z3.VerifyAsync(skeletonPath, ct);
             if (!verifyResult.Success)
             {
@@ -94,12 +122,12 @@ public sealed class DafnyImplementationPhase : IPhase
                 continue;
             }
 
-            var csPath = Path.Combine(stagingDir, $"{comp.Name}.cs");
-            await File.WriteAllTextAsync(csPath, translation.CleanCsharp, ct);
+            var csPath2 = Path.Combine(stagingDir, $"{comp.Name}.cs");
+            await File.WriteAllTextAsync(csPath2, translation.CleanCsharp, ct);
             results.Add(new DafnyVerificationResult
             {
                 ModuleName = comp.Name, DafnyPath = skeletonPath,
-                IsVerified = true, TranslatedCSharpPath = csPath
+                IsVerified = true, TranslatedCSharpPath = csPath2
             });
         }
 
@@ -123,10 +151,101 @@ public sealed class DafnyImplementationPhase : IPhase
     }
 
     /// <summary>
-    /// Generate Dafny code for a component using the model.
-    /// Includes the Dafny reference card and the component's spec/responsibility/test cases.
+    /// Generate Dafny for a component AND verify it with Z3, using a correction
+    /// loop: generate → Z3 reject → feed previous Dafny + Z3 errors back → fix → verify.
+    /// Max 3 attempts. This is what a human does: write code, compiler says "error",
+    /// look at the error, look at the code, fix one line, recompile. The compiler is the teacher.
+    /// </summary>
+    /// <returns>Tuple of (generatedDafny, verifyOk, verifyOutput, translatedCSharp, dafnyPath).</returns>
+    private async Task<(string? Dafny, bool Verified, string? VerifyOutput, string? TranslatedCSharp, string? DafnyPath)>
+        GenerateAndVerifyDafnyAsync(Component comp, PhaseContext context, string stagingDir, CancellationToken ct)
+    {
+        const int maxAttempts = 3;
+        var dafnyPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
+        string? currentDafny = null;
+        string[] currentErrors = [];
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            // Generate (or fix) the Dafny
+            var generated = attempt == 0
+                ? await GenerateDafnyAsync(comp, context, ct)
+                : await FixDafnyAsync(comp, context, currentDafny!, currentErrors, ct);
+
+            if (string.IsNullOrWhiteSpace(generated))
+            {
+                Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}: model returned empty");
+                return (null, false, "Model returned empty output", null, dafnyPath);
+            }
+
+            currentDafny = generated;
+            await File.WriteAllTextAsync(dafnyPath, generated, ct);
+
+            // Z3 verify — the compiler is the teacher
+            var verifyResult = await _z3.VerifyAsync(dafnyPath, ct);
+            if (!verifyResult.Success)
+            {
+                var errors = verifyResult.Errors.Length > 0
+                    ? verifyResult.Errors.Take(10).ToArray()
+                    : new[] { verifyResult.Stdout[..Math.Min(500, verifyResult.Stdout.Length)] };
+
+                Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}/{maxAttempts}: Z3 rejected:");
+                foreach (var err in errors.Take(5))
+                    Console.Error.WriteLine($"  {err}");
+
+                currentErrors = errors;
+                continue;
+            }
+
+            // Z3 passed — translate to C#
+            var translation = await _z3.TranslateAsync(dafnyPath, comp.Name, ct);
+            if (!translation.Success || string.IsNullOrWhiteSpace(translation.CleanCsharp))
+            {
+                Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}: Z3 passed but C# translation failed: {translation.Stderr}");
+                // Feed translation error back — the Dafny needs to be adjusted so it translates cleanly
+                currentErrors = [$"C# translation failed: {translation.Stderr}", "Fix the Dafny so it translates to C# correctly. Keep method signatures unchanged."];
+                continue;
+            }
+
+            Console.Error.WriteLine($"[dafny-impl] {comp.Name} Z3 verified + translated on attempt {attempt + 1}");
+            return (generated, true, null, translation.CleanCsharp, dafnyPath);
+        }
+
+        // Exhausted all attempts — return the last Z3 error output
+        var lastOutput = currentErrors.Length > 0 ? string.Join("\n", currentErrors) : "Z3 verification failed (no details)";
+        return (currentDafny, false, lastOutput, null, dafnyPath);
+    }
+
+    /// <summary>
+    /// Generate Dafny code for a component using the model (first attempt).
+    /// Includes the Dafny reference card, the component's spec/responsibility/test cases,
+    /// and the crystallized pseudocode from the reduction phase.
     /// </summary>
     private async Task<string?> GenerateDafnyAsync(Component comp, PhaseContext context, CancellationToken ct)
+    {
+        var prompt = BuildDafnyPrompt(comp, context, isCorrection: false, previousDafny: null, z3Errors: null);
+        return await CallModelAndExtractDafny(prompt, context, ct);
+    }
+
+    /// <summary>
+    /// Fix Dafny code that Z3 rejected. The model sees its previous Dafny AND the
+    /// Z3 errors — so it can do a targeted fix instead of rewriting from scratch.
+    /// This is what a human does: look at line 38, see the error, fix one line, recompile.
+    /// </summary>
+    private async Task<string?> FixDafnyAsync(Component comp, PhaseContext context,
+        string previousDafny, string[] z3Errors, CancellationToken ct)
+    {
+        var prompt = BuildDafnyPrompt(comp, context, isCorrection: true,
+            previousDafny: previousDafny, z3Errors: z3Errors);
+        return await CallModelAndExtractDafny(prompt, context, ct);
+    }
+
+    /// <summary>
+    /// Build the Dafny generation/fix prompt. On correction, includes the previous
+    /// Dafny and Z3 errors so the model can do a targeted fix.
+    /// </summary>
+    private static StringBuilder BuildDafnyPrompt(Component comp, PhaseContext context,
+        bool isCorrection, string? previousDafny, string[]? z3Errors)
     {
         var referenceCard = LoadReferenceCard();
         var testCases = comp.TestCases.Length > 0
@@ -138,44 +257,98 @@ public sealed class DafnyImplementationPhase : IPhase
                 $"  method {m.Name}({string.Join(", ", m.Params.Select(p => $"{p.Name}: {p.Type}"))}) returns ({m.ReturnType})"))
             : "";
 
-        // Read pseudocode reduction artifact — the crystallized pseudocode is the algorithm spec
         var pseudocode = ExtractPseudocodeForComponent(comp.Name, context);
 
-        var systemPrompt = new StringBuilder();
-        systemPrompt.AppendLine("You are writing a Dafny module for the Posit spec compiler.");
-        systemPrompt.AppendLine("Write a COMPLETE Dafny module that implements the spec.");
-        systemPrompt.AppendLine("Z3 will verify your code — it must pass verification.");
-        systemPrompt.AppendLine();
-        systemPrompt.AppendLine($"Component: {comp.Name}");
-        systemPrompt.AppendLine($"Responsibility: {comp.Responsibility}");
-        systemPrompt.AppendLine($"Pattern: {comp.PatternName ?? "custom"}");
-        systemPrompt.AppendLine();
-        systemPrompt.AppendLine("Method signatures to implement:");
-        systemPrompt.AppendLine(sigs);
-        systemPrompt.AppendLine();
-        systemPrompt.AppendLine("Test cases (your implementation MUST satisfy these):");
-        systemPrompt.AppendLine(testCases);
-        systemPrompt.AppendLine();
+        var sb = new StringBuilder();
+        if (isCorrection)
+        {
+            sb.AppendLine("You are fixing a Dafny module that Z3 rejected. The compiler found errors.");
+            sb.AppendLine("Look at YOUR previous code below, find the specific lines that caused the errors,");
+            sb.AppendLine("and fix ONLY those lines. Keep everything else unchanged.");
+            sb.AppendLine();
+
+            // Detect "not Dafny" errors — the model output JSON or prose instead of Dafny
+            var isNotDafnyError = z3Errors != null && z3Errors.Any(e =>
+                e.Contains("this symbol not expected", StringComparison.OrdinalIgnoreCase) ||
+                e.Contains("unexpected token", StringComparison.OrdinalIgnoreCase) ||
+                e.Contains("parse error", StringComparison.OrdinalIgnoreCase));
+            if (isNotDafnyError)
+            {
+                sb.AppendLine("⚠️  CRITICAL: Your previous output was NOT valid Dafny code!");
+                sb.AppendLine("The error 'this symbol not expected' means the compiler received something");
+                sb.AppendLine("that isn't Dafny (probably JSON or prose). You MUST output ONLY raw Dafny source code.");
+                sb.AppendLine("No JSON, no markdown, no explanations — just the Dafny module.");
+                sb.AppendLine("Start with 'module' and end with the closing '}'.");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("═══ Z3 ERRORS (fix these) ═══");
+            if (z3Errors != null)
+                foreach (var err in z3Errors)
+                    sb.AppendLine($"  {err}");
+            sb.AppendLine();
+            sb.AppendLine("═══ YOUR PREVIOUS OUTPUT (fix this, don't rewrite from scratch) ═══");
+            sb.AppendLine(previousDafny);
+            sb.AppendLine("═══ END PREVIOUS OUTPUT ═══");
+            sb.AppendLine();
+            if (isNotDafnyError)
+            {
+                sb.AppendLine("Output a COMPLETE Dafny module starting with 'module' and ending with '}'.");
+                sb.AppendLine("ONLY Dafny code. No JSON wrappers, no markdown fences, no explanations.");
+            }
+            else
+            {
+                sb.AppendLine("Look at the errors above, find the specific line(s) in your code that caused them,");
+                sb.AppendLine("and fix ONLY those lines. Keep method signatures, {:extern} declarations, and");
+                sb.AppendLine("module structure exactly as-is. Output the complete fixed Dafny module.");
+            }
+        }
+        else
+        {
+            sb.AppendLine("You are writing a Dafny module for the Posit spec compiler.");
+            sb.AppendLine("Write a COMPLETE Dafny module that implements the spec.");
+            sb.AppendLine("Z3 will verify your code — it must pass verification.");
+        }
+        sb.AppendLine();
+        sb.AppendLine($"Component: {comp.Name}");
+        sb.AppendLine($"Responsibility: {comp.Responsibility}");
+        sb.AppendLine($"Pattern: {comp.PatternName ?? "custom"}");
+        sb.AppendLine();
+        sb.AppendLine("Method signatures to implement (USE THESE EXACT NAMES):");
+        sb.AppendLine(sigs);
+        sb.AppendLine();
+        sb.AppendLine("Test cases (your implementation MUST satisfy these):");
+        sb.AppendLine(testCases);
+        sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(pseudocode))
         {
-            systemPrompt.AppendLine("Reduced pseudocode (implement this logic in Dafny):");
-            systemPrompt.AppendLine(pseudocode);
-            systemPrompt.AppendLine();
+            sb.AppendLine("Reduced pseudocode (implement this logic in Dafny):");
+            sb.AppendLine(pseudocode);
+            sb.AppendLine();
         }
 
-        systemPrompt.AppendLine("Dafny Language Dictionary:");
-        systemPrompt.AppendLine(referenceCard);
-        systemPrompt.AppendLine();
-        systemPrompt.AppendLine("Rules:");
-        systemPrompt.AppendLine("1. Output ONLY raw Dafny code. No JSON, no markdown fences, no explanations.");
-        systemPrompt.AppendLine("2. Keep method signatures as specified above.");
-        systemPrompt.AppendLine("3. Keep all {:extern} declarations unchanged.");
-        systemPrompt.AppendLine("4. Write real method bodies that implement the spec's logic.");
-        systemPrompt.AppendLine("5. The code must pass Z3 verification.");
-        systemPrompt.AppendLine("6. The pseudocode is the algorithm — translate it into proper Dafny with contracts.");
-        systemPrompt.AppendLine("7. Add requires/ensures clauses, invariants, and decreases for loops.");
+        sb.AppendLine("Dafny Language Dictionary:");
+        sb.AppendLine(referenceCard);
+        sb.AppendLine();
+        sb.AppendLine("Rules:");
+        sb.AppendLine("1. Output ONLY raw Dafny code. No JSON, no markdown fences, no explanations.");
+        sb.AppendLine("2. Keep method signatures as specified above — use the EXACT method names.");
+        sb.AppendLine("3. Keep all {:extern} declarations unchanged.");
+        sb.AppendLine("4. Write real method bodies that implement the spec's logic.");
+        sb.AppendLine("5. The code must pass Z3 verification.");
+        sb.AppendLine("6. The pseudocode is the algorithm — translate it into proper Dafny with contracts.");
+        sb.AppendLine("7. Add requires/ensures clauses, invariants, and decreases for loops.");
 
+        return sb;
+    }
+
+    /// <summary>
+    /// Call the model with a prompt and extract Dafny from the response.
+    /// Handles reasoning tags, markdown fences, and JSON wrappers.
+    /// </summary>
+    private async Task<string?> CallModelAndExtractDafny(StringBuilder systemPrompt, PhaseContext context, CancellationToken ct)
+    {
         var prompt = new PromptTemplate
         {
             PhaseId = context.PhaseId,
@@ -196,7 +369,6 @@ public sealed class DafnyImplementationPhase : IPhase
             if (string.IsNullOrWhiteSpace(gen.Text))
                 return null;
 
-            // Extract Dafny from response — strip reasoning tags, markdown fences, JSON wrappers
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
 
             // Strip markdown fences if present
@@ -218,7 +390,7 @@ public sealed class DafnyImplementationPhase : IPhase
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[dafny-impl] Model generation failed for '{comp.Name}': {ex.Message}");
+            Console.Error.WriteLine($"[dafny-impl] Model generation failed: {ex.Message}");
             return null;
         }
     }
@@ -277,7 +449,7 @@ public sealed class DafnyImplementationPhase : IPhase
     /// <summary>
     /// Recursively scan JSON for a string property that looks like Dafny code.
     /// The model nests Dafny in arbitrary JSON structures: {methods:[{body:"..."}]}.
-    /// Scan all string values at any depth for 'method' or 'module'.
+    /// Scan all string values at any depth for Dafny keywords.
     /// </summary>
     private static string? ExtractDafnyFromJson(string text)
     {
@@ -289,15 +461,26 @@ public sealed class DafnyImplementationPhase : IPhase
         catch { return null; }
     }
 
+    private static readonly string[] DafnyCodeMarkers =
+        ["method ", "module ", "function ", "datatype ", "requires ", "ensures ", "var ", ":=", "if ", "return "];
+
     private static string? ScanJsonForDafny(System.Text.Json.JsonElement element)
     {
         switch (element.ValueKind)
         {
             case System.Text.Json.JsonValueKind.String:
                 var s = element.GetString();
-                // Must contain Dafny keywords AND be substantial (not just a field name)
-                if (s != null && s.Length > 20 && (s.Contains("method ") || s.Contains("module ")))
+                // Must contain Dafny code markers AND be substantial (not just a field name)
+                if (s != null && s.Length > 20 && DafnyCodeMarkers.Any(m => s.Contains(m, StringComparison.OrdinalIgnoreCase)))
+                {
+                    // If it looks like a complete module, return as-is
+                    if (s.Contains("module ", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("method ", StringComparison.OrdinalIgnoreCase))
+                        return s;
+                    // It's a code fragment (body field) — wrap it in a module structure
+                    // The caller will need to reconstruct the full module
                     return s;
+                }
                 return null;
             case System.Text.Json.JsonValueKind.Object:
                 foreach (var prop in element.EnumerateObject())

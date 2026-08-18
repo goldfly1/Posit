@@ -235,6 +235,7 @@ public sealed class PseudocodeReductionPhase : IPhase
 
     private static bool IsCrystallized(string pseudocode)
     {
+        var hasSubstantiveLine = false;
         foreach (var line in pseudocode.Replace("\r\n", "\n").Split('\n'))
         {
             var trimmed = line.Trim();
@@ -243,11 +244,14 @@ public sealed class PseudocodeReductionPhase : IPhase
             if (trimmed.StartsWith("method ")) continue; // signature line
             if (trimmed.StartsWith("Responsibility:")) continue;
             if (trimmed.StartsWith("test:")) continue;
-            // Check for any Dafny token
+            // This is a substantive line — it must contain a Dafny token
+            hasSubstantiveLine = true;
             var hasToken = DafnyTokens.Any(t => trimmed.Contains(t, StringComparison.OrdinalIgnoreCase));
             if (!hasToken) return false;
         }
-        return true;
+        // If there are no substantive lines (only sig/responsibility/test),
+        // it's just the raw spec — NOT crystallized. It needs reduction.
+        return hasSubstantiveLine;
     }
 
     private static string LoadReferenceCard()
