@@ -104,11 +104,28 @@ public sealed class BotHarness
 
             // Skip file creation for file-not-found tests — pass a bad path instead
             if (testData == "__NONEXISTENT_FILE__") continue;
-            // Use .json extension for JSON test data, .csv for CSV, .txt for text
-            var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
-                : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
-            var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}{ext}");
-            File.WriteAllText(testFile, testData);
+
+            // Multi-file: testData contains === separator → create multiple files
+            if (testData.Contains("==="))
+            {
+                var parts = testData.Split("===", 2);
+                for (var pi = 0; pi < parts.Length; pi++)
+                {
+                    var partData = parts[pi].Trim();
+                    var partExt = partData.StartsWith("[") || partData.StartsWith("{") ? ".json"
+                        : (partData.Contains(",") && partData.Contains("\n") ? ".csv" : ".txt");
+                    var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}_{pi}{partExt}");
+                    File.WriteAllText(testFile, partData);
+                }
+            }
+            else
+            {
+                // Single file: .json extension for JSON, .csv for CSV, .txt for text
+                var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
+                    : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
+                var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}{ext}");
+                File.WriteAllText(testFile, testData);
+            }
         }
 
         var buildResult = await BotHarnessDocker.BuildAsync(_dockerPath, tempDir, sessionId.Value, ct);
@@ -144,9 +161,27 @@ public sealed class BotHarness
             {
                 // File-type program: pass test data file path as CLI arg
                 var testData = GenerateTestData(tc.Id, tc.Name, specHint);
-                var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
-                    : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
-                cliArg = $"testdata_{tc.Id}{ext}";
+
+                // Multi-file: pass multiple file paths
+                if (testData.Contains("==="))
+                {
+                    var parts = testData.Split("===", 2);
+                    var args = new List<string>();
+                    for (var pi = 0; pi < parts.Length; pi++)
+                    {
+                        var partData = parts[pi].Trim();
+                        var ext = partData.StartsWith("[") || partData.StartsWith("{") ? ".json"
+                            : (partData.Contains(",") && partData.Contains("\n") ? ".csv" : ".txt");
+                        args.Add($"testdata_{tc.Id}_{pi}{ext}");
+                    }
+                    cliArg = string.Join(" ", args);
+                }
+                else
+                {
+                    var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
+                        : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
+                    cliArg = $"testdata_{tc.Id}{ext}";
+                }
             }
             var runResult = await BotHarnessDocker.RunContainerAsync(
                 _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct, stdinInput);
@@ -277,6 +312,15 @@ public sealed class BotHarness
             if (name.Contains("invalid") || name.Contains("error") || name.Contains("bad"))
                 return "20 X";
             return "32 F";
+        }
+        // Multi-file merge: return two CSV blocks separated by ===
+        if (name.Contains("merge") || name.Contains("multi") || name.Contains("two") || name.Contains("combine"))
+        {
+            if (name.Contains("invalid") || name.Contains("error") || name.Contains("mismatch"))
+                return "name,age\nAlice,30\n===\nname,age,city\nBob,25,NYC";
+            if (name.Contains("empty"))
+                return "===\nname,age\nCarol,35";
+            return "name,age\nAlice,30\n===\nname,age\nCarol,35";
         }
         if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
