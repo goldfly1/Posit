@@ -187,6 +187,7 @@ internal static class Program
                 }
 
                 var fixer = new WireFixer(gateway);
+                var translatedTypes = await ExtractTranslatedCSharpAsync(sessionId);
                 var fixContext = new PhaseContext
                 {
                     SessionId = sessionId,
@@ -202,7 +203,7 @@ internal static class Program
                     ModelRoute = GetModelForFixer(),
                     BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
                 };
-                var fixedWire = await fixer.FixAsync(prevWire, fixInstructions.ToArray(), fixContext);
+                var fixedWire = await fixer.FixAsync(prevWire, fixInstructions.ToArray(), translatedTypes, fixContext);
 
                 if (string.IsNullOrWhiteSpace(fixedWire))
                 {
@@ -422,6 +423,42 @@ internal static class Program
             if (sourceCode == null) return null;
             var wireFile = sourceCode.Files.FirstOrDefault(f => f.Path.EndsWith("Wire.cs"));
             return wireFile?.Content;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Extract the translated C# type definitions (non-Wire.cs files) from the
+    /// SourceCodeBundle. The WireFixer needs these to see the actual property names
+    /// on Dafny-translated types (e.g. _IConversionResult.isValid vs IsValid).
+    /// Returns the concatenated C# source of all non-Wire.cs files, truncated to 4000 chars.
+    /// </summary>
+    private static async Task<string?> ExtractTranslatedCSharpAsync(SessionId sessionId)
+    {
+        try
+        {
+            var repo = new ArtifactRepository();
+            var artifacts = await repo.ListBySessionAsync(sessionId);
+            var bundle = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.SourceCodeBundle);
+            if (bundle == null) return null;
+            var sourceCode = Deserialize<SourceCodeBundle>(bundle.PayloadJson);
+            if (sourceCode == null) return null;
+
+            var sb = new System.Text.StringBuilder();
+            foreach (var f in sourceCode.Files)
+            {
+                if (f.Path.EndsWith("Wire.cs")) continue; // skip the file being fixed
+                if (string.IsNullOrWhiteSpace(f.Content)) continue;
+                sb.AppendLine($"// === {f.Path} ===");
+                sb.AppendLine(f.Content);
+                sb.AppendLine();
+            }
+            var result = sb.ToString().Trim();
+            if (string.IsNullOrEmpty(result)) return null;
+            // Truncate to avoid drowning the model — it needs the type definitions, not every line
+            if (result.Length > 4000)
+                result = result[..4000] + "\n// ... (truncated — see type definitions above)";
+            return result;
         }
         catch { return null; }
     }
