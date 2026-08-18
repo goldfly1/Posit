@@ -74,7 +74,9 @@ public static class ContractScanner
                             {
                                 errors.Add(new ScanError(comp.Name, "methodSignature.name",
                                     ms.Name,
-                                    $"does not exist on cut-out '{comp.PatternName}' (real methods: {string.Join(", ", realMethodNames)})",
+                                    $"does not exist on cut-out '{comp.PatternName}' (real methods: {string.Join(", ", realMethodNames)}). " +
+                                    $"If this component needs methods the cut-out doesn't have, set patternName to null and write custom Dafny. " +
+                                    $"Do NOT invent method names — use ONLY the real methods listed, or drop the cut-out.",
                                     [.. realMethodNames]));
                             }
                         }
