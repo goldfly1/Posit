@@ -305,8 +305,9 @@ public sealed class DafnyImplementationPhase : IPhase
         }
         else
         {
-            sb.AppendLine("You are writing a Dafny module for the Posit spec compiler.");
-            sb.AppendLine("Write a COMPLETE Dafny module that implements the spec.");
+            sb.AppendLine("You are refactoring reduced pseudocode into valid Dafny.");
+            sb.AppendLine("The pseudocode below IS the algorithm. Do NOT redesign it.");
+            sb.AppendLine("Your job: wrap it in the method signatures, add contracts, fix syntax to valid Dafny. That's all.");
             sb.AppendLine("Z3 will verify your code — it must pass verification.");
         }
         sb.AppendLine();
@@ -323,7 +324,7 @@ public sealed class DafnyImplementationPhase : IPhase
 
         if (!string.IsNullOrWhiteSpace(pseudocode))
         {
-            sb.AppendLine("Reduced pseudocode (implement this logic in Dafny):");
+            sb.AppendLine("Pseudocode to refactor into Dafny (this IS the algorithm — wrap it, don't redesign it):");
             sb.AppendLine(pseudocode);
             sb.AppendLine();
         }
@@ -335,9 +336,9 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("1. Output ONLY raw Dafny code. No JSON, no markdown fences, no explanations.");
         sb.AppendLine("2. Keep method signatures as specified above — use the EXACT method names.");
         sb.AppendLine("3. Keep all {:extern} declarations unchanged.");
-        sb.AppendLine("4. Write real method bodies that implement the spec's logic.");
+        sb.AppendLine("4. ALWAYS use `method` — NEVER use `function`. Functions are pure expressions (no loops, no mutable assignment). Methods allow imperative code. Always use method.");
         sb.AppendLine("5. The code must pass Z3 verification.");
-        sb.AppendLine("6. The pseudocode is the algorithm — translate it into proper Dafny with contracts.");
+        sb.AppendLine("6. The pseudocode IS the algorithm — translate it into proper Dafny with contracts. Do not redesign the logic.");
         sb.AppendLine("7. Add requires/ensures clauses, invariants, and decreases for loops.");
 
         return sb;
