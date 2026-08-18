@@ -289,9 +289,14 @@ public static class TypeChainChecker
                 $"{e.FromComponent}.{e.FromMethod} returns '{e.FromType}' " +
                 $"but {e.ToComponent}.{e.ToMethod} expects '{e.ToType}'");
             // Actionable guidance: tell the model HOW to fix it
-            if (e.FromType.Contains("ISequence") && e.ToType == "string")
+            // Handle both C# notation (ISequence) and Dafny notation (seq<)
+            var fromIsSeq = e.FromType.Contains("ISequence") || e.FromType.Contains("seq<");
+            var toIsSeq = e.ToType.Contains("ISequence") || e.ToType.Contains("seq<");
+            var fromIsString = e.FromType == "string";
+            var toIsString = e.ToType == "string";
+            if (fromIsSeq && toIsString)
                 sb.AppendLine("    FIX: The last logic component must return 'string' (serialize its output to a string), OR add a serialization step before the printer.");
-            else if (e.FromType == "string" && e.ToType.Contains("ISequence"))
+            else if (fromIsString && toIsSeq)
                 sb.AppendLine("    FIX: Use a stub that returns the right type — ReadLines returns seq<string>, ReadFile returns string. Match the stub to what the next component expects.");
             else
                 sb.AppendLine("    FIX: Change the return type or input type so they match, OR add a conversion step between them.");
