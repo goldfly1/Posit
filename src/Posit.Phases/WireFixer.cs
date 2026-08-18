@@ -4,7 +4,7 @@ using System.Text;
 using Posit.AI.Models;
 
 /// <summary>
-/// Dedicated Wire.cs compile-error fixer. Like a plumber — doesn't redesign
+/// Dedicated Wire.cs fixer. Like a plumber — doesn't redesign
 /// the building, just fixes the leaking pipe. Gets ONLY the Wire.cs content
 /// and the compile errors, with the ISequence API reference. No architecture
 /// context, no connections, no method signatures. Just "fix these errors in
