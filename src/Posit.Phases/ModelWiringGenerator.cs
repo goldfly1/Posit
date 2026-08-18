@@ -25,6 +25,19 @@ public sealed class ModelWiringGenerator
         // Build the prompt with connections, signatures, and type conversion reference
         var systemPrompt = BuildPrompt(comp, contract, translatedSigs, stubSigs);
 
+        // Inject correction signal if present (e.g. Docker build errors from previous attempt)
+        if (context.CorrectionSignal is { Length: > 0 })
+        {
+            var sb2 = new StringBuilder(systemPrompt);
+            sb2.AppendLine();
+            sb2.AppendLine("═══ CORRECTION SIGNAL — your previous Wire.cs had these compile errors ═══");
+            sb2.AppendLine("Fix ALL of the following before resubmitting:");
+            foreach (var signal in context.CorrectionSignal)
+                sb2.AppendLine($"  {signal}");
+            sb2.AppendLine("═══ END CORRECTION SIGNAL ═══");
+            systemPrompt = sb2.ToString();
+        }
+
         var prompt = new PromptTemplate
         {
             PhaseId = context.PhaseId,
@@ -53,8 +66,11 @@ public sealed class ModelWiringGenerator
                 try
                 {
                     using var doc = System.Text.Json.JsonDocument.Parse(text);
+                    // Model may use "code" or "wireCode" as the field name
                     if (doc.RootElement.TryGetProperty("code", out var codeProp))
                         text = codeProp.GetString() ?? text;
+                    else if (doc.RootElement.TryGetProperty("wireCode", out var wireProp))
+                        text = wireProp.GetString() ?? text;
                 }
                 catch { }
             }
@@ -160,6 +176,15 @@ namespace {comp.Name}
         sb.AppendLine("  string[] -> ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(string.Join(\"\\n\", arr))");
         sb.AppendLine("  string[] -> ISequence<ISequence<Rune>>: Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(arr.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())");
         sb.AppendLine("  int/BigInteger: use BigInteger.Zero for default, BigInteger for arithmetic");
+        sb.AppendLine();
+        sb.AppendLine("CRITICAL DAFNY RUNTIME API RULES:");
+        sb.AppendLine("  ISequence<T> is NOT an array or List. Do NOT use .Length, .Count, .ElementCount, or [] indexing.");
+        sb.AppendLine("  Use LINQ only: .Count() for length, .ElementAt(i) for indexing, .Select(...) to iterate.");
+        sb.AppendLine("  Examples:");
+        sb.AppendLine("    Length:  seq.Count()    (NOT seq.Length or seq.ElementCount)");
+        sb.AppendLine("    Index:   seq.ElementAt(i)   (NOT seq[i])");
+        sb.AppendLine("    Iterate: seq.Select(r => (char)r.Value).ToArray()");
+        sb.AppendLine("  For nested sequences (2D/3D), use .Select(row => ...) to unwrap each level.");
         sb.AppendLine();
 
         // Rules

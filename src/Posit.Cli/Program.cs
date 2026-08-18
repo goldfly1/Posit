@@ -72,7 +72,9 @@ internal static class Program
         if (state.Status != SessionStatus.Completed)
             return 1;
 
-        // Auto-run Docker harness after pipeline completes
+        // Auto-run Docker harness after pipeline completes, with wiring retry loop.
+        // If Docker build fails on Wire.cs, feed the compile error back to the
+        // wiring model and re-run csharp-implementation, up to 3 times.
         Console.Error.WriteLine($"[posit] auto-launching Docker harness for {sessionId}...");
         var gateway = new OllamaModelGateway(new HttpClient());
         var harness = new BotHarness(new ArtifactRepository(), model: gateway);
@@ -81,6 +83,35 @@ internal static class Program
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
         foreach (var tc in result.Results)
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
+
+        // Wiring retry loop: if Docker build failed (not test failure), retry wiring
+        const int maxWiringRetries = 3;
+        for (var retry = 0; retry < maxWiringRetries && !result.Success && IsDockerBuildFailure(result); retry++)
+        {
+            Console.Error.WriteLine($"[harness] Docker build failed — retrying wiring ({retry + 1}/{maxWiringRetries})...");
+            Console.Error.WriteLine($"[harness] build error: {ExtractBuildError(result, 500)}");
+
+            // Re-run csharp-implementation with the build error as correction signal
+            var wireState = await stateStore.LoadSessionAsync(sessionId);
+            if (wireState is null) break;
+            // Extract only the C# compile errors, not the full Docker log
+            var buildErrors = ExtractCompileErrors(result.Error ?? "Docker build failed");
+            wireState = wireState.WithStatus(SessionStatus.Planning)
+                .WithCorrectionSignal(buildErrors);
+            // Remove csharp-implementation from completed so it re-runs
+            wireState = wireState.WithCompletedPhases(
+                wireState.CompletedPhases.Where(p => p.Value != "csharp-implementation").ToArray());
+            await stateStore.SaveSessionAsync(sessionId, wireState);
+            wireState = await orchestrator.RunAsync(wireState);
+
+            // Re-run harness
+            result = await harness.RunAsync(sessionId);
+            Console.Error.WriteLine($"[harness] retry {retry + 1}: success={result.Success} tests={result.Results.Length}");
+            if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
+            foreach (var tc in result.Results)
+                Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
+        }
+
         return result.Success ? 0 : 1;
     }
 
@@ -196,6 +227,52 @@ internal static class Program
 
     private static int UnknownCommand(string command)
     { Console.Error.WriteLine($"Unknown command: {command}"); PrintUsage(); return 1; }
+
+    /// <summary>
+    /// Check if the harness failure is a Docker build failure (not a test failure).
+    /// Build failures have compile errors in the Error field. Test failures have
+    /// Success=false but Error=null (individual tests failed, but build succeeded).
+    /// </summary>
+    private static bool IsDockerBuildFailure(BotHarnessResult result) =>
+        !result.Success && !string.IsNullOrWhiteSpace(result.Error)
+        && (result.Error.Contains("Build FAILED", StringComparison.OrdinalIgnoreCase)
+            || result.Error.Contains("error CS", StringComparison.OrdinalIgnoreCase)
+            || result.Error.Contains("failed to build", StringComparison.OrdinalIgnoreCase)
+            || result.Error.Contains("did not complete successfully", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Extract a truncated build error message for logging.
+    /// </summary>
+    private static string ExtractBuildError(BotHarnessResult result, int maxLen) =>
+        result.Error is null ? "" : (result.Error.Length <= maxLen ? result.Error : result.Error[..maxLen] + "...");
+
+    /// <summary>
+    /// Extract only the C# compile error lines from a Docker build log.
+    /// Filters out Docker progress lines, warnings, and noise.
+    /// Returns a string[] of error lines suitable for CorrectionSignal.
+    /// </summary>
+    private static string[] ExtractCompileErrors(string dockerLog)
+    {
+        if (string.IsNullOrWhiteSpace(dockerLog)) return new[] { "Docker build failed (no error details)" };
+        var lines = dockerLog.Replace("\r\n", "\n").Split('\n');
+        var errors = new List<string>();
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            // Strip Docker step prefixes like "#11 7.063 "
+            var stripped = System.Text.RegularExpressions.Regex.Replace(trimmed, @"^#\d+\s+\d+\.\d+\s+", "");
+            // Keep only error CS lines (compile errors)
+            if (stripped.Contains("error CS", StringComparison.OrdinalIgnoreCase))
+                errors.Add(stripped);
+            // Also keep "Build FAILED" as a summary line
+            if (stripped.Equals("Build FAILED.", StringComparison.OrdinalIgnoreCase))
+                errors.Add(stripped);
+        }
+        if (errors.Count == 0)
+            return new[] { "Docker build failed. Wire.cs has compile errors. Check the C# syntax and Dafny runtime API usage." };
+        // Limit to 10 errors to avoid overwhelming the model
+        return errors.Take(10).ToArray();
+    }
 
     private static void PrintUsage()
     {
