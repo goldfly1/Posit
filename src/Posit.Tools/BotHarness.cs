@@ -112,7 +112,7 @@ public sealed class BotHarness
         }
 
         var buildResult = await BotHarnessDocker.BuildAsync(_dockerPath, tempDir, sessionId.Value, ct);
-        if (!buildResult.Success) return Fail($"Docker build failed: {buildResult.Output}");
+        if (!buildResult.Success) return new BotHarnessResult(false, [], tempDir, $"Docker build failed: {buildResult.Output}");
 
         var results = new List<TestCaseResult>();
 
