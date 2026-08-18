@@ -27,7 +27,7 @@ See `wiki/carapace-doctrine.md` for the canonical text.
 
 ## Status
 
-50+ commits, 8 projects, build clean (0 errors, 0 warnings). 7 of 11 phases built (added PseudocodeReduction). Pipeline runs end-to-end with DB persistence. Data capture live (prompts_log, audit_events, artifacts, sessions). 6/6 trials (T1-T6) passing with cut-outs. Cut-outs clipped from architect — now writes custom Dafny from primitives. Pseudocode reduction layer built, needs DafnyImpl correction loop to fully work without cut-outs.
+60+ commits, 8 projects, build clean (0 errors, 0 warnings). 7 of 11 phases built (added PseudocodeReduction). Pipeline runs end-to-end with DB persistence. Data capture live (prompts_log, audit_events, artifacts, sessions). 6/6 trials (T1-T6) passing with cut-outs. T12 (Config File Merger) **GREEN without cut-outs** — first non-trivial trial to pass end-to-end with custom Dafny. DafnyImpl has 4-attempt Z3 correction loop with opaque error translation. Pseudocode reducer crystallizes at pass 2-4. Function ban (always use `method`) eliminates the #1 Dafny parse error class.
 
 ## Git
 

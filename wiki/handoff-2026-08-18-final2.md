@@ -44,7 +44,14 @@ Specialist principle:
 |-------|--------------|---------------------------|
 | T1-T6 | ✅ 6/6 PASS | ⚠️ Dafny impl fails (needs PreviousOutput correction loop) |
 
-## Known Issues for Next Session
+## Known Issues (SUPERSEDED — see handoff-2026-08-19.md)
+
+> **All three issues below are FIXED as of Aug 19, 2026.** See `handoff-2026-08-19.md` for details.
+> 1. ✅ FIXED: DafnyImplementationPhase now has 4-attempt Z3 correction loop with PreviousOutput
+> 2. ✅ FIXED: Error translation layer provides plain-English hints for opaque CoCo parser errors
+> 3. ✅ FIXED: Pseudocode crystallization check requires substantive lines (was vacuously true)
+
+### Original issues (historical reference):
 
 1. **DafnyImplementationPhase needs PreviousOutput correction loop**
    Same pattern as architect: Z3 rejects → model needs to see its previous Dafny

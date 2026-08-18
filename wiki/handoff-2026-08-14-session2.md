@@ -21,11 +21,14 @@ runs, but code generation bugs prevent compilation in Docker.
 - io-shell components with empty `stubNames` are now rejected with available stubs listed.
 - Previously only validated `patternName` for dafny components — io-shell with zero stubs passed silently.
 
-### 3. DafnyImplementationPhase — Imp Removed Entirely
-**File:** `src/Posit.Phases/DafnyImplementationPhase.cs` (305 → 145 lines)
-- The reconstruction subagents put a model call in this phase despite the spec saying "Code (no model)."
-- Now purely deterministic: verify skeleton → translate to C#. No model, no fallback, no Imp.
-- If skeleton fails Z3, correction signal goes back to Architecture (the only phase with a model).
+### 3. DafnyImplementationPhase — Hybrid with Z3 Correction Loop
+**File:** `src/Posit.Phases/DafnyImplementationPhase.cs`
+- Cut-out components: skeleton exists → Z3 verify → translate (deterministic, no model)
+- Custom components: no skeleton → model writes Dafny → Z3 verify → 4-attempt correction loop (feed previous Dafny + Z3 errors back) → translate
+- BAN `function` — always use `method` (eliminates invalid UnaryExpression class of errors)
+- Reframe as refactor: pseudocode IS the algorithm, wrap it don't redesign it
+- "Not Dafny" detection: when Z3 says "this symbol not expected", tells model to output raw Dafny
+- Broadened JSON extraction: detects var/:=/if/return markers, not just method/module
 - `IModelGateway` dependency removed from constructor.
 
 ### 4. Z3Runner — `--allow-warnings` on Verify
@@ -110,7 +113,7 @@ DocumentType.Invoice") that the generic pattern bodies don't implement. This is 
 - `DesignContextSnowballer.cs` (69) — design context snowball across phases
 
 ### Posit.Phases (12 files)
-- `DafnyImplementationPhase.cs` (145) — purely deterministic: verify → translate, NO model
+- `DafnyImplementationPhase.cs` (544) — hybrid: cut-outs deterministic, custom Dafny with 4-attempt Z3 correction loop
 
 ## Next Steps
 1. Fix `__default` in WiringGenerator (root cause, not band-aid)

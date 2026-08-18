@@ -114,3 +114,13 @@
 // 8. Integer division / truncates toward zero
 // 9. ghost variables only in proofs, not in compiled code
 // 10. match must cover all datatype variants (or have else case)
+// 11. ALWAYS use `method` — NEVER use `function` for code with loops/assignment
+//     Functions are pure expressions (no while, no var reassignment, no return)
+//     Using while inside a function gives "invalid UnaryExpression" (CoCo parser bug)
+// 12. Map syntax: `map[K, V]` (comma between key/value types), NOT `map[K]V`
+//     Empty map: `map[]`, NOT `map<K,V>()`
+// 13. Generic types use angle brackets: `seq<T>` `set<T>` `map<K,V>`
+//     NOT square brackets: `seq[T]` `set[T]` — square brackets are for indexing only
+// 14. `char('0' + d)` constructs a char from an int — use `(char)(i)` syntax
+// 15. Map update: `m[k := v]` returns a new map with k→v. Map lookup: `m[k]`.
+//     Check key exists: `k in m`. Map keys: `m.Keys` (set). Map values: `m.Values` (set).
