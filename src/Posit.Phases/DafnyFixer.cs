@@ -86,9 +86,14 @@ public sealed class DafnyFixer
                     text, @"```(?:dafny)?\s*\n?(.*?)\n?```",
                     System.Text.RegularExpressions.RegexOptions.Singleline);
                 if (fenceMatch.Success)
+                {
                     fixedDafny = fenceMatch.Groups[1].Value.Trim();
+                }
                 else
-                    fixedDafny = text.Trim();
+                {
+                    // Model may wrap Dafny in JSON — extract the code field
+                    fixedDafny = ExtractDafnyFromText(text);
+                }
             }
             catch (Exception ex)
             {
@@ -183,6 +188,54 @@ public sealed class DafnyFixer
         sb.AppendLine("The code MUST pass Z3 verification. Keep all {:extern} declarations unchanged.");
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Extract Dafny code from model output. The model may return:
+    /// - Raw Dafny (best case)
+    /// - JSON wrapper with a code field (e.g. {"fixed_code": "...", "code": "..."})
+    /// - Markdown fences (handled by caller)
+    /// This mirrors what a human does: read the output, find the code, ignore the noise.
+    /// </summary>
+    private static string ExtractDafnyFromText(string text)
+    {
+        // If it doesn't start with {, it's probably raw Dafny
+        var jsonStart = text.IndexOf('{');
+        if (jsonStart < 0)
+            return text.Trim();
+
+        // Try to parse as JSON and extract a code field
+        try
+        {
+            var jsonText = text[jsonStart..];
+            using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
+            // Try known field names (same list as WireFixer/ModelWiringGenerator)
+            foreach (var fieldName in new[] { "code", "fixed_code", "fixedCode", "dafny", "source",
+                "content", "file", "output", "result", "answer", "solution", "module", "dafnyCode" })
+            {
+                if (doc.RootElement.TryGetProperty(fieldName, out var prop)
+                    && prop.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var code = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(code) && code.Contains("method ") || code?.Contains("module ") == true)
+                        return code.Trim();
+                }
+            }
+            // Fallback: find first string property that looks like Dafny
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var s = prop.Value.GetString();
+                    if (s != null && (s.Contains("method ") || s.Contains("module ")))
+                        return s.Trim();
+                }
+            }
+        }
+        catch { }
+
+        // Not JSON or no code field found — return as-is
+        return text.Trim();
     }
 
     private static string LoadReferenceCard()
