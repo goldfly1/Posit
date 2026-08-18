@@ -146,6 +146,10 @@ public sealed class DafnyFixer
             sb.AppendLine($"  {instr}");
         sb.AppendLine();
 
+        sb.AppendLine("═══ DAFNY REFERENCE CARD ═══");
+        sb.AppendLine(LoadReferenceCard());
+        sb.AppendLine();
+
         sb.AppendLine("═══ DAFNY SOURCE TO FIX ═══");
         sb.AppendLine(dafnySource);
         sb.AppendLine();
@@ -154,6 +158,18 @@ public sealed class DafnyFixer
         sb.AppendLine("The code MUST pass Z3 verification. Keep all {:extern} declarations unchanged.");
 
         return sb.ToString();
+    }
+
+    private static string LoadReferenceCard()
+    {
+        var paths = new[] {
+            Path.Combine(Directory.GetCurrentDirectory(), "patterns", "dafny-reference-card.dfy"),
+            "C:/Users/goldf/Posit/patterns/dafny-reference-card.dfy"
+        };
+        foreach (var p in paths)
+            if (File.Exists(p))
+                return File.ReadAllText(p);
+        return "// Dafny reference card not found";
     }
 }
 
