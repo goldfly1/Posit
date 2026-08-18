@@ -84,18 +84,22 @@ public sealed class CSharpImplementationPhase : IPhase
             }
         }
 
-        // Sub-step (c): wiring via ModelWiringGenerator (model writes Wire.cs)
+        // Sub-step (c): wiring via deterministic WiringGenerator (primary)
+        // The deterministic generator uses the ACTUAL translated C# method signatures
+        // and type conversions — no guessing property names. The model generator is
+        // only used as a fallback if the deterministic one can't handle the wiring.
         var translatedSigs = ScanTranslatedSignatures(files, contract);
         var stubSigs = ScanStubSignatures(files, contract);
         var modelWirer = new ModelWiringGenerator(_model);
         foreach (var comp in contract.Components)
         {
             if (comp.Connections.Length == 0) continue;
-            var wireContent = await modelWirer.GenerateAsync(comp, contract, translatedSigs, stubSigs, context, ct);
+            // Primary: deterministic wiring (uses exact names from translated C#)
+            var wireContent = WiringGenerator.Generate(comp, contract, translatedSigs, stubSigs);
             if (string.IsNullOrWhiteSpace(wireContent))
             {
-                // Fallback to rule-based generator if model fails
-                wireContent = WiringGenerator.Generate(comp, contract, translatedSigs, stubSigs);
+                // Fallback to model if deterministic generator fails
+                wireContent = await modelWirer.GenerateAsync(comp, contract, translatedSigs, stubSigs, context, ct);
             }
             files.Add(new SourceCodeFile($"{comp.Name}/Wire.cs", wireContent));
         }
