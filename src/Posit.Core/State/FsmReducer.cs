@@ -125,13 +125,15 @@ public sealed class FsmReducer
         {
             var newState = state
                 .WithStatus(SessionStatus.Retry)
-                .WithCorrectionSignal(errors);
+                .WithCorrectionSignal(errors)
+                .WithPreviousOutput(result?.RawOutput);
             return Ok(newState, ["phase.retry_requested"]);
         }
 
         var rollbackState2 = state
             .WithStatus(SessionStatus.CheckpointRollback)
-            .WithCorrectionSignal(errors);
+            .WithCorrectionSignal(errors)
+            .WithPreviousOutput(result?.RawOutput);
         return Ok(rollbackState2, ["phase.checkpoint_rollback"]);
     }
 

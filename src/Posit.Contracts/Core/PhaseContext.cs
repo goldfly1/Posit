@@ -17,6 +17,13 @@ public record PhaseContext
     public string[] CorrectionSignal { get; init; } = [];
 
     /// <summary>
+    /// The model's previous output from the last attempt. Injected into the
+    /// correction signal so the model can do a targeted fix instead of
+    /// rewriting from scratch and repeating the same mistake.
+    /// </summary>
+    public string? PreviousOutput { get; init; }
+
+    /// <summary>
     /// Accumulated design context from prior phases. Each design phase
     /// (Architecture, API Definition, Pseudocode) adds its piece. Implementation
     /// reads the full accumulated context to avoid losing key decisions.

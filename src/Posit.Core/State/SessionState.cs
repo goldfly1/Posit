@@ -25,6 +25,13 @@ public record SessionState
     public string[] CorrectionSignal { get; init; } = [];
 
     /// <summary>
+    /// The model's raw output from the last failed attempt. Passed to the
+    /// next retry so the model can do a targeted fix instead of rewriting
+    /// from scratch and repeating the same mistake.
+    /// </summary>
+    public string? PreviousOutput { get; init; }
+
+    /// <summary>
     /// Number of times implementation has looped back to Architecture.
     /// Capped at 2 to prevent infinite cycling.
     /// </summary>
@@ -80,6 +87,7 @@ public record SessionState
     public SessionState WithCompletedPhases(PhaseId[] phases) => this with { CompletedPhases = phases };
     public SessionState WithContextSummary(ContextSummary summary) => this with { LastContextSummary = summary };
     public SessionState WithCorrectionSignal(string[] correctionSignal) => this with { CorrectionSignal = correctionSignal };
+    public SessionState WithPreviousOutput(string? output) => this with { PreviousOutput = output };
     public SessionState WithDesignContext(DesignContext? designContext) => this with { DesignContext = designContext };
     public SessionState WithDependencyGraph(DependencyGraph? graph) => this with { DependencyGraph = graph };
 }

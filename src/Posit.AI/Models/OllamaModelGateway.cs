@@ -146,6 +146,11 @@ public sealed class OllamaModelGateway : IModelGateway
         // into PhaseContext. The gateway injects them here so the model sees exactly
         // what was wrong and what's available to fix it. This is the carapace closing
         // the loop: reject → send back with listing → model fixes → re-scan → repeat.
+        //
+        // CRITICAL: The model must see its OWN PREVIOUS OUTPUT alongside the errors.
+        // Without it, the model rewrites from scratch and makes the same mistake.
+        // With it, the model can do a targeted fix: "I see my JSON had X, the error
+        // says Y, I need to change X to fix Y." This is what a human does.
         if (context.CorrectionSignal is { Length: > 0 })
         {
             sb.AppendLine("═══ CORRECTION SIGNAL — your previous output had these errors ═══");
@@ -156,6 +161,20 @@ public sealed class OllamaModelGateway : IModelGateway
                 sb.AppendLine($"• {signal}");
             }
             sb.AppendLine();
+
+            // Include the model's previous output so it can do a targeted fix
+            // instead of rewriting from scratch and repeating the same mistake.
+            if (!string.IsNullOrWhiteSpace(context.PreviousOutput))
+            {
+                sb.AppendLine("═══ YOUR PREVIOUS OUTPUT (fix this, don't rewrite from scratch) ═══");
+                sb.AppendLine(context.PreviousOutput);
+                sb.AppendLine();
+                sb.AppendLine("═══ END PREVIOUS OUTPUT ═══");
+                sb.AppendLine();
+                sb.AppendLine("Look at your previous output above, find the specific field(s) that caused");
+                sb.AppendLine("the errors, and fix ONLY those fields. Keep everything else unchanged.");
+            }
+
             sb.AppendLine("═══ END CORRECTION SIGNAL ═══");
             sb.AppendLine();
         }

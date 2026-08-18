@@ -102,6 +102,8 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             {
                 Log($"[{phaseId}] success (attempt {result.AttemptNumber})");
                 seenFailures.Remove(phaseId);
+                // Clear previous output on success — no correction needed for next phase
+                state = state.WithPreviousOutput(null);
             }
             else
             {
@@ -142,6 +144,7 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         InputArtifacts = await _artifactRepo.ListBySessionAsync(state.SessionId),
         ModelRoute = GetModelForPhase(), BudgetRemaining = state.Profile.Budget,
         AttemptNumber = state.CurrentAttempt, CorrectionSignal = state.CorrectionSignal,
+        PreviousOutput = state.PreviousOutput,
         DesignContext = state.DesignContext
     };
 
