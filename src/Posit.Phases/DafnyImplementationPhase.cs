@@ -160,7 +160,7 @@ public sealed class DafnyImplementationPhase : IPhase
     private async Task<(string? Dafny, bool Verified, string? VerifyOutput, string? TranslatedCSharp, string? DafnyPath)>
         GenerateAndVerifyDafnyAsync(Component comp, PhaseContext context, string stagingDir, CancellationToken ct)
     {
-        const int maxAttempts = 3;
+        const int maxAttempts = 4;
         var dafnyPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
         string? currentDafny = null;
         string[] currentErrors = [];

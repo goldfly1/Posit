@@ -16,16 +16,33 @@
 - Dafny Language Dictionary: 86 entries, 5 words average, 5.6K chars
   Covers all types, statements, specs, declarations, modules, attributes, stdlib
 - PseudocodeReductionPhase: recursive reduction to Dafny tokens
-  Crystallization check: every line must contain a Dafny token
+  Crystallization check: every line must contain a Dafny token from the dictionary
   Max 5 passes, stops when crystallized or model says STOP
   All passes stored in DB (PseudocodeModule artifact)
 - DafnyImplementationPhase reads pseudocode artifact, includes in prompt
+
+## Pipeline (Aug 18 — with pseudocode reduction)
+
+```
+Architecture → Pseudocode Reduction → Dafny Contracts → Dafny Implementation → C# Implementation → QA → Bot Harness
+
+Correction loops:
+  Architecture retry: PreviousOutput + CorrectionSignal
+  WireFixer: C# compile errors + Wire.cs + ISequence API (3 retries)
+  DafnyFixer: test failures + Dafny source + reference card + Z3 loop (3 retries)
+  Retry loop: WireFixer↔DafnyFixer alternation (6 retries max)
+
+Specialist principle:
+  Each blocker TYPE gets a dedicated specialist.
+  Each specialist gets ONLY what it needs + a correction loop.
+  Fixers see only Dafny — never pseudocode.
+```
 
 ## Trial Status
 
 | Trial | With cut-outs | Without cut-outs (current) |
 |-------|--------------|---------------------------|
-| T1-T6 | ✅ 6/6 PASS | ⚠️ Dafny impl fails (JSON extraction + no correction loop) |
+| T1-T6 | ✅ 6/6 PASS | ⚠️ Dafny impl fails (needs PreviousOutput correction loop) |
 
 ## Known Issues for Next Session
 
@@ -33,6 +50,7 @@
    Same pattern as architect: Z3 rejects → model needs to see its previous Dafny
    + the Z3 errors to do a targeted fix. Currently the FSM retries but the
    DafnyImplementationPhase doesn't inject PreviousOutput into its prompt.
+   The DafnyFixer already has this (3 Z3 retries) — DafnyImplementationPhase needs the same.
 
 2. **DafnyImplementationPhase recursive JSON extraction works** but the model
    writes wrong method names (Conversion instead of Convert). The Z3 correction
@@ -41,11 +59,17 @@
 3. **Pseudocode reduction phase runs** but the crystallized pseudocode may need
    tuning. Need to see actual reduction output to evaluate.
 
+4. **AGENTS.md needs updating** — Status, Pipeline, and Locked Decisions sections
+   are out of date. The file is protected (needs user approval). New decisions 30-37
+   should be added: cut-outs clipped, lean prompt, PreviousOutput, universal JSON
+   extraction, specialist framework, pseudocode reduction, language dictionary,
+   retry loop alternation.
+
 ## Git State
 
 - Branch: master, pushed to origin
-- Latest commit: 080275b — Pseudocode reduction layer
-- Working tree: clean
+- Latest commit: db18213 — Handoff
+- Working tree: uncommitted changes to wiki/handoff-2026-08-18-final2.md (this file)
 
 ## Build Status
 

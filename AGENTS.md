@@ -27,7 +27,7 @@ See `wiki/carapace-doctrine.md` for the canonical text.
 
 ## Status
 
-18+ commits, 8 projects, build clean (0 errors, 0 warnings). 6 of 11 phases built. Pipeline runs end-to-end with DB persistence. Data capture live (prompts_log, audit_events, artifacts, sessions).
+50+ commits, 8 projects, build clean (0 errors, 0 warnings). 7 of 11 phases built (added PseudocodeReduction). Pipeline runs end-to-end with DB persistence. Data capture live (prompts_log, audit_events, artifacts, sessions). 6/6 trials (T1-T6) passing with cut-outs. Cut-outs clipped from architect — now writes custom Dafny from primitives. Pseudocode reduction layer built, needs DafnyImpl correction loop to fully work without cut-outs.
 
 ## Git
 
@@ -45,7 +45,7 @@ See `wiki/carapace-doctrine.md` for the canonical text.
 - **Wiki vector index:** Postgres `wiki.wiki_chunks` table on port 5434. Markdown docs indexed with embeddings. `scripts/sync-wiki-html.sh` re-indexes and regenerates HTML. `docs/wiki.html` is the human-readable output.
 - **Registry vector DB:** `posit_registry.variants` table — see decision 15 below.
 - **Dafny stdlib reference:** 57 modules (18,501 lines) indexed in `wiki/reference/dafny-stdlib.md`. Also `wiki/reference/dafny-runtime-cs.md` and `wiki/reference/dafny-runtime-system-cs.md` for C# runtime. Searchable via wiki vector index.
-- **Pattern reference card:** `patterns/dafny-reference-card.dfy` — Z3-proven syntax examples (9 VC, 0 errors). Injected into model prompts to prevent common errors.
+- **Pattern reference card:** `patterns/dafny-reference-card.dfy` — Dafny Language Dictionary (86 entries, 5 words average, 5.6K chars). Covers all types, statements, specs, declarations, modules, attributes, stdlib. Injected into Dafny writer + DafnyFixer + PseudocodeReducer prompts. IS the crystallization vocabulary for the reducer.
 - **Shell:** git-bash (MSYS), POSIX syntax. NOT PowerShell.
 - **Kill dotnet:** `powershell.exe -Command "Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`
 

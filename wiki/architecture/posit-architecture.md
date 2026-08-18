@@ -23,15 +23,41 @@ Posit is a spec compiler. The architect posits contracts (requires/ensures). Z3 
 6. **Small modules** — 200 lines max per Dafny module. Forces decomposition. Tractable proofs.
 7. **Wiki-driven** — 2,147 proven Dafny examples in the wiki. The model learns by imitation, not by guessing.
 
-## Pipeline
+## Pipeline (Aug 18, 2026 — current)
 
 ```
-Ideation → Architecture → API Definition → Pseudocode → Design Review
-  → Dafny Contracts (architect writes .dfy skeletons with requires/ensures, {:extern} portals for I/O)
-  → Dafny Implementation (Imp fills Dafny bodies, Z3 verifies, translate cs — verified logic + extern holes)
-  → C# Implementation (Imp writes C# shells that plug into extern portals, calls translated Dafny)
-  → QA (compile translated C#, test unverified modules only)
-  → Deployment → Observability → Documentation
+Architecture → Pseudocode Reduction → Dafny Contracts → Dafny Implementation
+  → C# Implementation → QA → Bot Harness (Docker build + run + compare)
+
+Architecture (deepseek-v4-flash:cloud):
+  Decomposes spec into components. Sets patternName=null for all dafny.
+  Outputs method signatures, connections, test cases. Lean prompt (2.2K chars).
+
+Pseudocode Reduction (deepseek-v4-flash:cloud):
+  Recursively reduces spec-level descriptions to Dafny-statement-level fragments.
+  Crystallization check: every line must contain a Dafny token from the dictionary.
+  Max 5 passes. All passes stored in DB. No Z3 — pseudocode isn't verified, it's reduced.
+
+Dafny Contracts (deterministic + Z3):
+  Verifies the skeleton contracts are sound. No model call.
+
+Dafny Implementation (deepseek-v4-flash:cloud + Z3):
+  Model writes complete Dafny module from pseudocode fragments + method signatures
+  + language dictionary. Z3 verifies. Translates to C#. Recursive JSON extraction.
+  NEEDS: PreviousOutput correction loop (same pattern as architect/DafnyFixer).
+
+C# Implementation (deepseek-v4-flash:cloud):
+  Model writes Wire.cs from connections + method signatures + ISequence API.
+  Docker build verifies. Recursive JSON extraction.
+
+QA (deepseek-v4-flash:cloud):
+  AI test data generation. Bot harness runs tests, compares output.
+
+Correction loops:
+  Architecture retry: PreviousOutput + CorrectionSignal (model sees own JSON)
+  WireFixer: C# compile errors + Wire.cs + ISequence API (3 retries)
+  DafnyFixer: test failures + Dafny source + reference card + Z3 loop (3 retries)
+  Retry loop: WireFixer↔DafnyFixer alternation (6 retries max)
 ```
 
 ### Phase Detail
