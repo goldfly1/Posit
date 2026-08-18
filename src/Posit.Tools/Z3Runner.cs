@@ -270,7 +270,8 @@ public sealed class Z3Runner
         }
 
         // Pattern: "this symbol not expected" — usually JSON or prose written as Dafny
-        if (errorLine.StartsWith("{") || errorLine.StartsWith("["))
+        // Only flag if it looks like JSON (starts with {" or ["), not a bare block brace
+        if (errorLine.StartsWith("{\"") || errorLine.StartsWith("[\"") || errorLine.StartsWith("{\"module"))
             return "The file starts with JSON or brackets, not Dafny code. Output ONLY raw Dafny source starting with 'module'.";
 
         // Pattern: bracket errors — usually wrong syntax for map/array/seq types
