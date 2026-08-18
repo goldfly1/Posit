@@ -164,10 +164,15 @@ public sealed class OllamaModelGateway : IModelGateway
 
             // Include the model's previous output so it can do a targeted fix
             // instead of rewriting from scratch and repeating the same mistake.
+            // Truncate to 3000 chars to avoid drowning the model in its own output —
+            // the model needs to see the structure, not re-read every field.
             if (!string.IsNullOrWhiteSpace(context.PreviousOutput))
             {
+                var prevOutput = context.PreviousOutput;
+                if (prevOutput.Length > 3000)
+                    prevOutput = prevOutput[..3000] + "\n... (truncated — fix the errors above, keep the rest)";
                 sb.AppendLine("═══ YOUR PREVIOUS OUTPUT (fix this, don't rewrite from scratch) ═══");
-                sb.AppendLine(context.PreviousOutput);
+                sb.AppendLine(prevOutput);
                 sb.AppendLine();
                 sb.AppendLine("═══ END PREVIOUS OUTPUT ═══");
                 sb.AppendLine();
