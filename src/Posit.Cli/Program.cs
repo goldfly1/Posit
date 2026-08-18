@@ -89,15 +89,32 @@ internal static class Program
         for (var retry = 0; retry < maxWiringRetries && !result.Success && IsDockerBuildFailure(result); retry++)
         {
             Console.Error.WriteLine($"[harness] Docker build failed — retrying wiring ({retry + 1}/{maxWiringRetries})...");
-            Console.Error.WriteLine($"[harness] build error: {ExtractBuildError(result, 500)}");
+            var compileErrors = ExtractCompileErrors(result.Error ?? "Docker build failed");
+            foreach (var ce in compileErrors)
+                Console.Error.WriteLine($"  {ce}");
+
+            // Get the previous Wire.cs so the model can fix it instead of rewriting from scratch
+            var prevWire = ExtractPreviousWireCs(result.TempDir);
+
+            // Build correction signal: compile errors + previous Wire.cs
+            var correctionParts = new List<string> { "Wire.cs compile errors:" };
+            correctionParts.AddRange(compileErrors);
+            if (!string.IsNullOrWhiteSpace(prevWire))
+            {
+                correctionParts.Add("");
+                correctionParts.Add("Previous Wire.cs (fix the errors above, keep the rest):");
+                correctionParts.Add(prevWire);
+            }
+            else
+            {
+                correctionParts.Add("(previous Wire.cs not available — write fresh)");
+            }
 
             // Re-run csharp-implementation with the build error as correction signal
             var wireState = await stateStore.LoadSessionAsync(sessionId);
             if (wireState is null) break;
-            // Extract only the C# compile errors, not the full Docker log
-            var buildErrors = ExtractCompileErrors(result.Error ?? "Docker build failed");
             wireState = wireState.WithStatus(SessionStatus.Planning)
-                .WithCorrectionSignal(buildErrors);
+                .WithCorrectionSignal(correctionParts.ToArray());
             // Remove csharp-implementation from completed so it re-runs
             wireState = wireState.WithCompletedPhases(
                 wireState.CompletedPhases.Where(p => p.Value != "csharp-implementation").ToArray());
@@ -272,6 +289,20 @@ internal static class Program
             return new[] { "Docker build failed. Wire.cs has compile errors. Check the C# syntax and Dafny runtime API usage." };
         // Limit to 10 errors to avoid overwhelming the model
         return errors.Take(10).ToArray();
+    }
+
+    /// <summary>
+    /// Extract the previous Wire.cs content from the harness temp directory.
+    /// Lets the model fix its own code instead of rewriting from scratch —
+    /// same as a human reading the compiler error and fixing the specific line.
+    /// </summary>
+    private static string? ExtractPreviousWireCs(string? tempDir)
+    {
+        if (string.IsNullOrWhiteSpace(tempDir) || !Directory.Exists(tempDir)) return null;
+        var wireFiles = Directory.GetFiles(tempDir, "Wire.cs", SearchOption.AllDirectories);
+        if (wireFiles.Length == 0) return null;
+        try { return File.ReadAllText(wireFiles[0]); }
+        catch { return null; }
     }
 
     private static void PrintUsage()

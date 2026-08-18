@@ -60,17 +60,42 @@ public sealed class ModelWiringGenerator
 
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
 
-            // If model returned JSON, extract the code field
+            // If model returned JSON, extract the code field.
+            // The model uses various field names: "code", "wireCode", "wire", "wireCs", "source".
+            // Try all known names, then fall back to any string-valued property.
             if (text.StartsWith('{'))
             {
                 try
                 {
                     using var doc = System.Text.Json.JsonDocument.Parse(text);
-                    // Model may use "code" or "wireCode" as the field name
-                    if (doc.RootElement.TryGetProperty("code", out var codeProp))
-                        text = codeProp.GetString() ?? text;
-                    else if (doc.RootElement.TryGetProperty("wireCode", out var wireProp))
-                        text = wireProp.GetString() ?? text;
+                    var root = doc.RootElement;
+                    string? extracted = null;
+                    // Try known field names in order of likelihood
+                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content" })
+                    {
+                        if (root.TryGetProperty(fieldName, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            extracted = prop.GetString();
+                            break;
+                        }
+                    }
+                    // Fallback: find the first string property that looks like C# code
+                    if (extracted is null)
+                    {
+                        foreach (var prop in root.EnumerateObject())
+                        {
+                            if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                                && (prop.Value.GetString()?.Contains("class") == true
+                                    || prop.Value.GetString()?.Contains("static") == true
+                                    || prop.Value.GetString()?.Contains("void") == true))
+                            {
+                                extracted = prop.Value.GetString();
+                                break;
+                            }
+                        }
+                    }
+                    if (extracted is not null)
+                        text = extracted;
                 }
                 catch { }
             }
@@ -177,14 +202,21 @@ namespace {comp.Name}
         sb.AppendLine("  string[] -> ISequence<ISequence<Rune>>: Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(arr.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())");
         sb.AppendLine("  int/BigInteger: use BigInteger.Zero for default, BigInteger for arithmetic");
         sb.AppendLine();
-        sb.AppendLine("CRITICAL DAFNY RUNTIME API RULES:");
-        sb.AppendLine("  ISequence<T> is NOT an array or List. Do NOT use .Length, .Count, .ElementCount, or [] indexing.");
-        sb.AppendLine("  Use LINQ only: .Count() for length, .ElementAt(i) for indexing, .Select(...) to iterate.");
-        sb.AppendLine("  Examples:");
-        sb.AppendLine("    Length:  seq.Count()    (NOT seq.Length or seq.ElementCount)");
-        sb.AppendLine("    Index:   seq.ElementAt(i)   (NOT seq[i])");
-        sb.AppendLine("    Iterate: seq.Select(r => (char)r.Value).ToArray()");
-        sb.AppendLine("  For nested sequences (2D/3D), use .Select(row => ...) to unwrap each level.");
+        sb.AppendLine("CRITICAL DAFNY RUNTIME API — ISequence<T> interface:");
+        sb.AppendLine("  ISequence<T> is the C# type for Dafny seq<T>. It implements IEnumerable<T>.");
+        sb.AppendLine("  REAL API (from DafnyRuntime source):");
+        sb.AppendLine("    .Count           — int property for length (NOT .Length, NOT .Count())");
+        sb.AppendLine("    .Select(i)       — element at index i (NOT seq[i] — Select IS the indexer!)");
+        sb.AppendLine("    .CloneAsArray()  — returns T[] copy");
+        sb.AppendLine("    .Contains(g)     — bool membership check");
+        sb.AppendLine("    .Take(n)/.Drop(n) — subsequence operations");
+        sb.AppendLine("  Since ISequence<T> implements IEnumerable<T>, LINQ works too:");
+        sb.AppendLine("    .Select(r => (char)r.Value)  — LINQ projection (note: same name as indexer, different signature)");
+        sb.AppendLine("    .Count()                      — LINQ count (method call, not property)");
+        sb.AppendLine("    .ElementAt(i)                 — LINQ indexer");
+        sb.AppendLine("  For ISequence<ISequence<T>> (2D): unwrap with .Select(row => ...) first.");
+        sb.AppendLine("  Type conversions: string→ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)");
+        sb.AppendLine("                     ISequence<Rune>→string: new string(seq.Select(r => (char)r.Value).ToArray())");
         sb.AppendLine();
 
         // Rules
