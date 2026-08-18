@@ -1,138 +1,116 @@
-// Dafny Reference Card — extracted from verified stdlib
-// Include this in prompts to prevent common errors.
+// Dafny Language Dictionary — 86 entries, 5 words average
+// The model knows Dafny. This is the vocabulary list, not a tutorial.
+// Used by: DafnyImplementationPhase, DafnyFixer, PseudocodeReducer.
+// Crystallization check: every line of pseudocode must use tokens from here.
 
-// ─── Strings are value types, NOT objects ──────────────────────────────
-// WRONG: function Foo(s: string) reads s { ... }     // ERROR: reads on value
-// RIGHT: function Foo(s: string) { ... }              // No reads needed
+// ─── Types ───
+// bool: true/false value type
+// int: arbitrary-precision integer, supports +, -, *, /, %
+// nat: non-negative integer (subset of int)
+// real: real/rational number
+// char: single character, compared with ==
+// string: immutable sequence of characters, = seq<char>
+// ord: ordinal type for well-founded ordering
+// bv<N>: N-bit bit-vector, supports bit operations
+// seq<T>: immutable sequence, |s| length, s[i] index, s[a..b] slice
+// set<T>: immutable set, x in s test, union +, intersection *
+// multiset<T>: set with counts, multiset[x] = count
+// map<K,V>: immutable key-value map, m[k] lookup, k in m test
+// imap<K,V>: infinite map (partial function)
+// array<T>: mutable array, a[i] access, a[i := x] update
+// array2<T>: 2D mutable array, a[i,j] access
+// tuple: (a, b, c) — t.0, t.1, t.2 for access
+// datatype: algebraic type: datatype Result = Success(v: int) | Failure(e: string)
+// codatatype: lazy/infinite type: codatatype Stream = Cons(head: int, tail: Stream)
+// class: reference type with fields, methods, constructor
+// trait: interface/abstract class, types implement it
+// iterator: generator type, yields values
 
-// ─── Seq indexing requires bounds proof ───────────────────────────────
-function First<T>(xs: seq<T>): (x: T)
-  requires |xs| > 0        // MUST prove non-empty before accessing xs[0]
-{
-  xs[0]
-}
+// ─── Statements ───
+// := : assignment
+// var x := E: variable declaration + assignment
+// if cond { } else { }: conditional branch
+// if cond then A else B: conditional expression
+// match e case C(x) => ... case D(y) => ...: pattern match
+// while cond invariant I decreases D { }: loop with proof obligations
+// for i := 0 to n do { }: counted loop
+// break: exit loop
+// continue: next iteration
+// return: return from method
+// print: output to console
+// assert P: prove P or verification fails
+// assume P: trust P without proof
+// forall x :: P(x) requires R(x): universal quantifier expression
+// exists x :: P(x): existential quantifier expression
+// calc { }: step-by-step calculation proof
+// s[i := x]: functional sequence update (new seq with element replaced)
+// map[k := v]: functional map update
+// x as int: type cast
+// x is Foo: type test (returns bool)
+// old(e): value of e in method pre-state
+// fresh(o): object o was allocated in this method
+// |s|: cardinality (length of seq, size of set)
+// let x := E; B: let binding expression
 
-function Last<T>(xs: seq<T>): (x: T)
-  requires |xs| > 0
-{
-  xs[|xs| - 1]
-}
+// ─── Specifications ───
+// requires P: precondition — caller must prove P
+// ensures P: postcondition — method must prove P
+// decreases E: termination metric — must decrease each iteration/recursion
+// invariant P: loop invariant — preserved each iteration
+// reads S: function reads only locations in S
+// modifies S: method modifies only locations in S
 
-// ─── Slicing ──────────────────────────────────────────────────────────
-// s[..n] — first n elements, requires 0 <= n <= |s|
-// s[n..] — elements from n onward, requires 0 <= n <= |s|
-// s[a..b] — elements a..b, requires 0 <= a <= b <= |s|
-// ALWAYS prove bounds before slicing. Z3 will reject s[idx+1..] if it
-// can't prove idx+1 <= |s|.
+// ─── Declarations ───
+// method Name(params) returns (r: T): executable method, verified by Z3
+// function Name(params): T: pure function, no side effects, used in proofs
+// predicate Name(params): function returning bool
+// lemma Name(params) requires P ensures Q: proof obligation — prove Q from P
+// const x: T := E: compile-time constant
+// constructor: class initializer, ensures Valid()
+// datatype variant: Success(v: T) | Failure(e: string) — constructor pattern
 
-// ─── Recursion MUST have decreases ─────────────────────────────────────
-function CountOccurrences(s: string, c: char): int
-  decreases |s|          // MUST supply decreases for recursive functions
-{
-  if |s| == 0 then 0
-  else if s[0] == c then 1 + CountOccurrences(s[1..], c)
-  else CountOccurrences(s[1..], c)
-}
+// ─── Modules ───
+// module M { }: namespace + encapsulation
+// import M: bring M's exports into scope
+// import opened M: bring M's names directly (no M. prefix)
+// export reveals ... provides ...: access control for module
+// abstract module M: module with unspecified bodies, proof by contract only
+// refines: module M refines N — M replaces N's bodies
 
-// ─── Loop invariants ───────────────────────────────────────────────────
-method SumArray(arr: seq<int>) returns (total: int)
-  requires forall i :: 0 <= i < |arr| ==> arr[i] >= 0
-  ensures total >= 0
-{
-  total := 0;
-  var i := 0;
-  while i < |arr|
-    invariant 0 <= i <= |arr|       // bounds invariant
-    invariant total >= 0            // accumulated property
-    decreases |arr| - i             // termination metric
-  {
-    total := total + arr[i];
-    i := i + 1;
-  }
-}
+// ─── Attributes ───
+// {:extern}: I/O portal — Z3 assumes contract, C# implements body
+// {:axiom}: bodyless method — suppresses missing body warning
+// {:autocontracts}: auto-generate requires/ensures from Valid() predicate
+// {:compile}: include in compilation output
+// {:fuel N}: unfolding depth for function definitions in proofs
+// {:induction}: auto-generate induction proof structure
+// {:timeLimit N}: Z3 time limit in seconds for this method
+// {:verify false}: skip Z3 verification for this method
+// {:transparent}: reveal function body to callers
+// {:tailrecursion}: enable tail call optimization
+// {:synthesize}: let Z3 synthesize the body
 
-// ─── datatype (enums and records) ─────────────────────────────────────
-datatype Color = Red | Green | Blue(value: int)
-datatype Result<T> = Success(value: T) | Failure(error: string)
+// ─── Stdlib (import Std.X) ───
+// Seq.Map(f, s): apply function f to each element
+// Seq.Filter(p, s): keep elements where predicate p holds
+// Seq.Sort(s): sort by natural order
+// Seq.Reverse(s): reverse sequence
+// Seq.Flatten(ss): flatten seq of seqs into one seq
+// Seq.Range(a, b): seq of ints from a to b-1
+// Seq.IndexOf(s, x): first index of x in s, or -1
+// Seq.Contains(s, x): true if x in s
+// Seq.Empty(): empty sequence []
+// Seq.Singleton(x): single-element sequence [x]
+// Seq.Concat(a, b): a + b — sequence concatenation
 
-// Pattern matching on datatypes:
-function IsSuccess<T>(r: Result<T>): bool
-{
-  match r
-  case Success(_) => true
-  case Failure(_) => false
-}
-
-// ─── Class with invariant ──────────────────────────────────────────────
-class Counter {
-  var count: int
-  predicate Valid() reads this { count >= 0 }
-
-  constructor()
-    ensures Valid()
-  {
-    count := 0;
-  }
-
-  method Inc()
-    requires Valid()
-    modifies this
-    ensures Valid()
-    ensures count == old(count) + 1
-  {
-    count := count + 1;
-  }
-}
-
-// ─── {:extern} for I/O portals ─────────────────────────────────────────
-// Z3 assumes the contract. C# implements the body in a partial class.
-method {:extern} ReadFile(path: string) returns (content: string)
-  requires |path| > 0
-  ensures |content| >= 0
-
-// ─── {:axiom} for bodyless methods ────────────────────────────────────
-// Suppresses warnings on bodyless methods (abstract specs).
-method {:axiom} Process(input: string) returns (output: string)
-  requires |input| > 0
-  ensures |output| >= 0
-
-// ─── Common pitfalls ──────────────────────────────────────────────────
+// ─── Common pitfalls ───
 // 1. Don't use reads on string/seq/int/bool — they are value types
 // 2. Don't access s[i] without proving 0 <= i < |s|
 // 3. Don't slice s[n..] without proving 0 <= n <= |s|
 // 4. Don't recurse without decreases
-// 5. Don't assert without proving from invariants
-// 6. Use := for assignment, not =
-// 7. type is a reserved keyword — don't use as parameter name
-// 8. char comparison: use == (works), string comparison: use SeqEqual or
-//    compare element-by-element
-
-// ─── Seq composition (NO cut-out needed for these) ────────────────────
-// Concatenation: rows1 + rows2 joins two sequences
-method MergeRows(rows1: seq<seq<string>>, rows2: seq<seq<string>>) returns (merged: seq<seq<string>>)
-  ensures merged == rows1 + rows2
-{
-  merged := rows1 + rows2;
-}
-
-// Append one element: seq + [element]
-method AddRow(rows: seq<seq<string>>, row: seq<string>) returns (result: seq<seq<string>>)
-  ensures result == rows + [row]
-{
-  result := rows + [row];
-}
-
-// String concatenation: s1 + s2
-// Length: |s|
-// Element access: s[i] (requires 0 <= i < |s|)
-// Slice: s[a..b] (requires 0 <= a <= b <= |s|)
-// Empty seq: [] (with type annotation: var x: seq<string> := [])
-// ─── Stdlib available (import Std.X) ──────────────────────────────────
-// Seq.Map(fn, s), Seq.Filter(p, s), Seq.Sort(s), Seq.Reverse(s),
-// Seq.Flatten(ss), Seq.Range(a, b), Seq.IndexOf(s, x), Seq.Contains(s, x)
-// Seq.Len(s)=|s|, Seq.Empty(), Seq.Singleton(x), Seq.Concat(a, b)=a+b
-// Set<U>: union, intersection, difference, membership (x in s)
-// Map<K,V>: keys, values, lookup (m[k]), contains (k in m)
-// Multiset<U>: counts, union, intersection
-// Ord: total ordering (compare). Newtype: constrained subtype.
-// trait: interface. codatatype: lazy/stream. iterator: generator.
+// 5. Use := for assignment, not =
+// 6. type is a reserved keyword — don't use as parameter name
+// 7. String comparison: compare element-by-element, not with ==
+// 8. Integer division / truncates toward zero
+// 9. ghost variables only in proofs, not in compiled code
+// 10. match must cover all datatype variants (or have else case)
