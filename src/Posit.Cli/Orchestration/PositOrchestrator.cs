@@ -142,17 +142,30 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         Prompt = PromptBuilder.Build(phaseId, _registry),
         UserRequest = state.InitialRequest?.Prompt,
         InputArtifacts = await _artifactRepo.ListBySessionAsync(state.SessionId),
-        ModelRoute = GetModelForPhase(), BudgetRemaining = state.Profile.Budget,
+        ModelRoute = GetModelForPhase(phaseId), BudgetRemaining = state.Profile.Budget,
         AttemptNumber = state.CurrentAttempt, CorrectionSignal = state.CorrectionSignal,
         PreviousOutput = state.PreviousOutput,
         DesignContext = state.DesignContext
     };
 
-    private static ModelRoute GetModelForPhase() => new()
+    private static ModelRoute GetModelForPhase(PhaseId phaseId)
     {
-        Tier = ModelTier.Fast, ProviderId = "ollama",
-        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.2
-    };
+        // Per-phase model routing: flash for fast phases, pro for Dafny writing.
+        // Flash: proven fast at architecture + pseudocode reduction (1-2s per call).
+        // Pro: reasons better through Dafny type relationships (but fails at pseudocode
+        //      reduction — outputs 14 tokens = STOP on every pass).
+        var modelId = phaseId.Value switch
+        {
+            "dafny-implementation" => "deepseek-v4-pro:cloud",
+            "dafny-fix" => "deepseek-v4-pro:cloud",
+            _ => "deepseek-v4-flash:cloud"
+        };
+        return new ModelRoute
+        {
+            Tier = ModelTier.Fast, ProviderId = "ollama",
+            ModelId = modelId, MaxOutputTokens = 8192, Temperature = 0.2
+        };
+    }
 
     /// <summary>Carapace enforcement: filenames, phantom module refs, missing components.</summary>
     private async Task<string[]> EnforceCarapace(PhaseResult result, SessionState state, CancellationToken ct)
