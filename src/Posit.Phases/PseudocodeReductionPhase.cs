@@ -130,9 +130,27 @@ public sealed class PseudocodeReductionPhase : IPhase
                 chain.Add(reduced);
                 current = reduced;
 
-                if (reduced.Trim().Equals("STOP", StringComparison.OrdinalIgnoreCase))
+                // Model says STOP — accept as crystallized. The model knows
+                // better than the heuristic whether the pseudocode is reduced enough.
+                // Also accept very short responses (< 10 chars) — model is signaling
+                // it has nothing more to reduce, even if it doesn't say "STOP" exactly.
+                if (reduced.Trim().Equals("STOP", StringComparison.OrdinalIgnoreCase)
+                    || reduced.Trim().StartsWith("STOP", StringComparison.OrdinalIgnoreCase)
+                    || (reduced.Trim().Length < 10 && reduced.ToLowerInvariant().Contains("stop")))
                 {
+                    Console.Error.WriteLine($"[pseudocode] {comp.Name}.{method.Name} model said STOP at pass {pass}");
                     crystallized = true;
+                    break;
+                }
+
+                // Very short non-STOP response (model gave up / returned empty / JSON noise)
+                // — accept the previous pass as the best crystallized version.
+                if (reduced.Trim().Length < 5)
+                {
+                    Console.Error.WriteLine($"[pseudocode] {comp.Name}.{method.Name} model returned short output at pass {pass} — accepting best effort");
+                    crystallized = true;
+                    // Use the previous pass as the final, not this tiny output
+                    chain.RemoveAt(chain.Count - 1);
                     break;
                 }
 
