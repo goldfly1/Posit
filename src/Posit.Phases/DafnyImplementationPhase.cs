@@ -138,6 +138,9 @@ public sealed class DafnyImplementationPhase : IPhase
                 $"  method {m.Name}({string.Join(", ", m.Params.Select(p => $"{p.Name}: {p.Type}"))}) returns ({m.ReturnType})"))
             : "";
 
+        // Read pseudocode reduction artifact — the crystallized pseudocode is the algorithm spec
+        var pseudocode = ExtractPseudocodeForComponent(comp.Name, context);
+
         var systemPrompt = new StringBuilder();
         systemPrompt.AppendLine("You are writing a Dafny module for the Posit spec compiler.");
         systemPrompt.AppendLine("Write a COMPLETE Dafny module that implements the spec.");
@@ -153,7 +156,15 @@ public sealed class DafnyImplementationPhase : IPhase
         systemPrompt.AppendLine("Test cases (your implementation MUST satisfy these):");
         systemPrompt.AppendLine(testCases);
         systemPrompt.AppendLine();
-        systemPrompt.AppendLine("Dafny Reference Card:");
+
+        if (!string.IsNullOrWhiteSpace(pseudocode))
+        {
+            systemPrompt.AppendLine("Reduced pseudocode (implement this logic in Dafny):");
+            systemPrompt.AppendLine(pseudocode);
+            systemPrompt.AppendLine();
+        }
+
+        systemPrompt.AppendLine("Dafny Language Dictionary:");
         systemPrompt.AppendLine(referenceCard);
         systemPrompt.AppendLine();
         systemPrompt.AppendLine("Rules:");
@@ -162,8 +173,8 @@ public sealed class DafnyImplementationPhase : IPhase
         systemPrompt.AppendLine("3. Keep all {:extern} declarations unchanged.");
         systemPrompt.AppendLine("4. Write real method bodies that implement the spec's logic.");
         systemPrompt.AppendLine("5. The code must pass Z3 verification.");
-        systemPrompt.AppendLine("6. Use Dafny built-ins: seq concat (+), string concat (+), |s| for length, s[i] for access.");
-        systemPrompt.AppendLine("7. Simple operations (parse, format, concat) do NOT need a pattern — write them inline.");
+        systemPrompt.AppendLine("6. The pseudocode is the algorithm — translate it into proper Dafny with contracts.");
+        systemPrompt.AppendLine("7. Add requires/ensures clauses, invariants, and decreases for loops.");
 
         var prompt = new PromptTemplate
         {
@@ -226,6 +237,42 @@ public sealed class DafnyImplementationPhase : IPhase
 
     private static string CleanDafny(string code) =>
         code.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
+
+    /// <summary>
+    /// Read the pseudocode reduction artifact and extract the final pass
+    /// for each method of the given component. Returns the crystallized
+    /// pseudocode as a single string, or null if no artifact found.
+    /// </summary>
+    private static string? ExtractPseudocodeForComponent(string compName, PhaseContext context)
+    {
+        foreach (var a in context.InputArtifacts)
+        {
+            if (a.Kind != ArtifactKind.PseudocodeModule) continue;
+            try
+            {
+                var bundle = JsonSerializer.Deserialize<PseudocodeReductionBundle>(a.PayloadJson, PositJson.Options);
+                if (bundle == null) continue;
+                var result = bundle.Results.FirstOrDefault(r => r.ModuleName == compName);
+                if (result == null) continue;
+
+                var sb = new StringBuilder();
+                foreach (var (methodName, passes) in result.MethodReductions)
+                {
+                    // Get the last non-STOP pass — that's the crystallized pseudocode
+                    var finalPass = passes.LastOrDefault(p => !p.Trim().Equals("STOP", StringComparison.OrdinalIgnoreCase));
+                    if (finalPass != null)
+                    {
+                        sb.AppendLine($"// {methodName}:");
+                        sb.AppendLine(finalPass);
+                        sb.AppendLine();
+                    }
+                }
+                return sb.Length > 0 ? sb.ToString() : null;
+            }
+            catch { }
+        }
+        return null;
+    }
 
     /// <summary>
     /// Recursively scan JSON for a string property that looks like Dafny code.
