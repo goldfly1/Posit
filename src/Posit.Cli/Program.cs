@@ -87,7 +87,7 @@ internal static class Program
         // Retry loop: build failures → WireFixer (C# wiring).
         // Test failures → WireFixer first (might be type conversion),
         // then DafnyFixer (cotton candy: compiles+Z3-green but wrong logic).
-        const int maxRetries = 4;
+        const int maxRetries = 6;
         var wireFixAttempted = false;
         for (var retry = 0; retry < maxRetries && !result.Success; retry++)
         {
@@ -171,6 +171,10 @@ internal static class Program
                 // Update BOTH the Dafny artifact AND the translated C# in the SourceCodeBundle
                 await UpdateDafnyInDbAsync(sessionId, dafnyFix, new ArtifactRepository());
                 Console.Error.WriteLine($"[harness] DafnyFixer applied — re-running harness...");
+
+                // Reset wireFixAttempted so WireFixer gets another shot —
+                // the translated C# changed, wiring may need to adapt.
+                wireFixAttempted = false;
             }
             else
             {
