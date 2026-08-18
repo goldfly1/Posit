@@ -120,11 +120,10 @@ public sealed class ArchitecturePhase : IPhase
         {
             if (comp.Classification == ModuleClassification.IoShell) continue;
 
+            // null patternName = custom Dafny (no cut-out). DafnyImplementationPhase
+            // will generate it from the reference card + method signatures. Z3 verifies.
             if (string.IsNullOrWhiteSpace(comp.PatternName))
-            {
-                errors.Add($"Component '{comp.Name}' is {comp.Classification} but has no patternName");
-                continue;
-            }
+                continue; // valid: custom Dafny, no skeleton to compose
 
             if (!_registry.HasPattern(comp.PatternName!))
             {

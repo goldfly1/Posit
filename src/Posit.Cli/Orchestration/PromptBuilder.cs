@@ -42,9 +42,11 @@ public static class PromptBuilder
         sb.AppendLine();
         sb.AppendLine("Each component needs:");
         sb.AppendLine("  - classification: \"dafny\" (provable logic) or \"io-shell\" (I/O)");
-        sb.AppendLine("  - dafny: patternName = a cut-out name from the registry, OR null to write custom Dafny");
-        sb.AppendLine("  - io-shell: stubNames = one or more stub names from the registry");
+        sb.AppendLine("  - patternName: ALWAYS null for dafny components. The pipeline writes custom");
+        sb.AppendLine("    Dafny from the method signatures you declare. Z3 verifies it.");
+        sb.AppendLine("  - io-shell: stubNames = one or more stub names from the list below");
         sb.AppendLine("  - methodSignatures: [{name, params:[{name,type}], returnType, returnDafnyType}]");
+        sb.AppendLine("    These signatures ARE the spec for the Dafny implementation. Be precise.");
         sb.AppendLine("  - dependencies: names of OTHER components this one calls");
         sb.AppendLine("  - connections: [{fromMethod, toComponent, toMethod, argMappings:[]}]");
         sb.AppendLine("    ONLY the orchestrator (io-shell with entryType) has connections. Dafny components have NONE.");
@@ -59,25 +61,7 @@ public static class PromptBuilder
 
         if (registry != null)
         {
-            // Cut-out catalog — compact: name + methods only
-            var cutOuts = registry.GetAllPatterns().Where(p => p.IsCutOut).OrderBy(p => p.Name).ToList();
-            if (cutOuts.Count > 0)
-            {
-                sb.AppendLine("CUT-OUTS (pre-written Dafny modules — each has a small set of methods):");
-                foreach (var p in cutOuts)
-                {
-                    var sigs = registry.GetMethodSignatures(p.Name);
-                    var methods = sigs.Count > 0
-                        ? string.Join(", ", sigs.Select(s => s.Name))
-                        : "(none)";
-                    sb.AppendLine($"  {p.Name}: {methods} — {p.Responsibility}");
-                }
-                sb.AppendLine("If a cut-out lacks a method you need: use a different cut-out, combine multiple cut-outs,");
-                sb.AppendLine("or set patternName=null and write custom Dafny (Z3 will verify it). Don't invent methods.");
-                sb.AppendLine();
-            }
-
-            // Stubs — compact: name + keywords only
+            // Stubs — still needed for io-shell (C# I/O portals)
             sb.AppendLine("STUBS (for io-shell components):");
             foreach (var s in registry.GetAllCSharpStubs().OrderBy(s => s.Name))
             {

@@ -38,12 +38,10 @@ public static class ContractScanner
             // ARE the spec, the wiring IS the implementation. No dead pattern body.
             if (comp.Classification != ModuleClassification.IoShell && comp.Connections.Length == 0)
             {
+                // null patternName = custom Dafny (no cut-out). Valid — skip validation.
                 if (string.IsNullOrWhiteSpace(comp.PatternName))
-                {
-                    errors.Add(new ScanError(comp.Name, "patternName", "(empty)",
-                        "is empty but component is classified as " + comp.Classification, []));
-                }
-                else if (!registry.HasPattern(comp.PatternName!))
+                    continue;
+                if (!registry.HasPattern(comp.PatternName!))
                 {
                     errors.Add(new ScanError(comp.Name, "patternName", comp.PatternName!,
                         "does not exist in the pattern registry",
