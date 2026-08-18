@@ -47,74 +47,99 @@ public sealed class DafnyFixer
         PhaseContext context,
         CancellationToken ct = default)
     {
-        var systemPrompt = BuildFixerPrompt(dafnySource, moduleName, responsibility, testCaseDescriptions, fixInstructions);
+        var maxAttempts = 3;
+        var currentSource = dafnySource;
+        var currentErrors = fixInstructions;
 
-        var prompt = new PromptTemplate
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            PhaseId = context.PhaseId,
-            Version = new PromptVersion("1.0.0"),
-            SystemPrompt = systemPrompt,
-            OutputFormatSpec = "Fixed Dafny source code only (complete module)",
-            ModelTier = ModelTier.Fast,
-            Temperature = 0.1, // low temperature — targeted logic fix, not creative work
-            MaxOutputTokens = 8192,
-            OutputFormat = OutputFormat.PlainText,
-            OutputSchemaRef = "DafnyModule",
-            Status = PromptStatus.Active
-        };
+            var systemPrompt = BuildFixerPrompt(currentSource, moduleName, responsibility, testCaseDescriptions, currentErrors);
 
-        string? fixedDafny;
-        try
-        {
-            var gen = await _model.GenerateAsync(context.ModelRoute, prompt, context, ct);
-            if (string.IsNullOrWhiteSpace(gen.Text))
+            var prompt = new PromptTemplate
+            {
+                PhaseId = context.PhaseId,
+                Version = new PromptVersion("1.0.0"),
+                SystemPrompt = systemPrompt,
+                OutputFormatSpec = "Fixed Dafny source code only (complete module)",
+                ModelTier = ModelTier.Fast,
+                Temperature = 0.1,
+                MaxOutputTokens = 8192,
+                OutputFormat = OutputFormat.PlainText,
+                OutputSchemaRef = "DafnyModule",
+                Status = PromptStatus.Active
+            };
+
+            string? fixedDafny;
+            try
+            {
+                var gen = await _model.GenerateAsync(context.ModelRoute, prompt, context, ct);
+                if (string.IsNullOrWhiteSpace(gen.Text))
+                {
+                    Console.Error.WriteLine($"[dafny-fixer] Attempt {attempt + 1}: model returned empty");
+                    return null;
+                }
+
+                var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+
+                // Strip markdown fences if present
+                var fenceMatch = System.Text.RegularExpressions.Regex.Match(
+                    text, @"```(?:dafny)?\s*\n?(.*?)\n?```",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+                if (fenceMatch.Success)
+                    fixedDafny = fenceMatch.Groups[1].Value.Trim();
+                else
+                    fixedDafny = text.Trim();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[dafny-fixer] Attempt {attempt + 1}: model call failed: {ex.Message}");
                 return null;
+            }
 
-            var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+            if (string.IsNullOrWhiteSpace(fixedDafny))
+            {
+                Console.Error.WriteLine($"[dafny-fixer] Attempt {attempt + 1}: extracted empty Dafny");
+                return null;
+            }
 
-            // Strip markdown fences if present
-            var fenceMatch = System.Text.RegularExpressions.Regex.Match(
-                text, @"```(?:dafny)?\s*\n?(.*?)\n?```",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
-            if (fenceMatch.Success)
-                fixedDafny = fenceMatch.Groups[1].Value.Trim();
-            else
-                fixedDafny = text.Trim();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[dafny-fixer] Model call failed: {ex.Message}");
-            return null;
-        }
+            // Z3 must verify the fix — Z3 is the judge, not the model.
+            // If Z3 rejects, feed the error back and retry (let the dog chew on it).
+            var stagingDir = Path.Combine(Path.GetTempPath(), "posit-dafny-fixer", context.SessionId.Value);
+            Directory.CreateDirectory(stagingDir);
+            var dafnyPath = Path.Combine(stagingDir, $"{moduleName}.dfy");
+            await File.WriteAllTextAsync(dafnyPath, fixedDafny, ct);
 
-        if (string.IsNullOrWhiteSpace(fixedDafny))
-            return null;
+            var verifyResult = await _z3.VerifyAsync(dafnyPath, ct);
+            if (verifyResult.Success)
+            {
+                // Translate verified Dafny to C#
+                var translation = await _z3.TranslateAsync(dafnyPath, moduleName, ct);
+                if (!translation.Success || string.IsNullOrWhiteSpace(translation.CleanCsharp))
+                {
+                    Console.Error.WriteLine($"[dafny-fixer] Attempt {attempt + 1}: Z3 passed but C# translation failed: {translation.Stderr}");
+                    // Translation failed — feed the translation error back and retry
+                    currentSource = fixedDafny;
+                    currentErrors = new[] { $"C# translation failed: {translation.Stderr}", "Fix the Dafny so it translates to C# correctly." };
+                    continue;
+                }
 
-        // Z3 must verify the fix — Z3 is the judge, not the model
-        var stagingDir = Path.Combine(Path.GetTempPath(), "posit-dafny-fixer", context.SessionId.Value);
-        Directory.CreateDirectory(stagingDir);
-        var dafnyPath = Path.Combine(stagingDir, $"{moduleName}.dfy");
-        await File.WriteAllTextAsync(dafnyPath, fixedDafny, ct);
+                Console.Error.WriteLine($"[dafny-fixer] Z3 verified + translated '{moduleName}' on attempt {attempt + 1} — fix accepted");
+                return new DafnyFixResult(fixedDafny, translation.CleanCsharp, dafnyPath);
+            }
 
-        var verifyResult = await _z3.VerifyAsync(dafnyPath, ct);
-        if (!verifyResult.Success)
-        {
-            Console.Error.WriteLine($"[dafny-fixer] Z3 rejected the fix for '{moduleName}':");
+            // Z3 rejected — feed the errors back for the next attempt
+            Console.Error.WriteLine($"[dafny-fixer] Attempt {attempt + 1}/{maxAttempts}: Z3 rejected for '{moduleName}':");
             foreach (var err in verifyResult.Errors.Take(10))
                 Console.Error.WriteLine($"  {err}");
-            return null;
+
+            currentSource = fixedDafny;
+            currentErrors = verifyResult.Errors.Length > 0
+                ? verifyResult.Errors.Take(10).ToArray()
+                : new[] { "Z3 verification failed (no specific error details)" };
         }
 
-        // Translate verified Dafny to C#
-        var translation = await _z3.TranslateAsync(dafnyPath, moduleName, ct);
-        if (!translation.Success || string.IsNullOrWhiteSpace(translation.CleanCsharp))
-        {
-            Console.Error.WriteLine($"[dafny-fixer] C# translation failed for '{moduleName}': {translation.Stderr}");
-            return null;
-        }
-
-        Console.Error.WriteLine($"[dafny-fixer] Z3 verified + translated '{moduleName}' — fix accepted");
-        return new DafnyFixResult(fixedDafny, translation.CleanCsharp, dafnyPath);
+        Console.Error.WriteLine($"[dafny-fixer] Exhausted {maxAttempts} attempts for '{moduleName}'");
+        return null;
     }
 
     private static string BuildFixerPrompt(
