@@ -127,3 +127,12 @@ method AddRow(rows: seq<seq<string>>, row: seq<string>) returns (result: seq<seq
 // Element access: s[i] (requires 0 <= i < |s|)
 // Slice: s[a..b] (requires 0 <= a <= b <= |s|)
 // Empty seq: [] (with type annotation: var x: seq<string> := [])
+// ─── Stdlib available (import Std.X) ──────────────────────────────────
+// Seq.Map(fn, s), Seq.Filter(p, s), Seq.Sort(s), Seq.Reverse(s),
+// Seq.Flatten(ss), Seq.Range(a, b), Seq.IndexOf(s, x), Seq.Contains(s, x)
+// Seq.Len(s)=|s|, Seq.Empty(), Seq.Singleton(x), Seq.Concat(a, b)=a+b
+// Set<U>: union, intersection, difference, membership (x in s)
+// Map<K,V>: keys, values, lookup (m[k]), contains (k in m)
+// Multiset<U>: counts, union, intersection
+// Ord: total ordering (compare). Newtype: constrained subtype.
+// trait: interface. codatatype: lazy/stream. iterator: generator.
