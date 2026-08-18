@@ -185,13 +185,35 @@ public sealed class DafnyImplementationPhase : IPhase
             if (string.IsNullOrWhiteSpace(gen.Text))
                 return null;
 
-            // Extract Dafny from response (strip markdown fences if present)
+            // Extract Dafny from response — strip reasoning tags, markdown fences, JSON wrappers
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+
+            // Strip markdown fences if present
             var fenceMatch = System.Text.RegularExpressions.Regex.Match(
                 text, @"```(?:dafny)?\s*\n?(.*?)\n?```",
                 System.Text.RegularExpressions.RegexOptions.Singleline);
             if (fenceMatch.Success)
                 return CleanDafny(fenceMatch.Groups[1].Value);
+
+            // Model may wrap Dafny in JSON — extract by scanning for code-like string property
+            if (text.TrimStart().StartsWith('{'))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(text.TrimStart()[text.TrimStart().IndexOf('{')..]);
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            var s = prop.Value.GetString();
+                            if (s != null && (s.Contains("method ") || s.Contains("module ")))
+                                return CleanDafny(s);
+                        }
+                    }
+                }
+                catch { }
+            }
+
             return CleanDafny(text);
         }
         catch (Exception ex)
