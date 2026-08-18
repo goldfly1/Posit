@@ -205,32 +205,49 @@ public sealed class DafnyFixer
     /// </summary>
     private static string ExtractDafnyFromText(string text)
     {
-        // If it doesn't start with {, it's probably raw Dafny
         var jsonStart = text.IndexOf('{');
         if (jsonStart < 0)
             return text.Trim();
 
-        // Try to parse as JSON and extract the code — universally scan for
-        // any string property that looks like Dafny (contains 'method' or 'module').
-        // Don't enumerate field names — the model uses unpredictable names.
+        // Recursively scan JSON for a string that looks like Dafny code
         try
         {
-            var jsonText = text[jsonStart..];
-            using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
-            foreach (var prop in doc.RootElement.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
-                {
-                    var s = prop.Value.GetString();
-                    if (s != null && (s.Contains("method ") || s.Contains("module ")))
-                        return s.Trim();
-                }
-            }
+            using var doc = System.Text.Json.JsonDocument.Parse(text[jsonStart..]);
+            var found = ScanJsonForDafny(doc.RootElement);
+            if (found != null)
+                return found;
         }
         catch { }
 
-        // Not JSON or no code field found — return as-is
         return text.Trim();
+    }
+
+    private static string? ScanJsonForDafny(System.Text.Json.JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.String:
+                var s = element.GetString();
+                if (s != null && s.Length > 20 && (s.Contains("method ") || s.Contains("module ")))
+                    return s;
+                return null;
+            case System.Text.Json.JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    var found = ScanJsonForDafny(prop.Value);
+                    if (found != null) return found;
+                }
+                return null;
+            case System.Text.Json.JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var found = ScanJsonForDafny(item);
+                    if (found != null) return found;
+                }
+                return null;
+            default:
+                return null;
+        }
     }
 
     private static string LoadReferenceCard()

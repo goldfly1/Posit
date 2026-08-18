@@ -196,22 +196,11 @@ public sealed class DafnyImplementationPhase : IPhase
                 return CleanDafny(fenceMatch.Groups[1].Value);
 
             // Model may wrap Dafny in JSON — extract by scanning for code-like string property
-            if (text.TrimStart().StartsWith('{'))
+            if (text.TrimStart().StartsWith('{') || text.TrimStart().StartsWith('['))
             {
-                try
-                {
-                    using var doc = System.Text.Json.JsonDocument.Parse(text.TrimStart()[text.TrimStart().IndexOf('{')..]);
-                    foreach (var prop in doc.RootElement.EnumerateObject())
-                    {
-                        if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
-                        {
-                            var s = prop.Value.GetString();
-                            if (s != null && (s.Contains("method ") || s.Contains("module ")))
-                                return CleanDafny(s);
-                        }
-                    }
-                }
-                catch { }
+                var extracted = ExtractDafnyFromJson(text.TrimStart());
+                if (extracted != null)
+                    return CleanDafny(extracted);
             }
 
             return CleanDafny(text);
@@ -237,6 +226,50 @@ public sealed class DafnyImplementationPhase : IPhase
 
     private static string CleanDafny(string code) =>
         code.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
+
+    /// <summary>
+    /// Recursively scan JSON for a string property that looks like Dafny code.
+    /// The model nests Dafny in arbitrary JSON structures: {methods:[{body:"..."}]}.
+    /// Scan all string values at any depth for 'method' or 'module'.
+    /// </summary>
+    private static string? ExtractDafnyFromJson(string text)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(text);
+            return ScanJsonForDafny(doc.RootElement);
+        }
+        catch { return null; }
+    }
+
+    private static string? ScanJsonForDafny(System.Text.Json.JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.String:
+                var s = element.GetString();
+                // Must contain Dafny keywords AND be substantial (not just a field name)
+                if (s != null && s.Length > 20 && (s.Contains("method ") || s.Contains("module ")))
+                    return s;
+                return null;
+            case System.Text.Json.JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    var found = ScanJsonForDafny(prop.Value);
+                    if (found != null) return found;
+                }
+                return null;
+            case System.Text.Json.JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var found = ScanJsonForDafny(item);
+                    if (found != null) return found;
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
 
     public ValidationResult ValidateOutput(PhaseResult result)
     {
