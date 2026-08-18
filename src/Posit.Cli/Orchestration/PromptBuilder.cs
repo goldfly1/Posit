@@ -122,9 +122,17 @@ public static class PromptBuilder
             if (cutOuts.Count > 0)
             {
                 sb.AppendLine("═══ OPTIONAL CUT-OUTS (pre-written Dafny modules — use ONLY if one matches exactly) ═══");
-                sb.AppendLine("Cut-outs are shortcuts. If one matches your component's responsibility exactly, use it.");
-                sb.AppendLine("If none matches, WRITE YOUR OWN Dafny method using the reference card below — Z3 will verify it.");
+                sb.AppendLine("Cut-outs are shortcuts. Each cut-out has a SMALL set of methods — check the methods listed.");
+                sb.AppendLine("If a cut-out doesn't have the method you need, DON'T invent it. Either:");
+                sb.AppendLine("  (a) Use a DIFFERENT cut-out that has the method, OR");
+                sb.AppendLine("  (b) Set patternName=null and write custom Dafny with the reference card below.");
                 sb.AppendLine("Do NOT force a cut-out to fit — write custom Dafny instead.");
+                sb.AppendLine();
+                sb.AppendLine("MULTI-CUT-OUT COMPOSITION: A spec may need MULTIPLE cut-outs, not just one.");
+                sb.AppendLine("Example: 'merge two CSV files' needs:");
+                sb.AppendLine("  csv-parser (ParseLines) + row-validator (ValidateRows) + csv-serializer (SerializeToCsv)");
+                sb.AppendLine("Each cut-out is a SEPARATE component. Don't try to put all methods on one cut-out.");
+                sb.AppendLine("If a single cut-out can't do everything, split into multiple components OR write custom Dafny.");
                 sb.AppendLine();
                 foreach (var p in cutOuts)
                 {
