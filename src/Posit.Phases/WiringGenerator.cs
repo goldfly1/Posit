@@ -58,9 +58,9 @@ public static class WiringGenerator
         var entryType = comp.EntryType ?? "file";
         if (entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase))
         {
-            sb.AppendLine("            if (!Console.IsInputRedirected && args.Length == 0)");
-            sb.AppendLine("            { Console.Error.WriteLine(\"Usage: pipe input via stdin\"); return 1; }");
+            // Stdin: just read the line. No args check — stdin programs don't take file args.
             sb.AppendLine("            var inputLine = Console.ReadLine() ?? \"\";");
+            sb.AppendLine("            if (string.IsNullOrEmpty(inputLine)) { Console.Error.WriteLine(\"Error: no input provided.\"); return 1; }");
         }
         else
         {

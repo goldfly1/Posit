@@ -117,26 +117,39 @@ public sealed class BotHarness
         var results = new List<TestCaseResult>();
 
         // Run each test case — test data files already created above
+        // Check if the CLI component uses stdin entry (not file args)
+        var isStdinEntry = string.Equals(cliComponent.EntryType, "stdin", StringComparison.OrdinalIgnoreCase);
+
         foreach (var tc in testCases)
         {
-            // For file-not-found tests, pass a non-existent path
             string cliArg;
+            string? stdinInput = null;
+
             if (tc.Name.Contains("FileNotFound", StringComparison.OrdinalIgnoreCase)
                 || tc.Name.Contains("not found", StringComparison.OrdinalIgnoreCase)
                 || tc.Name.Contains("missing", StringComparison.OrdinalIgnoreCase))
             {
                 cliArg = "nonexistent_file.csv";
             }
+            else if (isStdinEntry)
+            {
+                // Stdin-type program: pipe test data via stdin, no CLI arg
+                cliArg = "";
+                var aiFile = aiTestData.FirstOrDefault(f =>
+                    f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
+                stdinInput = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
+                if (stdinInput == "__NONEXISTENT_FILE__") stdinInput = "";
+            }
             else
             {
-                // Determine extension from test data content
+                // File-type program: pass test data file path as CLI arg
                 var testData = GenerateTestData(tc.Id, tc.Name, specHint);
                 var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
                     : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
                 cliArg = $"testdata_{tc.Id}{ext}";
             }
             var runResult = await BotHarnessDocker.RunContainerAsync(
-                _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct);
+                _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct, stdinInput);
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedBehavior, CompareOutput(runResult.Output, tc.ExpectedBehavior)));
         }
@@ -246,7 +259,6 @@ public sealed class BotHarness
         var name = (tcName + " " + (specHint ?? "")).ToLowerInvariant();
         if (name.Contains("empty") || name.Contains("no data") || name.Contains("emptyarray"))
         {
-            // For JSON tests, empty array is "[]". For CSV tests, empty is "".
             if (name.Contains("json") || name.Contains("array"))
                 return "[]";
             return "";
@@ -254,11 +266,18 @@ public sealed class BotHarness
         if (name.Contains("invalid") || name.Contains("inconsistent") || name.Contains("mismatch"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA,extra\nCarol,35,SF";
         if (name.Contains("filenotfound") || name.Contains("missing") || name.Contains("not found"))
-            return "__NONEXISTENT_FILE__"; // sentinel — harness should pass a bad path instead
+            return "__NONEXISTENT_FILE__";
         if (name.Contains("json"))
             return "[{\"name\":\"Alice\",\"age\":\"30\"},{\"name\":\"Bob\",\"age\":\"25\"}]";
         if (name.Contains("word") || name.Contains("text") || name.Contains("frequency") || name.Contains("log"))
             return "the cat sat on the mat the cat\nthe dog ran fast\n";
+        // Temperature/stdin programs: input is "value unit" format
+        if (name.Contains("temp") || name.Contains("convert") || name.Contains("celsius") || name.Contains("fahrenheit"))
+        {
+            if (name.Contains("invalid") || name.Contains("error") || name.Contains("bad"))
+                return "20 X";
+            return "32 F";
+        }
         if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
             return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
         // Default: simple valid CSV

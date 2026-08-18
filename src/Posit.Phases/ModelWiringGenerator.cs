@@ -61,17 +61,20 @@ public sealed class ModelWiringGenerator
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
 
             // If model returned JSON, extract the code field.
-            // The model uses various field names: "code", "wireCode", "wire", "wireCs", "source".
-            // Try all known names, then fall back to any string-valued property.
-            if (text.StartsWith('{'))
+            // The model wraps C# code in JSON with varying field names.
+            // Try to find JSON in the text (might have leading whitespace or tags).
+            var jsonStart = text.IndexOf('{');
+            if (jsonStart >= 0)
             {
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(text);
+                    var jsonText = text[jsonStart..];
+                    using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
                     var root = doc.RootElement;
                     string? extracted = null;
                     // Try known field names in order of likelihood
-                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content" })
+                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content",
+                        "file", "output", "result", "main", "fixed_file", "fixedFile", "answer", "solution", "cs" })
                     {
                         if (root.TryGetProperty(fieldName, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String)
                         {
@@ -224,9 +227,13 @@ namespace {comp.Name}
         sb.AppendLine("1. Write a complete Main(string[] args) method.");
         var entryType = comp.EntryType ?? "file";
         if (entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase))
-            sb.AppendLine("2. Entry is stdin: use Console.ReadLine() to read input. Do NOT use args[0].");
+        {
+            sb.AppendLine("2. Entry is STDIN: use Console.ReadLine() to read input. Do NOT use args[0].");
+            sb.AppendLine("   Do NOT check args.Length or print usage for missing args — stdin programs don't take file args.");
+            sb.AppendLine("   If Console.ReadLine() returns null, print an error and return 1.");
+        }
         else
-            sb.AppendLine("2. Entry is a file path: use args[0] as the file path/input. If stdin specified, use Console.ReadLine().");
+            sb.AppendLine("2. Entry is a file path: use args[0] as the file path/input.");
         sb.AppendLine("3. Call each method in connection order, passing the previous result to the next.");
         sb.AppendLine("4. For void methods with out params: declare out variables, use the first as the chained result.");
         sb.AppendLine("5. If an out param is bool (isValid): check it — if false, print error to stderr and return 1.");

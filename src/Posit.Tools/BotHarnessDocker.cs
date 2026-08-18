@@ -53,22 +53,6 @@ internal static class BotHarnessDocker
         return await RunDockerAsync(dockerPath, args, ct);
     }
 
-    /// <summary>
-    /// Run a container with the given input, capture stdout.
-    /// </summary>
-    internal static async Task<DockerResult> RunContainerAsync(
-        string dockerPath, string tag, string cliComponentName, string input, CancellationToken ct = default)
-    {
-        // Sanitize tag (same as BuildAsync)
-        var safeTag = new string(tag.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '.' ? c : '-').ToArray());
-        if (safeTag.StartsWith('-')) safeTag = "p" + safeTag[1..];
-        var args = $"run --rm posit-run-{safeTag.ToLowerInvariant()}";
-        if (!string.IsNullOrEmpty(input))
-            args += $" {EscapeShellArg(input)}";
-
-        return await RunDockerAsync(dockerPath, args, ct);
-    }
-
     private static async Task<DockerResult> RunDockerAsync(
         string dockerPath, string arguments, CancellationToken ct)
     {
@@ -88,6 +72,67 @@ internal static class BotHarnessDocker
         {
             using var process = new Process { StartInfo = psi };
             process.Start();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+            await process.WaitForExitAsync(ct);
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+            var output = string.IsNullOrEmpty(stderr) ? stdout : stdout + "\n" + stderr;
+            return new DockerResult(process.ExitCode == 0, output);
+        }
+        catch (Exception ex)
+        {
+            return new DockerResult(false, $"Docker execution failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Run a container with the given input, capture stdout.
+    /// If stdinInput is non-null, pipes it via stdin instead of passing as CLI arg.
+    /// </summary>
+    internal static async Task<DockerResult> RunContainerAsync(
+        string dockerPath, string tag, string cliComponentName, string input,
+        CancellationToken ct = default, string? stdinInput = null)
+    {
+        // Sanitize tag (same as BuildAsync)
+        var safeTag = new string(tag.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '.' ? c : '-').ToArray());
+        if (safeTag.StartsWith('-')) safeTag = "p" + safeTag[1..];
+        var args = $"run --rm";
+        // Add -i flag when piping stdin so the container reads from stdin
+        if (stdinInput != null)
+            args += " -i";
+        args += $" posit-run-{safeTag.ToLowerInvariant()}";
+        // Only pass input as CLI arg if no stdin piping
+        if (!string.IsNullOrEmpty(input) && stdinInput == null)
+            args += $" {EscapeShellArg(input)}";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = dockerPath,
+            Arguments = args,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        // Pipe stdin if provided
+        if (stdinInput != null)
+            psi.RedirectStandardInput = true;
+
+        try
+        {
+            using var process = new Process { StartInfo = psi };
+            process.Start();
+
+            if (stdinInput != null)
+            {
+                await process.StandardInput.WriteLineAsync(stdinInput.AsMemory(), ct);
+                await process.StandardInput.FlushAsync(ct);
+                process.StandardInput.Close();
+            }
 
             var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
             var stderrTask = process.StandardError.ReadToEndAsync(ct);

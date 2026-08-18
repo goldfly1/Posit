@@ -84,16 +84,36 @@ internal static class Program
         foreach (var tc in result.Results)
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
 
-        // Wiring retry loop: if Docker build failed, call the WireFixer —
-        // a dedicated agent that gets ONLY the compile errors + Wire.cs + ISequence API.
-        // Like a plumber: doesn't redesign the building, just fixes the leaking pipe.
+        // Wiring retry loop: if Docker build failed OR tests failed with usage/error messages,
+        // call the WireFixer — a dedicated agent that gets ONLY the errors + Wire.cs + API reference.
         const int maxWiringRetries = 3;
-        for (var retry = 0; retry < maxWiringRetries && !result.Success && IsDockerBuildFailure(result); retry++)
+        for (var retry = 0; retry < maxWiringRetries && !result.Success; retry++)
         {
-            var compileErrors = ExtractCompileErrors(result.Error ?? "Docker build failed");
-            Console.Error.WriteLine($"[harness] Docker build failed — calling WireFixer ({retry + 1}/{maxWiringRetries})...");
-            foreach (var ce in compileErrors)
-                Console.Error.WriteLine($"  {ce}");
+            var isBuildFailure = IsDockerBuildFailure(result);
+            var isTestFailure = !isBuildFailure && result.Results.Any(r => !r.Matches);
+
+            if (!isBuildFailure && !isTestFailure) break;
+
+            List<string> fixInstructions;
+            if (isBuildFailure)
+            {
+                fixInstructions = new List<string> { "Wire.cs compile errors:" };
+                fixInstructions.AddRange(ExtractCompileErrors(result.Error ?? "Docker build failed"));
+                Console.Error.WriteLine($"[harness] Docker build failed — calling WireFixer ({retry + 1}/{maxWiringRetries})...");
+            }
+            else
+            {
+                // Test failure: build succeeded but program produces wrong output
+                fixInstructions = new List<string> { "Wire.cs test failures (program compiles but produces wrong output):" };
+                foreach (var tc in result.Results.Where(r => !r.Matches))
+                {
+                    fixInstructions.Add($"  Test '{tc.Id}': expected '{tc.Expected}', got '{tc.Output}'");
+                }
+                Console.Error.WriteLine($"[harness] Test failures — calling WireFixer ({retry + 1}/{maxWiringRetries})...");
+            }
+
+            foreach (var fi in fixInstructions)
+                Console.Error.WriteLine($"  {fi}");
 
             var prevWire = ExtractPreviousWireCs(result.TempDir);
             if (string.IsNullOrWhiteSpace(prevWire))
@@ -119,7 +139,7 @@ internal static class Program
                 ModelRoute = GetModelForFixer(),
                 BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
             };
-            var fixedWire = await fixer.FixAsync(prevWire, compileErrors, fixContext);
+            var fixedWire = await fixer.FixAsync(prevWire, fixInstructions.ToArray(), fixContext);
 
             if (string.IsNullOrWhiteSpace(fixedWire))
             {

@@ -54,12 +54,15 @@ public sealed class WireFixer
             var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
 
             // The fixer should return raw C# — but handle JSON wrapping just in case
-            if (text.StartsWith('{'))
+            var jsonStart = text.IndexOf('{');
+            if (jsonStart >= 0)
             {
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(text);
-                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content" })
+                    var jsonText = text[jsonStart..];
+                    using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
+                    foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content",
+                        "file", "output", "result", "main", "fixed_file", "fixedFile", "answer", "solution", "cs" })
                     {
                         if (doc.RootElement.TryGetProperty(fieldName, out var prop)
                             && prop.ValueKind == System.Text.Json.JsonValueKind.String)
@@ -91,12 +94,12 @@ public sealed class WireFixer
     private static string BuildFixerPrompt(string wireCsContent, string[] compileErrors)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are a C# compile-error fixer. The file Wire.cs has compile errors.");
-        sb.AppendLine("Fix ONLY the errors listed below. Keep everything else unchanged.");
+        sb.AppendLine("You are a C# code fixer. The file Wire.cs has problems.");
+        sb.AppendLine("Fix ONLY the problems listed below. Keep everything else unchanged.");
         sb.AppendLine("Output the complete fixed Wire.cs file.");
         sb.AppendLine();
 
-        sb.AppendLine("═══ COMPILE ERRORS (fix these) ═══");
+        sb.AppendLine("═══ PROBLEMS TO FIX ═══");
         foreach (var err in compileErrors)
             sb.AppendLine($"  {err}");
         sb.AppendLine();
