@@ -161,6 +161,12 @@ public sealed class DafnyFixer
         sb.AppendLine("{:extern} declarations, and requires/ensures contracts unchanged.");
         sb.AppendLine("Output the complete fixed Dafny module.");
         sb.AppendLine();
+        sb.AppendLine("CRITICAL RULES:");
+        sb.AppendLine("1. Do NOT add new methods, new {:extern} declarations, or new modules.");
+        sb.AppendLine("2. Do NOT add a Main method — the entry point is handled by C# wiring, not Dafny.");
+        sb.AppendLine("3. Fix ONLY the body of existing methods that have wrong logic.");
+        sb.AppendLine("4. Keep the module structure exactly as-is — same methods, same signatures, same externs.");
+        sb.AppendLine();
 
         sb.AppendLine($"═══ MODULE: {moduleName} ═══");
         sb.AppendLine($"Responsibility: {responsibility}");
