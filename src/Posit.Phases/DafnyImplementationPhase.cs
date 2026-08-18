@@ -332,6 +332,18 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("Dafny Language Dictionary:");
         sb.AppendLine(referenceCard);
         sb.AppendLine();
+        sb.AppendLine("═══ SYNTAX ERRORS TO AVOID (these are NOT Dafny — do NOT write them) ═══");
+        sb.AppendLine("Dafny is NOT C#. These C# constructs do NOT work in Dafny:");
+        sb.AppendLine("  BAD: (char)('0' + d)      → GOOD: char('0' + d)  [no C-style casts]");
+        sb.AppendLine("  BAD: new string[|s|]       → GOOD: new char[|s|]   [Dafny arrays need element type]");
+        sb.AppendLine("  BAD: for (i=0; i<n; i++)   → GOOD: for i := 0 to n-1  [Dafny for loop syntax]");
+        sb.AppendLine("  BAD: map[string]int[]      → GOOD: map[string, int]  [comma, not concatenation]");
+        sb.AppendLine("  BAD: map<string,int>()     → GOOD: map[]              [empty map literal, no parens]");
+        sb.AppendLine("  BAD: seq[string]           → GOOD: seq<string>       [angle brackets for generics]");
+        sb.AppendLine("  BAD: arr[i] = x            → GOOD: arr[i] := x       [Dafny uses := not = for assignment]");
+        sb.AppendLine("  BAD: string.Join(...)      → GOOD: use recursive concatenation or Seq.Concat");
+        sb.AppendLine("  BAD: int.TryParse(...)     → GOOD: write a helper method with a loop");
+        sb.AppendLine();
         sb.AppendLine("Rules:");
         sb.AppendLine("1. Output ONLY raw Dafny code. No JSON, no markdown fences, no explanations.");
         sb.AppendLine("2. Keep method signatures as specified above — use the EXACT method names.");
@@ -340,6 +352,7 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("5. The code must pass Z3 verification.");
         sb.AppendLine("6. The pseudocode IS the algorithm — translate it into proper Dafny with contracts. Do not redesign the logic.");
         sb.AppendLine("7. Add requires/ensures clauses, invariants, and decreases for loops.");
+        sb.AppendLine("8. Dafny is NOT C#. Do not write C# syntax. Use := for assignment, char() not (char), for i := 0 to n not for(i=0...), map[K,V] not map[K]V.");
 
         return sb;
     }

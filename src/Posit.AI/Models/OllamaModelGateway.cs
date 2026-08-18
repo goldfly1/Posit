@@ -53,8 +53,10 @@ public sealed class OllamaModelGateway : IModelGateway
                 new OllamaMessage { Role = "user", Content = user ?? string.Empty }
             ],
             Stream = false,
-            // Thinking OFF — causes 65K+ output runaway. Traces saved to .posit/staging/thinking/ when enabled.
-            // Thinking OFF by default — causes 65K+ output runaway. Traces saved to .posit/staging/thinking/ when enabled.
+            // Thinking OFF — Ollama thinking mode causes infinite loops (model repeats
+            // the same paragraph 32K times, uses all output tokens on thinking, produces
+            // zero response). Confirmed Aug 19: flash model loops on spec ambiguity.
+            // Traces saved to .posit/staging/thinking/ when enabled for debugging.
             Think = false,
             Options = new OllamaOptions
             {
