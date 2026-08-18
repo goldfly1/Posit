@@ -31,6 +31,7 @@ public static class DesignContextSnowballer
             Classification = x.Classification, PatternName = x.PatternName, StubNames = x.StubNames,
             DafnyContractPath = x.DafnyContractPath, ParametersJson = x.ParametersJson,
             MethodSignatures = x.MethodSignatures, Connections = x.Connections, SharedTypes = x.SharedTypes,
+            EntryType = x.EntryType, BranchCondition = x.BranchCondition,
             TestCases = x.TestCases.Select(tc => new DesignTestCase(
                 tc.Id, tc.Name, tc.TargetType, tc.Description, tc.ExpectedBehavior)).ToArray()
         }).ToArray();

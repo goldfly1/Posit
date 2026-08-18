@@ -38,6 +38,13 @@ public static class PromptBuilder
         sb.AppendLine("  - \"dafny\": Pure logic that can be proven in Dafny (parsing, validation, transformation, computation).");
         sb.AppendLine("  - \"io-shell\": I/O-bound code that connects to the outside world (file, console, network, database).");
         sb.AppendLine();
+        sb.AppendLine("═══ KEEP IT SIMPLE ═══");
+        sb.AppendLine("Use 2-3 components: one io-shell for I/O, one or two dafny for logic. NEVER more than 4.");
+        sb.AppendLine("A temperature converter is ONE dafny component + ONE io-shell. Not six components.");
+        sb.AppendLine("A CSV validator is ONE dafny component (parse+validate) + ONE io-shell (read+print).");
+        sb.AppendLine("Over-decomposition is the #1 cause of failure. Fewer components = fewer wiring bugs = higher pass rate.");
+        sb.AppendLine("Combine related logic into a single dafny component. Don't split parsing from validation from transformation.");
+        sb.AppendLine();
         sb.AppendLine("UNIVERSAL STARTER: Every build begins with the \"pipeline\" pattern as its foundation.");
         sb.AppendLine("The pipeline pattern handles parse → validate → transform → store → respond.");
         sb.AppendLine("Use it for the main orchestrator/entry component, then add specialist patterns for specific modules.");
@@ -55,6 +62,9 @@ public static class PromptBuilder
         sb.AppendLine("    CONNECTIONS MUST FORM A LINEAR CHAIN. Each step's output feeds the next step's input.");
         sb.AppendLine("    Do NOT add extra steps (sort, format, transform, output) between cut-outs — the cut-outs already do everything.");
         sb.AppendLine("    The last connection should be to a Print/WriteLine stub that outputs the result.");
+        sb.AppendLine("  - entryType: \"file\" (reads args[0] as file path) or \"stdin\" (reads Console.ReadLine). REQUIRED on the orchestrator component.");
+        sb.AppendLine("  - branchCondition: if a step returns isValid (bool), set this to describe the error branch, e.g. \"if !isValid: print error, exit 1\".");
+        sb.AppendLine("    This tells the wiring generator to emit an if-branch. Without this, the error path is invisible to the wiring.");
         sb.AppendLine("  - testCases: array of {id, name, targetType, description, expectedBehavior}");
         sb.AppendLine();
         sb.AppendLine("═══ STUB USAGE RULES ═══");
@@ -130,6 +140,8 @@ public static class PromptBuilder
         sb.AppendLine("  \"classification\": \"dafny\"|\"io-shell\", \"patternName\": \"...\"|null, \"stubNames\": [\"...\"]|[],");
         sb.AppendLine("  \"methodSignatures\": [{\"name\":\"...\",\"params\":[{\"name\":\"...\",\"type\":\"...\"}],\"returnType\":\"...\",\"returnDafnyType\":\"...\"}],");
         sb.AppendLine("  \"connections\": [{\"fromMethod\":\"...\",\"toComponent\":\"...\",\"toMethod\":\"...\",\"argMappings\":[]}],");
+        sb.AppendLine("  \"entryType\": \"file\"|\"stdin\",");
+        sb.AppendLine("  \"branchCondition\": \"...\"|null,");
         sb.AppendLine("  \"testCases\": [{\"id\":\"...\",\"name\":\"...\",\"targetType\":\"...\",\"description\":\"...\",\"expectedBehavior\":\"...\"}] }],");
         sb.AppendLine("  \"deploymentTopology\": \"...\" }");
         return sb.ToString();

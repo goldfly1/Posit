@@ -60,16 +60,6 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             var result = await _controller.ExecuteAsync(context, ct);
             var validation = phase.ValidateOutput(result);
 
-            if (validation.IsValid && phaseId.Value == "csharp-implementation")
-            {
-                var errors = await EnforceCarapace(result, state, ct);
-                if (errors.Length > 0)
-                {
-                    validation = new ValidationResult { IsValid = false, Errors = errors };
-                    result = result with { Status = PhaseStatus.Failed, Warnings = errors };
-                }
-            }
-
             // Post-Dafny type chain check: after dafny-implementation, before C# impl.
             // Real C# types exist now. If the chain breaks, kick back to Architecture.
             if (validation.IsValid && phaseId.Value == "dafny-implementation")
@@ -78,8 +68,24 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
                 if (chainErrors.Count > 0)
                 {
                     var msgs = TypeChainChecker.FormatErrors(chainErrors);
+                    msgs += "\nThe C# types from Z3-translated Dafny don't chain. Fix the architecture's method signatures.";
                     validation = new ValidationResult { IsValid = false, Errors = [msgs] };
-                    result = result with { Status = PhaseStatus.Failed, Warnings = [msgs] };
+                    // Force rollback to architecture — retrying dafny-implementation
+                    // won't fix a type chain error that originates in the architecture.
+                    result = result with { Status = PhaseStatus.Failed, Warnings = [msgs], ForceRollback = true };
+                }
+            }
+
+            // C# implementation failure → route back to architecture for correction.
+            // The wiring was built from the architecture's connections. If it fails,
+            // the architecture needs to fix the connections, not retry the wiring.
+            if (validation.IsValid && phaseId.Value == "csharp-implementation")
+            {
+                var carapaceErrors = await EnforceCarapace(result, state, ct);
+                if (carapaceErrors.Length > 0)
+                {
+                    validation = new ValidationResult { IsValid = false, Errors = carapaceErrors };
+                    result = result with { Status = PhaseStatus.Failed, Warnings = carapaceErrors };
                 }
             }
 

@@ -11,6 +11,7 @@ public static class TypeChainChecker
 {
     /// <summary>
     /// Check the type chain. Returns list of errors (empty = clean).
+    /// Uses scanned C# signatures when available (post-Dafny).
     /// </summary>
     public static List<TypeChainError> Check(
         ArchitectureContract contract,
@@ -49,6 +50,139 @@ public static class TypeChainChecker
         }
 
         return errors;
+    }
+
+    /// <summary>
+    /// Pre-Dafny type chain check. Runs AFTER architecture, BEFORE Dafny —
+    /// the data flow spec check. Uses declared method signatures from the
+    /// contract (returnDafnyType / DafnyType) instead of scanned C# types.
+    /// This catches type mismatches before anyone writes code, so the
+    /// correction signal routes back to the architect, not the Dafny writer.
+    /// </summary>
+    public static List<TypeChainError> CheckPreDafny(ArchitectureContract contract)
+    {
+        var errors = new List<TypeChainError>();
+
+        foreach (var comp in contract.Components)
+        {
+            if (comp.Connections.Length < 2) continue;
+
+            for (int i = 0; i < comp.Connections.Length - 1; i++)
+            {
+                var cur = comp.Connections[i];
+                var next = comp.Connections[i + 1];
+
+                // Get the return type from the contract's declared method signatures
+                var curRetType = GetDeclaredReturnType(cur, contract);
+                if (curRetType == null) continue;
+                if (curRetType == "void" || curRetType == "Void") continue;
+
+                var nextParamType = GetDeclaredFirstParamType(next, contract);
+                if (nextParamType == null) continue;
+
+                // For pre-Dafny, we compare Dafny types (returnDafnyType, DafnyType)
+                // These use Dafny notation: seq<string>, string, int, bool, etc.
+                if (!AreCompatibleDafny(curRetType, nextParamType))
+                {
+                    errors.Add(new TypeChainError(
+                        comp.Name,
+                        i,
+                        cur.ToComponent, cur.ToMethod, curRetType,
+                        next.ToComponent, next.ToMethod, nextParamType));
+                }
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Get the return type from the contract's declared method signatures.
+    /// Uses ReturnDafnyType (Dafny notation) if available, falls back to ReturnType.
+    /// Handles void+out params: first out param is the data return.
+    /// </summary>
+    private static string? GetDeclaredReturnType(ConnectionSpec conn, ArchitectureContract contract)
+    {
+        var comp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
+        if (comp == null) return null;
+        var ms = comp.MethodSignatures.FirstOrDefault(x => x.Name == conn.ToMethod);
+        if (ms == null) return null;
+        // If returnType is void but there are out params (Dafny multi-return),
+        // the first param with DafnyType containing "out" or just the first param
+        // is the data return. But in the contract, out params aren't marked.
+        // Use ReturnDafnyType if available, otherwise ReturnType.
+        var ret = !string.IsNullOrWhiteSpace(ms.ReturnDafnyType) ? ms.ReturnDafnyType : ms.ReturnType;
+        // If void, check if any param has a DafnyType that looks like a bool (isValid)
+        // — the first non-bool param is the data return
+        if (ret == "void" || ret == "Void")
+        {
+            // For Dafny multi-return, the contract's returnType might be void
+            // but the method actually returns multiple values. In Dafny notation,
+            // the return type would be something like "(seq<seq<string>>, bool)".
+            // If ReturnDafnyType captures this, use it. Otherwise skip.
+            if (!string.IsNullOrWhiteSpace(ms.ReturnDafnyType) && ms.ReturnDafnyType != "void")
+                return ms.ReturnDafnyType;
+            return "void"; // can't determine — skip
+        }
+        return ret;
+    }
+
+    /// <summary>
+    /// Get the first param type from the contract's declared method signatures.
+    /// Uses DafnyType if available, falls back to Type.
+    /// </summary>
+    private static string? GetDeclaredFirstParamType(ConnectionSpec conn, ArchitectureContract contract)
+    {
+        var comp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
+        if (comp == null) return null;
+        var ms = comp.MethodSignatures.FirstOrDefault(x => x.Name == conn.ToMethod);
+        if (ms == null || ms.Params.Length == 0) return null;
+        var p = ms.Params[0];
+        return !string.IsNullOrWhiteSpace(p.DafnyType) ? p.DafnyType : p.Type;
+    }
+
+    /// <summary>
+    /// Dafny-type compatibility check. Compares Dafny notation types
+    /// (seq&lt;string&gt;, string, int, bool, etc.) without C# runtime types.
+    /// </summary>
+    private static bool AreCompatibleDafny(string from, string to)
+    {
+        var f = from.Trim();
+        var t = to.Trim();
+        if (f == t) return true;
+        // string ↔ seq<string> — join/split at boundary (1D is OK)
+        if (f == "string" && t == "seq<string>") return true;
+        if (t == "string" && f == "seq<string>") return true;
+        // seq<seq<string>> → string is OK (2D to string for printing)
+        if (t == "string" && f == "seq<seq<string>>") return true;
+        // string → seq<seq<string>> is a DIMENSIONAL MISMATCH — not compatible.
+        // Use ReadLines (returns seq<string>) instead of ReadFile (returns string).
+        // This is the exact bug we want to catch before code is written.
+        // int ↔ BigInteger — same in Dafny
+        if ((f == "int" || f == "BigInteger") && (t == "int" || t == "BigInteger")) return true;
+        // string ↔ int — model handles parse/format
+        if (f == "string" && t == "int") return true;
+        if (t == "string" && f == "int") return true;
+        // bool is terminal — doesn't chain to anything
+        if (f == "bool") return false;
+        if (t == "bool") return true; // anything can be checked as bool
+        // seq<seq<string>> ↔ seq<string> — dimensional mismatch, NOT compatible
+        // (this is the error we want to catch early!)
+        // Same nesting depth = compatible
+        var fDepth = CountDafnySeqDepth(f);
+        var tDepth = CountDafnySeqDepth(t);
+        if (fDepth > 0 && fDepth == tDepth) return true;
+        // Different depth with seq types = incompatible (catches the ReadFile vs ReadLines bug)
+        if (fDepth != tDepth && (fDepth > 0 || tDepth > 0)) return false;
+        return false;
+    }
+
+    /// <summary>Count seq nesting depth in Dafny notation (seq&lt;string&gt; = 1, seq&lt;seq&lt;string&gt;&gt; = 2).</summary>
+    private static int CountDafnySeqDepth(string type)
+    {
+        int count = 0, idx = 0;
+        while ((idx = type.IndexOf("seq<", idx)) >= 0) { count++; idx += 4; }
+        return count;
     }
 
     private static string? GetReturnType(ConnectionSpec conn, ArchitectureContract contract,

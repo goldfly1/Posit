@@ -53,13 +53,32 @@ public static class WiringGenerator
     {
         sb.AppendLine("        public static int Main(string[] args)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (args.Length == 0) { Console.Error.WriteLine(\"Usage: <input>\"); return 1; }");
+
+        // Entry type: "stdin" reads Console.ReadLine(), "file" (default) reads args[0]
+        var entryType = comp.EntryType ?? "file";
+        if (entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine("            if (!Console.IsInputRedirected && args.Length == 0)");
+            sb.AppendLine("            { Console.Error.WriteLine(\"Usage: pipe input via stdin\"); return 1; }");
+            sb.AppendLine("            var inputLine = Console.ReadLine() ?? \"\";");
+        }
+        else
+        {
+            sb.AppendLine("            if (args.Length == 0) { Console.Error.WriteLine(\"Usage: <input>\"); return 1; }");
+            sb.AppendLine("            var inputArgs = args[0];");
+        }
 
         // io-shell gets args[0] (C# string), Dafny gets UnicodeFromString
-        var inputArgs = SafeName("args");
+        var inputArgs = entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase) ? "inputLine" : SafeName("args");
         var hasIoShell = comp.Classification == ModuleClassification.IoShell;
 
-        if (hasIoShell)
+        if (entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase))
+        {
+            // stdin already gives us a string — no need to wrap
+            if (!hasIoShell)
+                sb.AppendLine($"            var {inputArgs} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(inputLine);");
+        }
+        else if (hasIoShell)
         {
             sb.AppendLine($"            var {inputArgs} = args[0];");
         }

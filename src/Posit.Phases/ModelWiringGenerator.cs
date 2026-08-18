@@ -110,6 +110,10 @@ namespace {comp.Name}
         sb.AppendLine();
         sb.AppendLine($"Component: {comp.Name}");
         sb.AppendLine($"Spec: {comp.Responsibility}");
+        if (!string.IsNullOrWhiteSpace(comp.EntryType))
+            sb.AppendLine($"Entry type: {comp.EntryType} (file=args[0] path, stdin=Console.ReadLine)");
+        if (!string.IsNullOrWhiteSpace(comp.BranchCondition))
+            sb.AppendLine($"Branch condition: {comp.BranchCondition}");
         sb.AppendLine();
 
         // List connections
@@ -161,11 +165,17 @@ namespace {comp.Name}
         // Rules
         sb.AppendLine("Rules:");
         sb.AppendLine("1. Write a complete Main(string[] args) method.");
-        sb.AppendLine("2. If the program takes a file path: use args[0]. If stdin: use Console.ReadLine().");
+        var entryType = comp.EntryType ?? "file";
+        if (entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase))
+            sb.AppendLine("2. Entry is stdin: use Console.ReadLine() to read input. Do NOT use args[0].");
+        else
+            sb.AppendLine("2. Entry is a file path: use args[0] as the file path/input. If stdin specified, use Console.ReadLine().");
         sb.AppendLine("3. Call each method in connection order, passing the previous result to the next.");
         sb.AppendLine("4. For void methods with out params: declare out variables, use the first as the chained result.");
         sb.AppendLine("5. If an out param is bool (isValid): check it — if false, print error to stderr and return 1.");
-        sb.AppendLine("6. The last call should print the result to stdout.");
+        if (!string.IsNullOrWhiteSpace(comp.BranchCondition))
+            sb.AppendLine($"5a. Branch condition from architect: {comp.BranchCondition}. Implement this branching.");
+        sb.AppendLine("6. The last call should print the result to stdout. Print the VALUE, not just a unit/type name.");
         sb.AppendLine("7. Apply type conversions at Dafny/io-shell boundaries (see table above).");
         sb.AppendLine("8. Output ONLY the Main method body (no class/namespace wrapper).");
         sb.AppendLine("9. If args.Length == 0, print usage and return 1.");

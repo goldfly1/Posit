@@ -54,12 +54,22 @@ public static class ContractScanner
                     // For cut-outs: check the model's declared method signatures match
                     // the REAL method names from the Dafny source. The model must use
                     // the real names, not invented ones.
+                    // EXCEPTION: error-path methods (WriteError, PrintError) are custom
+                    // additions by the architect for error handling — they won't be on
+                    // the cut-out. Allow them when branching is present.
                     var realSigs = registry.GetMethodSignatures(comp.PatternName!);
                     if (realSigs.Count > 0)
                     {
                         var realMethodNames = realSigs.Select(s => s.Name).ToHashSet();
+                        // Check if this component has branching
+                        var hasBranching = !string.IsNullOrWhiteSpace(comp.BranchCondition)
+                            || comp.MethodSignatures.Any(m =>
+                                (m.ReturnDafnyType ?? m.ReturnType ?? "").Equals("bool", StringComparison.OrdinalIgnoreCase));
                         foreach (var ms in comp.MethodSignatures)
                         {
+                            // Skip error-path methods when branching is present
+                            if (hasBranching && IsErrorPathMethod(ms.Name))
+                                continue;
                             if (!realMethodNames.Contains(ms.Name))
                             {
                                 errors.Add(new ScanError(comp.Name, "methodSignature.name",
@@ -130,6 +140,9 @@ public static class ContractScanner
             // Declaration/use consistency: every declared method should be used in a
             // connection. Skip for connection-bearing components (orchestrators) —
             // their wiring calls other components, not their own methods.
+            // EXCEPTION: when the component has a BranchCondition (error branching),
+            // allow error-path methods (WriteError, PrintError, etc.) to be declared
+            // but unused — they're called in the error branch, not the main chain.
             if (comp.Connections.Length == 0)
             {
                 var allCalledMethods = new HashSet<string>();
@@ -142,12 +155,23 @@ public static class ContractScanner
                 foreach (var conn in comp.Connections)
                     allCalledMethods.Add(conn.FromMethod);
 
+                // Determine if this component has branching (BranchCondition set, or
+                // any method signature returns bool — isValid pattern)
+                var hasBranching = !string.IsNullOrWhiteSpace(comp.BranchCondition)
+                    || comp.MethodSignatures.Any(m =>
+                        (m.ReturnDafnyType ?? m.ReturnType ?? "").Equals("bool", StringComparison.OrdinalIgnoreCase));
+
                 foreach (var declared in ownMethods)
                 {
                     if (!allCalledMethods.Contains(declared))
+                    {
+                        // Allow error-path methods when branching is present
+                        if (hasBranching && IsErrorPathMethod(declared))
+                            continue;
                         errors.Add(new ScanError(comp.Name, "methodSignature.name",
                             declared, "is declared but never used in any connection",
                             [.. allCalledMethods]));
+                    }
                 }
             }
         }
@@ -167,4 +191,15 @@ public static class ContractScanner
             sb.AppendLine(err.Format());
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Heuristic: does this method name look like an error-path method?
+    /// Error-path methods are called in the branch (if !isValid), not the main chain.
+    /// They don't need to appear in connections.
+    /// </summary>
+    private static bool IsErrorPathMethod(string methodName) =>
+        methodName.Contains("Error", StringComparison.OrdinalIgnoreCase)
+        || methodName.Contains("WriteStderr", StringComparison.OrdinalIgnoreCase)
+        || methodName.Contains("PrintError", StringComparison.OrdinalIgnoreCase)
+        || methodName.Contains("Fail", StringComparison.OrdinalIgnoreCase);
 }

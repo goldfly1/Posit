@@ -56,6 +56,19 @@ public sealed class ArchitecturePhase : IPhase
             return Fail(context, listing, result);
         }
 
+        // Pre-Dafny type chain check — the data flow spec validation.
+        // Runs AFTER architecture, BEFORE Dafny. Catches type mismatches
+        // in the declared method signatures before anyone writes code.
+        // If the chain breaks, route back to the architect with actionable errors.
+        var chainErrors = TypeChainChecker.CheckPreDafny(contract);
+        if (chainErrors.Count > 0)
+        {
+            var chainMsg = TypeChainChecker.FormatErrors(chainErrors);
+            chainMsg += "\nFix the method signatures or connection order so types chain correctly.";
+            chainMsg += "\nCommon fixes: use ReadLines (seq<string>) for CSV, ReadFile (string) for JSON/text.";
+            return Fail(context, chainMsg, result);
+        }
+
         return Success(context, contract, result);
     }
 

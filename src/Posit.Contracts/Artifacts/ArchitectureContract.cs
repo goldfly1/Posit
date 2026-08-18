@@ -34,6 +34,22 @@ public record Component(
     public MethodSignature[] MethodSignatures { get; init; } = [];
     public ConnectionSpec[] Connections { get; init; } = [];
     public SharedTypeRef[] SharedTypes { get; init; } = [];
+
+    /// <summary>
+    /// Data flow spec: how the orchestrator component reads input.
+    /// "file" = args[0] is a file path (use ReadFile/ReadLines).
+    /// "stdin" = read from Console.ReadLine().
+    /// null/empty = default to "file" for backward compatibility.
+    /// </summary>
+    public string? EntryType { get; init; }
+
+    /// <summary>
+    /// Data flow spec: branching condition for error paths.
+    /// e.g. "if !isValid: print error, exit 1".
+    /// The wiring generator reads this to emit if-branches.
+    /// null = no branching (linear pipeline).
+    /// </summary>
+    public string? BranchCondition { get; init; }
 }
 
 public record MethodSignature(

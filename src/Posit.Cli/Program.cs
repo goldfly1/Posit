@@ -171,7 +171,7 @@ internal static class Program
         Name = "Posit Run",
         Phases = [KnownPhases.Architecture, KnownPhases.DafnyContracts,
                   KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation, KnownPhases.Qa],
-        MaxRetriesPerPhase = 3,
+        MaxRetriesPerPhase = 5,
         Budget = new BudgetRemaining { Amount = 10m, Cap = 10m },
         Approvals = new ApprovalConfig
         {

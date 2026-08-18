@@ -109,6 +109,18 @@ public sealed class FsmReducer
         var attempt = state.CurrentAttempt;
         var errors = result?.Warnings ?? [];
 
+        // ForceRollback: the phase can't fix itself by retrying (e.g. type chain
+        // errors from architecture, carapace violations). Route back to Architecture
+        // with the correction signal so the architect fixes the root cause.
+        if (result?.ForceRollback == true)
+        {
+            var rollbackState = state
+                .WithStatus(SessionStatus.CheckpointRollback)
+                .WithCorrectionSignal(errors);
+            // Use rollback.to_architecture directly
+            return ApplyRollbackToArchitecture(rollbackState);
+        }
+
         if (attempt <= state.Profile.MaxRetriesPerPhase)
         {
             var newState = state
@@ -117,10 +129,10 @@ public sealed class FsmReducer
             return Ok(newState, ["phase.retry_requested"]);
         }
 
-        var rollbackState = state
+        var rollbackState2 = state
             .WithStatus(SessionStatus.CheckpointRollback)
             .WithCorrectionSignal(errors);
-        return Ok(rollbackState, ["phase.checkpoint_rollback"]);
+        return Ok(rollbackState2, ["phase.checkpoint_rollback"]);
     }
 
     private FsmTransitionResult ApplyRetryDispatch(SessionState state)

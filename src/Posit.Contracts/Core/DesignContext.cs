@@ -220,6 +220,16 @@ public record DesignComponent(string Id, string Name, string Responsibility, str
     /// Types shared with other modules via Dafny `include`.
     /// </summary>
     public SharedTypeRef[] SharedTypes { get; init; } = [];
+
+    /// <summary>
+    /// Data flow spec: how the orchestrator reads input. "file" or "stdin".
+    /// </summary>
+    public string? EntryType { get; init; }
+
+    /// <summary>
+    /// Data flow spec: branching condition for error paths.
+    /// </summary>
+    public string? BranchCondition { get; init; }
 }
 
 public record DesignTestCase(string Id, string Name, string TargetType, string Description, string ExpectedBehavior);
