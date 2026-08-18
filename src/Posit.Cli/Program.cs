@@ -84,47 +84,65 @@ internal static class Program
         foreach (var tc in result.Results)
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
 
-        // Wiring retry loop: if Docker build failed (not test failure), retry wiring
+        // Wiring retry loop: if Docker build failed, call the WireFixer —
+        // a dedicated agent that gets ONLY the compile errors + Wire.cs + ISequence API.
+        // Like a plumber: doesn't redesign the building, just fixes the leaking pipe.
         const int maxWiringRetries = 3;
         for (var retry = 0; retry < maxWiringRetries && !result.Success && IsDockerBuildFailure(result); retry++)
         {
-            Console.Error.WriteLine($"[harness] Docker build failed — retrying wiring ({retry + 1}/{maxWiringRetries})...");
             var compileErrors = ExtractCompileErrors(result.Error ?? "Docker build failed");
+            Console.Error.WriteLine($"[harness] Docker build failed — calling WireFixer ({retry + 1}/{maxWiringRetries})...");
             foreach (var ce in compileErrors)
                 Console.Error.WriteLine($"  {ce}");
 
-            // Get the previous Wire.cs so the model can fix it instead of rewriting from scratch
             var prevWire = ExtractPreviousWireCs(result.TempDir);
-
-            // Build correction signal: compile errors + previous Wire.cs
-            var correctionParts = new List<string> { "Wire.cs compile errors:" };
-            correctionParts.AddRange(compileErrors);
-            if (!string.IsNullOrWhiteSpace(prevWire))
+            if (string.IsNullOrWhiteSpace(prevWire))
             {
-                correctionParts.Add("");
-                correctionParts.Add("Previous Wire.cs (fix the errors above, keep the rest):");
-                correctionParts.Add(prevWire);
-            }
-            else
-            {
-                correctionParts.Add("(previous Wire.cs not available — write fresh)");
+                Console.Error.WriteLine("[harness] No previous Wire.cs found — cannot fix, falling back to full re-run");
+                break;
             }
 
-            // Re-run csharp-implementation with the build error as correction signal
-            var wireState = await stateStore.LoadSessionAsync(sessionId);
-            if (wireState is null) break;
-            wireState = wireState.WithStatus(SessionStatus.Planning)
-                .WithCorrectionSignal(correctionParts.ToArray());
-            // Remove csharp-implementation from completed so it re-runs
-            wireState = wireState.WithCompletedPhases(
-                wireState.CompletedPhases.Where(p => p.Value != "csharp-implementation").ToArray());
-            await stateStore.SaveSessionAsync(sessionId, wireState);
-            wireState = await orchestrator.RunAsync(wireState);
+            // Call the dedicated fixer — gets ONLY the errors + Wire.cs + API reference
+            var fixer = new WireFixer(gateway);
+            var fixContext = new PhaseContext
+            {
+                SessionId = sessionId,
+                PhaseId = new PhaseId("wire-fix"),
+                Prompt = new PromptTemplate
+                {
+                    PhaseId = new PhaseId("wire-fix"), Version = new PromptVersion("1.0.0"),
+                    SystemPrompt = "", OutputFormatSpec = "C# code",
+                    ModelTier = ModelTier.Fast, Temperature = 0.1, MaxOutputTokens = 4096,
+                    OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "WireCs",
+                    Status = PromptStatus.Active
+                },
+                ModelRoute = GetModelForFixer(),
+                BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
+            };
+            var fixedWire = await fixer.FixAsync(prevWire, compileErrors, fixContext);
 
-            // Re-run harness
+            if (string.IsNullOrWhiteSpace(fixedWire))
+            {
+                Console.Error.WriteLine("[harness] WireFixer returned empty — cannot fix");
+                break;
+            }
+
+            // Write the fixed Wire.cs back to the DB so the harness picks it up
+            // on re-run (the harness re-materializes from DB every time).
+            await UpdateWireCsInDbAsync(sessionId, fixedWire, new ArtifactRepository());
+
+            // Re-run harness with the fixed Wire.cs (from DB)
             result = await harness.RunAsync(sessionId);
             Console.Error.WriteLine($"[harness] retry {retry + 1}: success={result.Success} tests={result.Results.Length}");
-            if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
+            if (result.Error is not null && IsDockerBuildFailure(result))
+            {
+                // Still a build failure — show the new errors for the next iteration
+                var newErrors = ExtractCompileErrors(result.Error);
+                foreach (var ne in newErrors)
+                    Console.Error.WriteLine($"  {ne}");
+            }
+            else if (result.Error is not null)
+                Console.Error.WriteLine($"[harness] error: {result.Error}");
             foreach (var tc in result.Results)
                 Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
         }
@@ -293,8 +311,6 @@ internal static class Program
 
     /// <summary>
     /// Extract the previous Wire.cs content from the harness temp directory.
-    /// Lets the model fix its own code instead of rewriting from scratch —
-    /// same as a human reading the compiler error and fixing the specific line.
     /// </summary>
     private static string? ExtractPreviousWireCs(string? tempDir)
     {
@@ -302,6 +318,78 @@ internal static class Program
         var wireFiles = Directory.GetFiles(tempDir, "Wire.cs", SearchOption.AllDirectories);
         if (wireFiles.Length == 0) return null;
         try { return File.ReadAllText(wireFiles[0]); }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Find the file path of Wire.cs in the harness temp directory.
+    /// </summary>
+    private static string? FindWireCsPath(string? tempDir)
+    {
+        if (string.IsNullOrWhiteSpace(tempDir) || !Directory.Exists(tempDir)) return null;
+        var wireFiles = Directory.GetFiles(tempDir, "Wire.cs", SearchOption.AllDirectories);
+        return wireFiles.Length > 0 ? wireFiles[0] : null;
+    }
+
+    /// <summary>
+    /// Model route for the WireFixer — same model as the rest of the pipeline.
+    /// </summary>
+    private static ModelRoute GetModelForFixer() => new()
+    {
+        Tier = ModelTier.Fast, ProviderId = "ollama",
+        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 4096, Temperature = 0.1
+    };
+
+    /// <summary>
+    /// Update Wire.cs in the DB's SourceCodeBundle artifact so the harness
+    /// picks up the fix on re-run. Reads the existing bundle, replaces Wire.cs
+    /// content, re-stages with same ID (ON CONFLICT updates payload).
+    /// </summary>
+    private static async Task UpdateWireCsInDbAsync(SessionId sessionId, string fixedWireCs, ArtifactRepository repo)
+    {
+        var artifacts = await repo.ListBySessionAsync(sessionId);
+        var bundle = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.SourceCodeBundle);
+        if (bundle == null)
+        {
+            Console.Error.WriteLine("[harness] No SourceCodeBundle found in DB — cannot update Wire.cs");
+            return;
+        }
+
+        var sourceCode = Deserialize<SourceCodeBundle>(bundle.PayloadJson);
+        if (sourceCode == null) return;
+
+        var updated = false;
+        var files = sourceCode.Files.Select(f =>
+        {
+            if (f.Path.EndsWith("Wire.cs"))
+            {
+                updated = true;
+                return f with { Content = fixedWireCs };
+            }
+            return f;
+        }).ToArray();
+
+        if (!updated)
+        {
+            Console.Error.WriteLine("[harness] No Wire.cs found in SourceCodeBundle — cannot update");
+            return;
+        }
+
+        var newBundle = new SourceCodeBundle
+        {
+            Files = files,
+            ProjectPath = sourceCode.ProjectPath,
+            TargetFramework = sourceCode.TargetFramework
+        };
+        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(newBundle, PositJson.Options);
+
+        // Re-stage with same ID — ON CONFLICT updates payload_json
+        await repo.StageAsync(bundle with { PayloadJson = payloadJson });
+    }
+
+    private static T? Deserialize<T>(byte[] payload) where T : class
+    {
+        try { return JsonSerializer.Deserialize<T>(payload, PositJson.Options); }
         catch { return null; }
     }
 
