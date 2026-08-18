@@ -62,13 +62,37 @@ public sealed class WireFixer
                     var jsonText = text[jsonStart..];
                     using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
                     foreach (var fieldName in new[] { "code", "wireCode", "wire", "wireCs", "source", "content",
-                        "file", "output", "result", "main", "fixed_file", "fixedFile", "answer", "solution", "cs" })
+                        "file", "output", "result", "main", "fixed_code", "fixed_file", "fixedFile", "fixedWire",
+                        "answer", "solution", "cs", "fixed" })
                     {
                         if (doc.RootElement.TryGetProperty(fieldName, out var prop)
                             && prop.ValueKind == System.Text.Json.JsonValueKind.String)
                         {
                             text = prop.GetString() ?? text;
                             break;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Fallback: if the text still has JSON wrapper (starts with {), try finding
+            // ANY string property that looks like C# code — same as DafnyFixer/ModelWiringGenerator
+            if (text.TrimStart().StartsWith('{'))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(text.TrimStart()[text.TrimStart().IndexOf('{')..]);
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            var s = prop.Value.GetString();
+                            if (s != null && (s.Contains("class ") || s.Contains("static ") || s.Contains("void ")))
+                            {
+                                text = s;
+                                break;
+                            }
                         }
                     }
                 }
