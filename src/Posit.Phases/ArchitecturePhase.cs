@@ -57,9 +57,6 @@ public sealed class ArchitecturePhase : IPhase
         }
 
         // Pre-Dafny type chain check — the data flow spec validation.
-        // Runs AFTER architecture, BEFORE Dafny. Catches type mismatches
-        // in the declared method signatures before anyone writes code.
-        // If the chain breaks, route back to the architect with actionable errors.
         var chainErrors = TypeChainChecker.CheckPreDafny(contract);
         if (chainErrors.Count > 0)
         {
@@ -67,6 +64,24 @@ public sealed class ArchitecturePhase : IPhase
             chainMsg += "\nFix the method signatures or connection order so types chain correctly.";
             chainMsg += "\nCommon fixes: use ReadLines (seq<string>) for CSV, ReadFile (string) for JSON/text.";
             return Fail(context, chainMsg, result);
+        }
+
+        // Cut-out type cross-check: compare the architect's DECLARED return types
+        // against the cut-out's ACTUAL return types from the registry.
+        // This catches the #1 T4 bug: architect declares CountFrequency returns 'string'
+        // but the cut-out actually returns 'seq<seq<string>>'. The pre-Dafny checker
+        // can't catch this because it trusts the declared types.
+        var cutOutErrors = CheckCutOutTypes(contract, _registry);
+        if (cutOutErrors.Count > 0)
+        {
+            var msg = $"Cut-out type mismatch — {cutOutErrors.Count} error(s):\n";
+            foreach (var e in cutOutErrors)
+                msg += $"  {e}\n";
+            msg += "\nYour declared return types don't match the actual cut-out return types.";
+            msg += "\nFIX: Either (a) match the declared type to the cut-out's actual type,";
+            msg += "\n     (b) write custom Dafny instead of using this cut-out, or";
+            msg += "\n     (c) add a serialization step that converts the cut-out output to string.";
+            return Fail(context, msg, result);
         }
 
         return Success(context, contract, result);
@@ -132,6 +147,85 @@ public sealed class ArchitecturePhase : IPhase
     private static string GetStagingDir(PhaseContext context) =>
         Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging",
             context.SessionId.Value, "dafny");
+
+    /// <summary>
+    /// Cross-check declared method return types against the cut-out's ACTUAL
+    /// return types from the registry. The architect often declares a return
+    /// type of 'string' when the cut-out actually returns 'seq<seq<string>>'.
+    /// This catches that BEFORE Dafny runs, so the correction routes to the
+    /// architect with the actual types.
+    /// </summary>
+    private static List<string> CheckCutOutTypes(ArchitectureContract contract, PatternRegistry registry)
+    {
+        var errors = new List<string>();
+        foreach (var comp in contract.Components)
+        {
+            if (comp.Classification == ModuleClassification.IoShell) continue;
+            if (string.IsNullOrWhiteSpace(comp.PatternName)) continue;
+            if (!registry.HasPattern(comp.PatternName!)) continue;
+
+            var realSigs = registry.GetMethodSignatures(comp.PatternName!);
+            if (realSigs.Count == 0) continue;
+
+            foreach (var declared in comp.MethodSignatures)
+            {
+                // Find the matching real method by name
+                var realSig = realSigs.FirstOrDefault(s => s.Name == declared.Name);
+                if (realSig == null) continue; // name mismatch caught by ContractScanner
+
+                var declaredRet = !string.IsNullOrWhiteSpace(declared.ReturnDafnyType)
+                    ? declared.ReturnDafnyType : declared.ReturnType;
+                // Real return type may include "name: type" prefix from Dafny returns clause
+                // e.g. "tokens: seq<string>" — strip the name prefix
+                var rawRealRet = realSig.ReturnType ?? "void";
+                var realRet = StripDafnyReturnName(rawRealRet);
+
+                // Normalize for comparison
+                var dNorm = declaredRet.Trim();
+                var rNorm = realRet.Trim();
+
+                if (dNorm == rNorm) continue;
+
+                // Check if they're compatible (same depth seq, etc.)
+                // string vs seq<...> is a mismatch unless the seq is 1D (string↔seq<string> is OK)
+                bool dIsSeq = dNorm.Contains("seq<");
+                bool rIsSeq = rNorm.Contains("seq<");
+                if (dIsSeq || rIsSeq)
+                {
+                    // seq<string> ↔ string is OK (1D, join/split at boundary)
+                    if ((dNorm == "string" && rNorm == "seq<string>") ||
+                        (rNorm == "string" && dNorm == "seq<string>"))
+                        continue;
+                    // Different types — mismatch
+                    errors.Add($"Component '{comp.Name}': method '{declared.Name}' declared as returning '{dNorm}' " +
+                               $"but cut-out '{comp.PatternName}' actually returns '{rNorm}'. " +
+                               $"Either declare the correct return type, or don't use this cut-out.");
+                }
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// Strip the "name: " prefix from a Dafny return type.
+    /// Dafny returns clause is "returns (name: type, name2: type2)" — the regex
+    /// captures the full content. We only want the type, not the name.
+    /// e.g. "tokens: seq<string>" → "seq<string>"
+    ///      "result: seq<seq<string>>" → "seq<seq<string>>"
+    /// For multi-return, take the first type (the data return).
+    /// </summary>
+    private static string StripDafnyReturnName(string raw)
+    {
+        var s = raw.Trim();
+        // Handle comma-separated multi-return: take first
+        if (s.Contains(','))
+            s = s.Split(',')[0].Trim();
+        // Strip "name: " prefix
+        var colonIdx = s.IndexOf(':');
+        if (colonIdx >= 0)
+            s = s[(colonIdx + 1)..].Trim();
+        return s;
+    }
 
     private static PhaseResult Fail(PhaseContext ctx, string error, GenerationResult gen) => new()
     {

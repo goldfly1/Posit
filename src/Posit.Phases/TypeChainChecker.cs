@@ -266,6 +266,10 @@ public static class TypeChainChecker
         // seq<seq<string>> ↔ ISequence<ISequence<ISequence<Rune>>>
         if (f == "seq<seq<string>>" && tDepth == 3 && tHasRune) return true;
         if (t == "seq<seq<string>>" && fDepth == 3 && fHasRune) return true;
+        // ISequence (any depth) → string: the WiringGenerator's ConvertType can
+        // convert any ISequence<Rune> depth to string (1D: char iterate, 2D: join
+        // rows, 3D: join rows and fields). This is the serialization at the boundary.
+        if (t == "string" && fDepth > 0 && fHasRune) return true;
         // Same ISequence depth with Rune = compatible (same type, different notation)
         if (fDepth > 0 && fDepth == tDepth && fHasRune && tHasRune) return true;
         return false;
