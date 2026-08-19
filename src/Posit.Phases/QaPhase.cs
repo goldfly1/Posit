@@ -130,22 +130,37 @@ public sealed class QaPhase : IPhase
         var spec = context.UserRequest ?? "";
         var connections = string.Join(", ", cliComp.Connections.Select(c => $"{c.FromMethod}→{c.ToComponent}.{c.ToMethod}"));
 
+        // Use the architect's test cases as the basis for test data (Decision 11)
+        var testCasesText = cliComp.TestCases.Length > 0
+            ? string.Join("\n", cliComp.TestCases.Select(tc => $"  - {tc.Description} → {tc.ExpectedBehavior}"))
+            : "(no test cases defined by architect — generate from spec)";
+
+        // Check if this is a stdin program (entry type) vs file-based
+        var entryType = cliComp.EntryType ?? "file";
+        var isStdin = entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase);
+
         var systemPrompt = $"""
             You are the QA phase of the Posit spec compiler.
-            Generate test data files for this program. Each file is a concrete input
-            that exercises a specific behavior or edge case.
+            Generate test data for this program based on the spec and the architect's test cases.
 
             Spec: {spec}
 
             Pipeline: {connections}
 
+            Entry type: {(isStdin ? "stdin (reads from Console.ReadLine)" : "file (reads from args[0])")}
+
+            Architect's test cases (use these as the basis for your test data):
+            {testCasesText}
+
             Rules:
             1. Output JSON array of test data files.
             2. Each file has: "fileName" (string), "content" (string), "description" (string).
-            3. Generate 3-5 files: valid input, empty/edge case, invalid input, file-not-found case.
-            4. For file-not-found: use fileName "NONEXISTENT" and content "".
-            5. Content must be the actual file content the program would read.
-            6. For JSON input: content starts with [. For CSV input: content has commas and newlines.
+            3. Generate 3-6 test cases covering: valid input, edge case, invalid input, and empty input.
+            4. Content must be the ACTUAL input the program would receive.
+            5. For stdin programs: content is the line(s) typed at the console.
+            6. For file-based programs: content is the file content.
+            7. Match the input format described in the spec — do NOT default to CSV or JSON unless the spec requires it.
+            8. For file-not-found: use fileName "NONEXISTENT" and content "".
             """;
 
         var prompt = new PromptTemplate
