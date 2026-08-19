@@ -353,6 +353,86 @@ public static class WiringGenerator
                 + $"Stubs must return the right shape. Variable: {varName}");
         // Compatible if same base type
         if (fromType == toType) return varName;
+
+        // ── Primitive type conversions (Dafny C# runtime) ──────────────────
+        // These are deterministic — no model guessing needed.
+
+        // string → BigRational (Dafny 'real'): parse via double, construct BigRational
+        if (fromType == "string" && toType == "Dafny.BigRational")
+            return $"new Dafny.BigRational(double.Parse({varName}))";
+
+        // string → BigInteger (Dafny 'int'): parse directly
+        if (fromType == "string" && (toType == "BigInteger" || toType == "Dafny.BigInteger"))
+            return $"BigInteger.Parse({varName})";
+
+        // string → int (Dafny 'int' when not BigInteger): parse
+        if (fromType == "string" && toType == "int")
+            return $"int.Parse({varName})";
+
+        // string → bool: parse
+        if (fromType == "string" && toType == "bool")
+            return $"bool.Parse({varName})";
+
+        // ISequence<Rune> → BigRational: convert to string first, then parse
+        if (fromDepth == 1 && fromHasRune && toType == "Dafny.BigRational")
+            return $"new Dafny.BigRational(double.Parse(new string({varName}.Select(r => (char)r.Value).ToArray())))";
+
+        // ISequence<Rune> → BigInteger: convert to string first, then parse
+        if (fromDepth == 1 && fromHasRune && (toType == "BigInteger" || toType == "Dafny.BigInteger"))
+            return $"BigInteger.Parse(new string({varName}.Select(r => (char)r.Value).ToArray()))";
+
+        // ISequence<Rune> → int: convert to string first, then parse
+        if (fromDepth == 1 && fromHasRune && toType == "int")
+            return $"int.Parse(new string({varName}.Select(r => (char)r.Value).ToArray()))";
+
+        // ISequence<Rune> → bool: convert to string first, then parse
+        if (fromDepth == 1 && fromHasRune && toType == "bool")
+            return $"bool.Parse(new string({varName}.Select(r => (char)r.Value).ToArray()))";
+
+        // BigRational → string: use ToString
+        if (fromType == "Dafny.BigRational" && toType == "string")
+            return $"{varName}.ToString()";
+
+        // BigInteger → string: use ToString
+        if ((fromType == "BigInteger" || fromType == "Dafny.BigInteger") && toType == "string")
+            return $"{varName}.ToString()";
+
+        // int → string: use ToString
+        if (fromType == "int" && toType == "string")
+            return $"{varName}.ToString()";
+
+        // bool → string: use ToString (lowercase for Dafny compatibility)
+        if (fromType == "bool" && toType == "string")
+            return $"{varName}.ToString().ToLower()";
+
+        // BigRational → ISequence<Rune>: ToString then UnicodeFromString
+        if (fromType == "Dafny.BigRational" && toDepth == 1 && toHasRune)
+            return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName}.ToString())";
+
+        // BigInteger → ISequence<Rune>: ToString then UnicodeFromString
+        if ((fromType == "BigInteger" || fromType == "Dafny.BigInteger") && toDepth == 1 && toHasRune)
+            return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName}.ToString())";
+
+        // int → ISequence<Rune>: ToString then UnicodeFromString
+        if (fromType == "int" && toDepth == 1 && toHasRune)
+            return $"Dafny.Sequence<Dafny.Rune>.UnicodeFromString({varName}.ToString())";
+
+        // int → BigInteger: implicit conversion
+        if (fromType == "int" && (toType == "BigInteger" || toType == "Dafny.BigInteger"))
+            return $"new BigInteger({varName})";
+
+        // BigInteger → int: explicit cast (may lose precision, but Dafny int is BigInteger)
+        if ((fromType == "BigInteger" || fromType == "Dafny.BigInteger") && toType == "int")
+            return $"(int){varName}";
+
+        // int → BigRational: construct from int
+        if (fromType == "int" && toType == "Dafny.BigRational")
+            return $"new Dafny.BigRational({varName})";
+
+        // BigInteger → BigRational: construct from BigInteger
+        if ((fromType == "BigInteger" || fromType == "Dafny.BigInteger") && toType == "Dafny.BigRational")
+            return $"new Dafny.BigRational({varName})";
+
         return null; // incompatible
     }
 
