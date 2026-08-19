@@ -164,9 +164,61 @@ public sealed class DafnyImplementationPhase : IPhase
         var dafnyPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
         string? currentDafny = null;
         string[] currentErrors = [];
+        var errorClassHistory = new List<string>();  // track error classes for escalation
+        var currentPseudocode = ExtractPseudocodeForComponent(comp.Name, context);
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
+            // Check for repeated error class — escalate to pseudocode re-reduction
+            if (attempt >= 2 && errorClassHistory.Count >= 2)
+            {
+                var lastTwo = errorClassHistory.TakeLast(2).ToList();
+                // Same class twice → escalate
+                // Also: alternating parse-error / while-in-function → same root cause (function misuse)
+                var sameClass = lastTwo[0] == lastTwo[1] && lastTwo[0] != "unknown";
+                var functionFamily = (lastTwo[0] == "while-in-function" && lastTwo[1] == "parse-error") ||
+                                     (lastTwo[0] == "parse-error" && lastTwo[1] == "while-in-function");
+                if (sameClass || functionFamily)
+                {
+                    var escalateReason = sameClass ? lastTwo[0] : "function-misuse (alternating parse-error/while-in-function)";
+                    Console.Error.WriteLine($"[dafny-impl] {comp.Name} error pattern '{escalateReason}' — escalating to pseudocode re-reduction");
+
+                    var improvedPseudocode = await ReReducePseudocodeAsync(
+                        comp, context, currentPseudocode, currentDafny!, currentErrors, ct);
+
+                    if (improvedPseudocode != null && improvedPseudocode != currentPseudocode)
+                    {
+                        Console.Error.WriteLine($"[dafny-impl] {comp.Name} pseudocode re-reduced — retrying DafnyImpl from improved pseudocode");
+                        currentPseudocode = improvedPseudocode;
+                        // Reset to first attempt with new pseudocode — fresh start
+                        var freshDafny = await GenerateDafnyWithPseudocodeAsync(comp, context, improvedPseudocode, ct);
+                        if (!string.IsNullOrWhiteSpace(freshDafny))
+                        {
+                            currentDafny = freshDafny;
+                            await File.WriteAllTextAsync(dafnyPath, freshDafny, ct);
+                            var reVerifyResult = await _z3.VerifyAsync(dafnyPath, ct);
+                            if (reVerifyResult.Success)
+                            {
+                                var reTranslation = await _z3.TranslateAsync(dafnyPath, comp.Name, ct);
+                                if (reTranslation.Success && !string.IsNullOrWhiteSpace(reTranslation.CleanCsharp))
+                                {
+                                    Console.Error.WriteLine($"[dafny-impl] {comp.Name} Z3 verified + translated after re-reduction");
+                                    return (freshDafny, true, null, reTranslation.CleanCsharp, dafnyPath);
+                                }
+                            }
+                            // Still failing — continue the loop with the new pseudocode
+                            currentErrors = reVerifyResult.Errors.Length > 0
+                                ? reVerifyResult.Errors.Take(10).ToArray()
+                                : new[] { reVerifyResult.Stdout[..Math.Min(500, reVerifyResult.Stdout.Length)] };
+                            errorClassHistory.Add(ClassifyError(currentErrors));
+                            continue;
+                        }
+                    }
+                    // Re-reduction didn't help — fall through to normal retry
+                    Console.Error.WriteLine($"[dafny-impl] {comp.Name} re-reduction did not produce usable pseudocode — continuing with DafnyFixer");
+                }
+            }
+
             // Generate (or fix) the Dafny
             var generated = attempt == 0
                 ? await GenerateDafnyAsync(comp, context, ct)
@@ -194,6 +246,7 @@ public sealed class DafnyImplementationPhase : IPhase
                     Console.Error.WriteLine($"  {err}");
 
                 currentErrors = errors;
+                errorClassHistory.Add(ClassifyError(errors));
                 continue;
             }
 
@@ -204,6 +257,7 @@ public sealed class DafnyImplementationPhase : IPhase
                 Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}: Z3 passed but C# translation failed: {translation.Stderr}");
                 // Feed translation error back — the Dafny needs to be adjusted so it translates cleanly
                 currentErrors = [$"C# translation failed: {translation.Stderr}", "Fix the Dafny so it translates to C# correctly. Keep method signatures unchanged."];
+                errorClassHistory.Add("translation");
                 continue;
             }
 
@@ -531,6 +585,168 @@ public sealed class DafnyImplementationPhase : IPhase
         !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
             ? comp.DafnyContractPath!
             : Path.Combine(GetStagingDir(ctx), $"{comp.Name}.dfy");
+
+    // ── Pseudocode re-reduction support ──────────────────────────────────────
+
+    /// <summary>
+    /// Classify Z3 errors into error classes for escalation detection.
+    /// Returns a short string like "cs-ism-for-loop", "parse-error", "type-mismatch".
+    /// When the same class appears twice, we escalate to pseudocode re-reduction.
+    /// </summary>
+    private static string ClassifyError(string[] errors)
+    {
+        var combined = string.Join(" ", errors).ToLowerInvariant();
+
+        // C#-ism: for loops with C syntax
+        if (combined.Contains("for (") || combined.Contains("for(") ||
+            combined.Contains("i = 0") || combined.Contains("i++"))
+            return "cs-ism-for-loop";
+
+        // C#-ism: char casts
+        if (combined.Contains("(char)") || combined.Contains("char cast"))
+            return "cs-ism-char-cast";
+
+        // C#-ism: map/seq syntax
+        if (combined.Contains("rbracket expected") &&
+            (combined.Contains("map[") || combined.Contains("seq[")))
+            return "cs-ism-generic-syntax";
+
+        // Parse errors — not Dafny (JSON, prose, etc.)
+        if (combined.Contains("this symbol not expected") ||
+            combined.Contains("unexpected token") ||
+            combined.Contains("parse error"))
+            return "parse-error";
+
+        // while inside function (the #1 error before the function ban)
+        if (combined.Contains("invalid unaryexpression") ||
+            (combined.Contains("while") && combined.Contains("function")))
+            return "while-in-function";
+
+        // Type mismatch / resolution
+        if (combined.Contains("type mismatch") || combined.Contains("cannot find") ||
+            combined.Contains("unresolved"))
+            return "type-mismatch";
+
+        return "unknown";
+    }
+
+    /// <summary>
+    /// Build a bone chart: align original pseudocode with the Dafny that failed,
+    /// annotated with the Z3 error. This is what the pseudocode reducer sees
+    /// when it needs to fix a fragment that caused a Dafny error.
+    /// </summary>
+    private static string BuildBoneChart(string originalPseudocode, string failingDafny, string[] z3Errors)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("═══ BONE CHART: Pseudocode → Dafny Alignment ═══");
+        sb.AppendLine();
+        sb.AppendLine("Z3 ERRORS:");
+        foreach (var err in z3Errors.Take(5))
+            sb.AppendLine($"  ❌ {err}");
+        sb.AppendLine();
+        sb.AppendLine("ORIGINAL PSEUDOCODE (the intent):");
+        sb.AppendLine(originalPseudocode);
+        sb.AppendLine();
+        sb.AppendLine("FAILING DAFNY (what was generated from the pseudocode):");
+        sb.AppendLine(failingDafny[..Math.Min(3000, failingDafny.Length)]);
+        sb.AppendLine();
+        sb.AppendLine("═══ END BONE CHART ═══");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Re-reduce pseudocode after Z3 rejects Dafny with a repeated error class.
+    /// The reducer sees the bone chart (original pseudocode + failing Dafny + Z3 errors)
+    /// and the reference card. It fixes the specific fragments that caused the error.
+    /// </summary>
+    private async Task<string?> ReReducePseudocodeAsync(
+        Component comp, PhaseContext context,
+        string originalPseudocode, string failingDafny, string[] z3Errors,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(originalPseudocode))
+            return null;
+
+        var referenceCard = LoadReferenceCard();
+        var boneChart = BuildBoneChart(originalPseudocode, failingDafny, z3Errors);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("You are a pseudocode reducer fixing a fragment that caused a Dafny verification error.");
+        sb.AppendLine("The bone chart below shows the original pseudocode (the intent) and the Dafny that was");
+        sb.AppendLine("generated from it. Z3 rejected the Dafny. Your job: fix the pseudocode fragments that");
+        sb.AppendLine("caused the error so they use valid Dafny tokens from the reference card.");
+        sb.AppendLine();
+        sb.AppendLine("Rules:");
+        sb.AppendLine("1. Fix ONLY the fragments that caused the Z3 error. Keep everything else unchanged.");
+        sb.AppendLine("2. Replace C#-isms with Dafny equivalents (for→while+invariant, (char)→char(), map[K]V→map[K,V]).");
+        sb.AppendLine("3. BAN 'function' — ALWAYS use 'method'. The error 'closeparen expected inside a function' means");
+        sb.AppendLine("   a helper was declared as 'function' instead of 'method'. Change ALL functions to methods.");
+        sb.AppendLine("4. Use ONLY tokens from the Dafny Language Dictionary below.");
+        sb.AppendLine("5. Output the COMPLETE corrected pseudocode (all methods, not just the fixed fragment).");
+        sb.AppendLine("6. The pseudocode IS the algorithm — do not redesign the logic, just fix the syntax.");
+        sb.AppendLine();
+        sb.AppendLine(boneChart);
+        sb.AppendLine();
+        sb.AppendLine("Dafny Language Dictionary (use ONLY these tokens):");
+        sb.AppendLine(referenceCard);
+
+        var prompt = new PromptTemplate
+        {
+            PhaseId = context.PhaseId,
+            Version = new PromptVersion("1.0.0"),
+            SystemPrompt = sb.ToString(),
+            OutputFormatSpec = "Corrected pseudocode",
+            ModelTier = ModelTier.Fast,
+            Temperature = 0.1,
+            MaxOutputTokens = 4096,
+            OutputFormat = OutputFormat.PlainText,
+            OutputSchemaRef = "Pseudocode",
+            Status = PromptStatus.Active
+        };
+
+        try
+        {
+            var gen = await _model!.GenerateAsync(context.ModelRoute, prompt, context, ct);
+            if (string.IsNullOrWhiteSpace(gen.Text))
+                return null;
+            return OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[dafny-impl] re-reduction model call failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Generate Dafny using specific (re-reduced) pseudocode instead of the
+    /// pseudocode from the artifact. This is used after re-reduction to give
+    /// DafnyImpl a fresh start with improved pseudocode.
+    /// </summary>
+    private async Task<string?> GenerateDafnyWithPseudocodeAsync(
+        Component comp, PhaseContext context, string pseudocode, CancellationToken ct)
+    {
+        var prompt = BuildDafnyPromptWithPseudocode(comp, context, pseudocode, isCorrection: false);
+        return await CallModelAndExtractDafny(prompt, context, ct);
+    }
+
+    /// <summary>
+    /// Build a Dafny generation prompt using specific pseudocode (not from artifact).
+    /// </summary>
+    private static StringBuilder BuildDafnyPromptWithPseudocode(
+        Component comp, PhaseContext context, string pseudocode, bool isCorrection)
+    {
+        // Reuse the existing prompt builder but inject the re-reduced pseudocode
+        var sb = BuildDafnyPrompt(comp, context, isCorrection, null, null);
+        // The existing prompt already has the old pseudocode from ExtractPseudocodeForComponent.
+        // We need to replace it. Find the pseudocode section and swap it.
+        // Simplest: append the re-reduced pseudocode as an override.
+        sb.AppendLine();
+        sb.AppendLine("═══ RE-REDUCED PSEUDOCODE (use THIS version, not the one above) ═══");
+        sb.AppendLine(pseudocode);
+        sb.AppendLine("═══ END RE-REDUCED PSEUDOCODE ═══");
+        return sb;
+    }
 
     private static ArchitectureContract? ExtractContract(PhaseContext ctx)
     {
