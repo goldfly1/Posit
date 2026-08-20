@@ -13,9 +13,10 @@ public sealed class DafnyImplementationPhase : IPhase
 {
     private readonly Z3Runner _z3;
     private readonly IModelGateway? _model;
+    private WikiSearcher? _wiki;
 
     public DafnyImplementationPhase(Z3Runner z3) { _z3 = z3; _model = null; }
-    public DafnyImplementationPhase(Z3Runner z3, IModelGateway model) { _z3 = z3; _model = model; }
+    public DafnyImplementationPhase(Z3Runner z3, IModelGateway model) { _z3 = z3; _model = model; _wiki = new WikiSearcher(new HttpClient()); }
 
     public PhaseId Id { get; } = new("dafny-implementation");
     public string Name => "Dafny Implementation";
@@ -258,8 +259,29 @@ public sealed class DafnyImplementationPhase : IPhase
                 foreach (var err in errors.Take(5))
                     Console.Error.WriteLine($"  {err}");
 
-                currentErrors = errors;
-                errorClassHistory.Add(ClassifyError(errors));
+                // Search the Dafny stdlib for examples relevant to the error
+                if (_wiki != null && attempt < maxAttempts - 1)
+                {
+                    var errorQuery = string.Join(" ", errors.Take(3)) + " " + comp.Responsibility;
+                    var wikiExamples = await _wiki.SearchAsync(errorQuery, limit: 2, ct);
+                    if (!string.IsNullOrWhiteSpace(wikiExamples))
+                    {
+                        Console.Error.WriteLine($"[dafny-impl] {comp.Name}: injecting stdlib reference examples");
+                        // Append wiki examples to the errors so the correction prompt includes them
+                        var enhancedErrors = errors.ToList();
+                        enhancedErrors.Add(wikiExamples);
+                        currentErrors = enhancedErrors.ToArray();
+                    }
+                    else
+                    {
+                        currentErrors = errors;
+                    }
+                }
+                else
+                {
+                    currentErrors = errors;
+                }
+                errorClassHistory.Add(ClassifyError(currentErrors));
                 continue;
             }
 
