@@ -298,7 +298,7 @@ public sealed class DafnyImplementationPhase : IPhase
     /// Build the Dafny generation/fix prompt. On correction, includes the previous
     /// Dafny and Z3 errors so the model can do a targeted fix.
     /// </summary>
-    private static StringBuilder BuildDafnyPrompt(Component comp, PhaseContext context,
+    private StringBuilder BuildDafnyPrompt(Component comp, PhaseContext context,
         bool isCorrection, string? previousDafny, string[]? z3Errors)
     {
         var referenceCard = LoadReferenceCard();
@@ -312,6 +312,12 @@ public sealed class DafnyImplementationPhase : IPhase
             : "";
 
         var pseudocode = ExtractPseudocodeForComponent(comp.Name, context);
+
+        // Read the skeleton .dfy file — this IS the interface the model must implement against
+        var skeletonPath = ResolveDafnyPath(context, comp);
+        var skeleton = File.Exists(skeletonPath)
+            ? File.ReadAllText(skeletonPath)
+            : null;
 
         var sb = new StringBuilder();
         if (isCorrection)
@@ -372,6 +378,23 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("Method signatures to implement (USE THESE EXACT NAMES):");
         sb.AppendLine(sigs);
         sb.AppendLine();
+
+        // Inject the skeleton — the model sees the FULL interface, not just signatures
+        if (!string.IsNullOrWhiteSpace(skeleton))
+        {
+            sb.AppendLine("═══ SKELETON (the interface — module structure, types, contracts, extern declarations) ═══");
+            sb.AppendLine("Implement the method bodies within THIS structure. Do NOT change:");
+            sb.AppendLine("  - module name or includes");
+            sb.AppendLine("  - datatype declarations");
+            sb.AppendLine("  - {:extern} method declarations (I/O portals — leave as-is)");
+            sb.AppendLine("  - method signatures (names, params, return types)");
+            sb.AppendLine("  - requires/ensures contracts");
+            sb.AppendLine("Your job: fill in the method bodies. The skeleton IS the carapace — inlay within it.");
+            sb.AppendLine(skeleton);
+            sb.AppendLine("═══ END SKELETON ═══");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("Test cases (your implementation MUST satisfy these):");
         sb.AppendLine(testCases);
         sb.AppendLine();
@@ -733,7 +756,7 @@ public sealed class DafnyImplementationPhase : IPhase
     /// <summary>
     /// Build a Dafny generation prompt using specific pseudocode (not from artifact).
     /// </summary>
-    private static StringBuilder BuildDafnyPromptWithPseudocode(
+    private StringBuilder BuildDafnyPromptWithPseudocode(
         Component comp, PhaseContext context, string pseudocode, bool isCorrection)
     {
         // Reuse the existing prompt builder but inject the re-reduced pseudocode
