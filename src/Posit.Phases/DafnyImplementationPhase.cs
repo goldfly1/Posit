@@ -353,12 +353,14 @@ public sealed class DafnyImplementationPhase : IPhase
             ? File.ReadAllText(skeletonPath)
             : null;
 
-        // Pre-generation wiki search: find relevant Dafny examples based on pseudocode content
+        // Pre-generation wiki search: find relevant Dafny examples
         var wikiExamples = "";
-        if (_wiki != null && !string.IsNullOrWhiteSpace(pseudocode))
+        if (_wiki != null)
         {
-            // Search using the pseudocode + responsibility as query
-            var searchQuery = $"{comp.Responsibility} {pseudocode[..Math.Min(200, pseudocode.Length)]}";
+            // Search using pseudocode if available, otherwise use responsibility + method signatures
+            var searchQuery = !string.IsNullOrWhiteSpace(pseudocode)
+                ? $"{comp.Responsibility} {pseudocode[..Math.Min(200, pseudocode.Length)]}"
+                : $"{comp.Responsibility} {sigs}";
             wikiExamples = await _wiki.SearchAsync(searchQuery, limit: 3, ct);
             if (!string.IsNullOrWhiteSpace(wikiExamples))
                 Console.Error.WriteLine($"[dafny-impl] {comp.Name}: pre-generation wiki search returned examples");
