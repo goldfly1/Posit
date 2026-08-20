@@ -642,10 +642,9 @@ public sealed class DafnyImplementationPhase : IPhase
         if (combined.Contains("(char)") || combined.Contains("char cast"))
             return "cs-ism-char-cast";
 
-        // C#-ism: map/seq syntax
-        if (combined.Contains("rbracket expected") &&
-            (combined.Contains("map[") || combined.Contains("seq[")))
-            return "cs-ism-generic-syntax";
+        // C#-ism: map/seq syntax — rbracket expected
+        if (combined.Contains("rbracket expected"))
+            return "rbracket-error";
 
         // Parse errors — not Dafny (JSON, prose, etc.)
         if (combined.Contains("this symbol not expected") ||

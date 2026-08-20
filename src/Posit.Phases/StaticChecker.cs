@@ -105,7 +105,18 @@ public static class StaticChecker
                 $"Line {GetLineNumber(dafnySource, m.Index)}: seq syntax. Use 'seq<T>' with angle brackets, not 'seq[T]'."));
         }
 
-        // 7. while loop without invariant
+        // 7. C#-ism: rbracket issues — [char(...)] or [expr] used as seq literal
+        //    Dafny uses [x] for seq literals but the parser can choke on complex expressions inside.
+        //    Common pattern: result + [char('0' + digit)] → use seq<char> construction
+        var bracketExprMatches = Regex.Matches(dafnySource, @"\[\s*char\s*\(");
+        foreach (Match m in bracketExprMatches)
+        {
+            issues.Add(new StaticIssue(
+                "rbracket-char-expr",
+                $"Line {GetLineNumber(dafnySource, m.Index)}: '[char(...)]' may cause parser error. Use '[char(...)]' only for simple expressions, or build the seq with a helper method instead."));
+        }
+
+        // 8. while loop without invariant
         var whileMatches = Regex.Matches(dafnySource, @"\bwhile\b\s*\(");
         foreach (Match m in whileMatches)
         {
