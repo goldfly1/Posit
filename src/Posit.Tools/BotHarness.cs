@@ -98,8 +98,13 @@ public sealed class BotHarness
         foreach (var tc in testCases)
         {
             // Try AI-generated test data first (from QA phase)
-            var aiFile = aiTestData.FirstOrDefault(f =>
-                f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
+            // Match by index: AI test files are stdin_0.txt, stdin_1.txt, etc.
+            // Also try matching by tc.Id in the path (legacy format)
+            var aiFile = aiTestData.Length > 0
+                ? aiTestData.Length > testCases.IndexOf(tc)
+                    ? aiTestData[testCases.IndexOf(tc)]
+                    : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))
+                : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
             var testData = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
 
             // Skip file creation for file-not-found tests — pass a bad path instead
