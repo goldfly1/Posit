@@ -50,15 +50,22 @@ public sealed class QaPhase : IPhase
                 else
                 {
                     // AI generation failed — fall back to architect's test cases, NOT hardcoded CSV.
-                    // The test cases describe the input format; convert them to test data files.
+                    // Extract the actual input value from the test case description.
+                    // Test cases are written like: Input '32 F' should convert to Celsius...
+                    // We extract the quoted value as the stdin content.
                     var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
                     foreach (var tc in cliComp.TestCases)
                     {
+                        // Extract quoted input from description: "Input '32 F' should..." → "32 F"
+                        var inputMatch = System.Text.RegularExpressions.Regex.Match(
+                            tc.Description, @"'([^']+)'");
+                        var inputContent = inputMatch.Success ? inputMatch.Groups[1].Value : tc.Description;
+
                         testDataFiles.Add(new TestDataFile
                         {
-                            FileName = isStdin ? $"stdin_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt"
-                                               : $"testdata_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt",
-                            Content = tc.Description,  // the test case description IS the input
+                            FileName = isStdin ? $"stdin_{testDataFiles.Count}.txt"
+                                               : $"testdata_{testDataFiles.Count}.txt",
+                            Content = inputContent,
                             Description = tc.ExpectedBehavior ?? tc.Description
                         });
                     }
@@ -77,14 +84,18 @@ public sealed class QaPhase : IPhase
             else if (cliComp != null && _model == null)
             {
                 // No model available — fall back to architect's test cases
+                // Extract quoted input from description (same as AI-fail fallback)
                 var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
                 foreach (var tc in cliComp.TestCases)
                 {
+                    var inputMatch = System.Text.RegularExpressions.Regex.Match(
+                        tc.Description, @"'([^']+)'");
+                    var inputContent = inputMatch.Success ? inputMatch.Groups[1].Value : tc.Description;
                     testDataFiles.Add(new TestDataFile
                     {
-                        FileName = isStdin ? $"stdin_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt"
-                                           : $"testdata_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt",
-                        Content = tc.Description,
+                        FileName = isStdin ? $"stdin_{testDataFiles.Count}.txt"
+                                           : $"testdata_{testDataFiles.Count}.txt",
+                        Content = inputContent,
                         Description = tc.ExpectedBehavior ?? tc.Description
                     });
                 }
