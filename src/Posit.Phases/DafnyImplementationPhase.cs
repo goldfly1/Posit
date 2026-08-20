@@ -505,9 +505,13 @@ public sealed class DafnyImplementationPhase : IPhase
                 return CleanDafny(fenceMatch.Groups[1].Value);
 
             // Model may wrap Dafny in JSON — extract by scanning for code-like string property
-            if (text.TrimStart().StartsWith('{') || text.TrimStart().StartsWith('['))
+            // Check if text contains JSON (starts with { or [ OR has "json" prefix OR contains {" )
+            var trimmedForJson = text.TrimStart();
+            if (trimmedForJson.StartsWith('{') || trimmedForJson.StartsWith('[')
+                || trimmedForJson.StartsWith("json", StringComparison.OrdinalIgnoreCase)
+                || trimmedForJson.Contains("{\""))
             {
-                var extracted = ExtractDafnyFromJson(text.TrimStart());
+                var extracted = ExtractDafnyFromJson(trimmedForJson);
                 if (extracted != null)
                     return CleanDafny(extracted);
             }
