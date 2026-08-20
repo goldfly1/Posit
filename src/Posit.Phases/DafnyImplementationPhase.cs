@@ -233,6 +233,19 @@ public sealed class DafnyImplementationPhase : IPhase
             currentDafny = generated;
             await File.WriteAllTextAsync(dafnyPath, generated, ct);
 
+            // Static checker — catch known error patterns before Z3 (instant, free)
+            var staticIssues = StaticChecker.CheckDafny(generated);
+            if (staticIssues.Count > 0)
+            {
+                var staticFeedback = StaticChecker.FormatIssues(staticIssues, "Dafny");
+                Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}: static checker found {staticIssues.Count} issue(s) — feeding back before Z3");
+
+                // Feed static issues back as errors, skip Z3 call
+                currentErrors = staticIssues.Select(s => s.Message).ToArray();
+                errorClassHistory.Add(StaticChecker.ClassifyStaticIssue(staticIssues));
+                continue;
+            }
+
             // Z3 verify — the compiler is the teacher
             var verifyResult = await _z3.VerifyAsync(dafnyPath, ct);
             if (!verifyResult.Success)
