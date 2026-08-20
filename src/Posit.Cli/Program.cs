@@ -306,7 +306,8 @@ internal static class Program
 
         var controller = new PhaseController();
         controller.Register(new ArchitecturePhase(gateway, registry));
-        controller.Register(new PseudocodeReductionPhase(gateway));
+        // Pseudocode phase disabled — wiki search + interface definition replace it
+        // controller.Register(new PseudocodeReductionPhase(gateway));
         controller.Register(new DafnyContractsPhase(z3));
         controller.Register(new DafnyImplementationPhase(z3, gateway));
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
@@ -319,7 +320,7 @@ internal static class Program
     {
         Id = new ProjectId($"posit-{sessionId.Value[..8]}"),
         Name = "Posit Run",
-        Phases = [KnownPhases.Architecture, KnownPhases.Pseudocode,
+        Phases = [KnownPhases.Architecture,
                   KnownPhases.DafnyContracts, KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation, KnownPhases.Qa],
         MaxRetriesPerPhase = 5,
         Budget = new BudgetRemaining { Amount = 10m, Cap = 10m },
@@ -331,10 +332,10 @@ internal static class Program
     };
 
     private static DependencyGraph BuildGraph() => new DependencyGraphEngine().Build(
-        [KnownPhases.Architecture, KnownPhases.Pseudocode,
+        [KnownPhases.Architecture,
          KnownPhases.DafnyContracts, KnownPhases.DafnyImplementation,
          KnownPhases.CSharpImplementation, KnownPhases.Qa],
-        [[], [KnownPhases.Architecture], [KnownPhases.Pseudocode],
+        [[], [KnownPhases.Architecture],
          [KnownPhases.DafnyContracts], [KnownPhases.DafnyImplementation], [KnownPhases.CSharpImplementation]]);
 
     private static string? ParseStringArg(string[] args, string name)
