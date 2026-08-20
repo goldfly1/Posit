@@ -127,6 +127,14 @@ public sealed class PseudocodeReductionPhase : IPhase
                     break;
                 }
 
+                // Detect stuck loop: same output as previous pass → stop wasting calls
+                if (reduced.Trim() == current.Trim())
+                {
+                    Console.Error.WriteLine($"[pseudocode] {comp.Name}.{method.Name} pass {pass}: same output as previous — accepting as crystallized");
+                    crystallized = true;
+                    break;
+                }
+
                 chain.Add(reduced);
                 current = reduced;
 
