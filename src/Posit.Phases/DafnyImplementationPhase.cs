@@ -431,7 +431,10 @@ public sealed class DafnyImplementationPhase : IPhase
         // Lean rules — 3 rules, not 8
         sb.AppendLine("Rules:");
         sb.AppendLine("1. Output ONLY raw Dafny code starting with 'module'. No JSON, no markdown, no explanations.");
-        sb.AppendLine("2. Use 'method' for code with loops or assignment. Use 'function' for pure helper calculations (no loops, no := assignment) that need to be called in requires/ensures clauses. Methods CANNOT be called in expressions — only functions can.");
+        sb.AppendLine("2. 'function' = pure expression (NO var, NO :=, NO while, NO return). Used in requires/ensures.");
+        sb.AppendLine("   'method' = imperative code (var, :=, while, if/else, return). CANNOT be called in requires/ensures.");
+        sb.AppendLine("   If a helper needs var or loops, it MUST be a 'method'. Call it from the method body, not from ensures.");
+        sb.AppendLine("   If a helper is a pure calculation (e.g. ConvertCtoF(v: real): real { v * 9.0 / 5.0 + 32.0 }), use 'function'.");
         sb.AppendLine("3. Add invariants and decreases for loops. The code must pass Z3 verification.");
 
         return sb;
