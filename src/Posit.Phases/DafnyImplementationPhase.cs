@@ -382,16 +382,16 @@ public sealed class DafnyImplementationPhase : IPhase
         // Inject the skeleton — the model sees the FULL interface, not just signatures
         if (!string.IsNullOrWhiteSpace(skeleton))
         {
-            sb.AppendLine("═══ SKELETON (the interface — module structure, types, contracts, extern declarations) ═══");
-            sb.AppendLine("Implement the method bodies within THIS structure. Do NOT change:");
-            sb.AppendLine("  - module name or includes");
-            sb.AppendLine("  - datatype declarations");
+            sb.AppendLine("═══ INTERFACE DEFINITION (module, types, contracts, extern declarations) ═══");
+            sb.AppendLine("This is the interface you are implementing. Fill in the method bodies. Do NOT change:");
+            sb.AppendLine("  - module name or include directives");
+            sb.AppendLine("  - datatype declarations (these are your types — use them, don't reinvent them)");
             sb.AppendLine("  - {:extern} method declarations (I/O portals — leave as-is)");
             sb.AppendLine("  - method signatures (names, params, return types)");
             sb.AppendLine("  - requires/ensures contracts");
-            sb.AppendLine("Your job: fill in the method bodies. The skeleton IS the carapace — inlay within it.");
+            sb.AppendLine("Implement within this interface. Do not add new top-level declarations.");
             sb.AppendLine(skeleton);
-            sb.AppendLine("═══ END SKELETON ═══");
+            sb.AppendLine("═══ END INTERFACE DEFINITION ═══");
             sb.AppendLine();
         }
 

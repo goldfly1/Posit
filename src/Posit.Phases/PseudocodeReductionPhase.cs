@@ -187,6 +187,23 @@ public sealed class PseudocodeReductionPhase : IPhase
         string currentPseudocode, string methodSignature, string responsibility,
         string dictionary, PhaseContext context, CancellationToken ct)
     {
+        // Read the interface definition — the reducer needs to know what types
+        // and structures are available so it reduces toward the right Dafny types
+        var contract = ExtractContract(context);
+        var interfaceDef = "";
+        if (contract != null)
+        {
+            var comp = contract.Components.FirstOrDefault(c => c.Name == context.PhaseId.Value);
+            if (comp != null)
+            {
+                var skeletonPath = !string.IsNullOrWhiteSpace(comp.DafnyContractPath)
+                    ? comp.DafnyContractPath!
+                    : Path.Combine(Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging", context.SessionId.ToString()), $"{comp.Name}.dfy");
+                if (File.Exists(skeletonPath))
+                    interfaceDef = File.ReadAllText(skeletonPath);
+            }
+        }
+
         var systemPrompt = new StringBuilder();
         systemPrompt.AppendLine("You are a pseudocode reducer. Make the pseudocode more concrete by replacing");
         systemPrompt.AppendLine("English-language concepts with Dafny language elements.");
@@ -194,6 +211,16 @@ public sealed class PseudocodeReductionPhase : IPhase
         systemPrompt.AppendLine("Method signature: " + methodSignature);
         systemPrompt.AppendLine("Responsibility: " + responsibility);
         systemPrompt.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(interfaceDef))
+        {
+            systemPrompt.AppendLine("═══ INTERFACE DEFINITION (types and contracts available to you) ═══");
+            systemPrompt.AppendLine("Use the types declared here — do not invent new types or use C# types.");
+            systemPrompt.AppendLine(interfaceDef);
+            systemPrompt.AppendLine("═══ END INTERFACE DEFINITION ═══");
+            systemPrompt.AppendLine();
+        }
+
         systemPrompt.AppendLine("Dafny language dictionary (use ONLY these tokens):");
         systemPrompt.AppendLine(dictionary);
         systemPrompt.AppendLine();
@@ -202,9 +229,10 @@ public sealed class PseudocodeReductionPhase : IPhase
         systemPrompt.AppendLine();
         systemPrompt.AppendLine("Rules:");
         systemPrompt.AppendLine("1. Replace every English verb/concept with the corresponding Dafny token from the dictionary.");
-        systemPrompt.AppendLine("2. Keep lines that already use only Dafny tokens unchanged.");
-        systemPrompt.AppendLine("3. If ALL lines already use only Dafny tokens, output STOP.");
-        systemPrompt.AppendLine("4. Output ONLY the reduced pseudocode (or STOP). No explanations.");
+        systemPrompt.AppendLine("2. Use types from the interface definition — do not use C# types (int, string, char[]).");
+        systemPrompt.AppendLine("3. Keep lines that already use only Dafny tokens unchanged.");
+        systemPrompt.AppendLine("4. If ALL lines already use only Dafny tokens, output STOP.");
+        systemPrompt.AppendLine("5. Output ONLY the reduced pseudocode (or STOP). No explanations.");
 
         var prompt = new PromptTemplate
         {
