@@ -157,9 +157,13 @@ public sealed class BotHarness
             {
                 // Stdin-type program: pipe test data via stdin, no CLI arg
                 cliArg = "";
-                var aiFile = aiTestData.FirstOrDefault(f =>
-                    f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
-                stdinInput = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
+                // Match by index (same as file creation above)
+                var stdinAiFile = aiTestData.Length > 0
+                    ? aiTestData.Length > testCases.IndexOf(tc)
+                        ? aiTestData[testCases.IndexOf(tc)]
+                        : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))
+                    : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
+                stdinInput = stdinAiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
                 if (stdinInput == "__NONEXISTENT_FILE__") stdinInput = "";
             }
             else
