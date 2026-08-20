@@ -47,13 +47,7 @@ public static class StaticChecker
                     "function-with-imperative-body",
                     $"Line {GetLineNumber(dafnySource, m.Index)}: 'function' with loops/assignment. Change to 'method'. Functions are pure expressions — no while, var, :=, or return."));
             }
-            else
-            {
-                // Even pure functions should be methods per our decision
-                issues.Add(new StaticIssue(
-                    "function-used",
-                    $"Line {GetLineNumber(dafnySource, m.Index)}: 'function' used. ALWAYS use 'method' instead. Change 'function' to 'method'."));
-            }
+            // Pure functions (no loops/assignment) are ALLOWED — they can be called in requires/ensures
         }
 
         // 2. C#-ism: (char) cast

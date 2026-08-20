@@ -429,7 +429,7 @@ public sealed class DafnyImplementationPhase : IPhase
         // Lean rules — 3 rules, not 8
         sb.AppendLine("Rules:");
         sb.AppendLine("1. Output ONLY raw Dafny code starting with 'module'. No JSON, no markdown, no explanations.");
-        sb.AppendLine("2. ALWAYS use 'method' — NEVER use 'function'. Use types from the interface definition.");
+        sb.AppendLine("2. Use 'method' for code with loops or assignment. Use 'function' for pure helper calculations (no loops, no := assignment) that need to be called in requires/ensures clauses. Methods CANNOT be called in expressions — only functions can.");
         sb.AppendLine("3. Add invariants and decreases for loops. The code must pass Z3 verification.");
 
         return sb;
@@ -726,8 +726,7 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("Rules:");
         sb.AppendLine("1. Fix ONLY the fragments that caused the Z3 error. Keep everything else unchanged.");
         sb.AppendLine("2. Replace C#-isms with Dafny equivalents (for→while+invariant, (char)→char(), map[K]V→map[K,V]).");
-        sb.AppendLine("3. BAN 'function' — ALWAYS use 'method'. The error 'closeparen expected inside a function' means");
-        sb.AppendLine("   a helper was declared as 'function' instead of 'method'. Change ALL functions to methods.");
+        sb.AppendLine("3. Use 'function' for pure helpers called in requires/ensures. Use 'method' for code with loops or assignment.");
         sb.AppendLine("4. Use Dafny syntax: method (not function), while+invariant, :=, char(), seq<T>, map[K,V].");
         sb.AppendLine("5. Output the COMPLETE corrected pseudocode (all methods, not just the fixed fragment).");
         sb.AppendLine("6. The pseudocode IS the algorithm — do not redesign the logic, just fix the syntax.");
