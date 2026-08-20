@@ -579,6 +579,15 @@ public sealed class DafnyImplementationPhase : IPhase
     /// </summary>
     private static string? ExtractDafnyFromJson(string text)
     {
+        // Strip common non-JSON prefixes (model sometimes writes "json\n{...}" or "```json\n{...}")
+        var jsonStart = text.IndexOf('{');
+        if (jsonStart > 0)
+            text = text[jsonStart..];
+        // Strip trailing content after the JSON object
+        var jsonEnd = text.LastIndexOf('}');
+        if (jsonEnd >= 0 && jsonEnd < text.Length - 1)
+            text = text[..(jsonEnd + 1)];
+
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(text);
