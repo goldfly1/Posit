@@ -47,16 +47,56 @@ public sealed class QaPhase : IPhase
                 var generated = await GenerateTestDataAsync(cliComp, contract, context, ct);
                 if (generated != null)
                     testDataFiles.AddRange(generated);
+                else
+                {
+                    // AI generation failed — fall back to architect's test cases, NOT hardcoded CSV.
+                    // The test cases describe the input format; convert them to test data files.
+                    var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
+                    foreach (var tc in cliComp.TestCases)
+                    {
+                        testDataFiles.Add(new TestDataFile
+                        {
+                            FileName = isStdin ? $"stdin_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt"
+                                               : $"testdata_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt",
+                            Content = tc.Description,  // the test case description IS the input
+                            Description = tc.ExpectedBehavior ?? tc.Description
+                        });
+                    }
+                    // If no test cases either, use a minimal generic input (not CSV)
+                    if (testDataFiles.Count == 0)
+                    {
+                        testDataFiles.Add(new TestDataFile
+                        {
+                            FileName = isStdin ? "stdin_default.txt" : "testdata_default.txt",
+                            Content = "test input",
+                            Description = "Default test data (no test cases available)"
+                        });
+                    }
+                }
             }
             else if (cliComp != null && _model == null)
             {
-                // Fallback: no model available, use deterministic stopgap data
-                testDataFiles.Add(new TestDataFile
+                // No model available — fall back to architect's test cases
+                var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
+                foreach (var tc in cliComp.TestCases)
                 {
-                    FileName = "testdata_default.csv",
-                    Content = "name,age\nAlice,30\nBob,25",
-                    Description = "Default test data (no AI available)"
-                });
+                    testDataFiles.Add(new TestDataFile
+                    {
+                        FileName = isStdin ? $"stdin_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt"
+                                           : $"testdata_{tc.Description[..Math.Min(20, tc.Description.Length)].Replace(" ", "_")}.txt",
+                        Content = tc.Description,
+                        Description = tc.ExpectedBehavior ?? tc.Description
+                    });
+                }
+                if (testDataFiles.Count == 0)
+                {
+                    testDataFiles.Add(new TestDataFile
+                    {
+                        FileName = "testdata_default.txt",
+                        Content = "test input",
+                        Description = "Default test data (no model, no test cases)"
+                    });
+                }
             }
 
             // Read verified status from DesignContext (snowballed after Z3), not ArchitectureContract
