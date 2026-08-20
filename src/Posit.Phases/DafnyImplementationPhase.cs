@@ -460,7 +460,7 @@ public sealed class DafnyImplementationPhase : IPhase
             if (string.IsNullOrWhiteSpace(gen.Text))
                 return null;
 
-            var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim();
+            var text = OllamaModelGateway.StripReasoningTags(gen.Text).Trim(); Console.Error.WriteLine($"[dafny-impl] RAW MODEL OUTPUT first 80: {text[..Math.Min(80, text.Length)]}");
 
             // Strip markdown fences if present
             var fenceMatch = System.Text.RegularExpressions.Regex.Match(
@@ -476,7 +476,7 @@ public sealed class DafnyImplementationPhase : IPhase
                 || trimmedForJson.StartsWith("json", StringComparison.OrdinalIgnoreCase)
                 || trimmedForJson.Contains("{\""))
             {
-                var extracted = ExtractDafnyFromJson(trimmedForJson);
+                Console.Error.WriteLine($"[dafny-impl] JSON detection fired, text starts: {trimmedForJson[..Math.Min(40, trimmedForJson.Length)]}"); var extracted = ExtractDafnyFromJson(trimmedForJson); if (extracted == null) Console.Error.WriteLine("[dafny-impl] ExtractDafnyFromJson returned null!"); else Console.Error.WriteLine($"[dafny-impl] Extracted {extracted.Length} chars");
                 if (extracted != null)
                     return CleanDafny(extracted);
             }
