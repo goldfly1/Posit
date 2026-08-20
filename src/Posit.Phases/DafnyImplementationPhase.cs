@@ -471,7 +471,8 @@ public sealed class DafnyImplementationPhase : IPhase
                 var fenceContent = CleanDafny(fenceMatch.Groups[1].Value);
                 // Fence content might be JSON — extract Dafny from it
                 var fenceTrimmed = fenceContent.TrimStart();
-                if (fenceTrimmed.StartsWith('{') || fenceTrimmed.StartsWith('['))
+                if (fenceTrimmed.StartsWith('{') || fenceTrimmed.StartsWith('[')
+                    || fenceTrimmed.StartsWith("json", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.Error.WriteLine($"[dafny-impl] Fence content is JSON, extracting Dafny from it");
                     var fenceExtracted = ExtractDafnyFromJson(fenceTrimmed);
