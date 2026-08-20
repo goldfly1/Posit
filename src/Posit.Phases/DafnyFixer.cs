@@ -182,8 +182,8 @@ public sealed class DafnyFixer
             sb.AppendLine($"  {instr}");
         sb.AppendLine();
 
-        sb.AppendLine("═══ DAFNY REFERENCE CARD ═══");
-        sb.AppendLine(LoadReferenceCard());
+        sb.AppendLine("Dafny syntax: method (not function), while+invariant, :=, char(), seq<T>, map[K,V].");
+        
         sb.AppendLine();
 
         sb.AppendLine("═══ DAFNY SOURCE TO FIX ═══");

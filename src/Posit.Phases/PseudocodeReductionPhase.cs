@@ -221,8 +221,8 @@ public sealed class PseudocodeReductionPhase : IPhase
             systemPrompt.AppendLine();
         }
 
-        systemPrompt.AppendLine("Dafny language dictionary (use ONLY these tokens):");
-        systemPrompt.AppendLine(dictionary);
+        systemPrompt.AppendLine("Use Dafny syntax: method (not function), while+invariant (not for-loops), := (not =), char() (not (char)), seq<T> (not seq[T]), map[K,V] (not map[K]V).");
+        // Reference card removed — lean prompt with key syntax rules above
         systemPrompt.AppendLine();
         systemPrompt.AppendLine("Current pseudocode:");
         systemPrompt.AppendLine(currentPseudocode);

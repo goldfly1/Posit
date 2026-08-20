@@ -702,7 +702,6 @@ public sealed class DafnyImplementationPhase : IPhase
         if (string.IsNullOrWhiteSpace(originalPseudocode))
             return null;
 
-        var referenceCard = LoadReferenceCard();
         var boneChart = BuildBoneChart(originalPseudocode, failingDafny, z3Errors);
 
         var sb = new StringBuilder();
@@ -716,14 +715,12 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("2. Replace C#-isms with Dafny equivalents (for→while+invariant, (char)→char(), map[K]V→map[K,V]).");
         sb.AppendLine("3. BAN 'function' — ALWAYS use 'method'. The error 'closeparen expected inside a function' means");
         sb.AppendLine("   a helper was declared as 'function' instead of 'method'. Change ALL functions to methods.");
-        sb.AppendLine("4. Use ONLY tokens from the Dafny Language Dictionary below.");
+        sb.AppendLine("4. Use Dafny syntax: method (not function), while+invariant, :=, char(), seq<T>, map[K,V].");
         sb.AppendLine("5. Output the COMPLETE corrected pseudocode (all methods, not just the fixed fragment).");
         sb.AppendLine("6. The pseudocode IS the algorithm — do not redesign the logic, just fix the syntax.");
         sb.AppendLine();
         sb.AppendLine(boneChart);
         sb.AppendLine();
-        sb.AppendLine("Dafny Language Dictionary (use ONLY these tokens):");
-        sb.AppendLine(referenceCard);
 
         var prompt = new PromptTemplate
         {

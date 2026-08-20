@@ -27,7 +27,7 @@ See `wiki/carapace-doctrine.md` for the canonical text.
 
 ## Status
 
-60+ commits, 8 projects, build clean (0 errors, 0 warnings). 7 of 11 phases built (added PseudocodeReduction). Pipeline runs end-to-end with DB persistence. Data capture live (prompts_log, audit_events, artifacts, sessions). 6/6 trials (T1-T6) passing with cut-outs. T12 (Config File Merger) **GREEN without cut-outs** — first non-trivial trial to pass end-to-end with custom Dafny. DafnyImpl has 4-attempt Z3 correction loop with opaque error translation. Pseudocode reducer crystallizes at pass 2-4. Function ban (always use `method`) eliminates the #1 Dafny parse error class.
+80+ commits, 8 projects, build clean. Pipeline runs end-to-end with DB persistence. T6 passing 6/6 without cut-outs (temperature converter). T12 GREEN without cut-outs. Pseudocode re-reduction loop with bone chart + error class escalation. Interface definition injection (DafnyImpl + pseudocode reducer see the skeleton). StaticChecker (pre-Z3 pattern catching). WikiSearcher (semantic search over 3,675 Dafny stdlib chunks — pre-generation + post-error). Universal type conversions in WiringGenerator (16 pairs). Robust CLI stub (ReadSplitLine, ReadArgs). Lean prompts (reference card replaced by wiki search, 8 rules → 3). Dead prompt files removed. Bonsai memory system (Postgres+pgvector+Ollama) active.
 
 ## Git
 
