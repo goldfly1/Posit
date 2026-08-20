@@ -312,7 +312,7 @@ public sealed class DafnyImplementationPhase : IPhase
     /// </summary>
     private async Task<string?> GenerateDafnyAsync(Component comp, PhaseContext context, CancellationToken ct)
     {
-        var prompt = BuildDafnyPrompt(comp, context, isCorrection: false, previousDafny: null, z3Errors: null);
+        var prompt = await BuildDafnyPromptAsync(comp, context, isCorrection: false, previousDafny: null, z3Errors: null, ct);
         return await CallModelAndExtractDafny(prompt, context, ct);
     }
 
@@ -324,8 +324,8 @@ public sealed class DafnyImplementationPhase : IPhase
     private async Task<string?> FixDafnyAsync(Component comp, PhaseContext context,
         string previousDafny, string[] z3Errors, CancellationToken ct)
     {
-        var prompt = BuildDafnyPrompt(comp, context, isCorrection: true,
-            previousDafny: previousDafny, z3Errors: z3Errors);
+        var prompt = await BuildDafnyPromptAsync(comp, context, isCorrection: true,
+            previousDafny: previousDafny, z3Errors: z3Errors, ct);
         return await CallModelAndExtractDafny(prompt, context, ct);
     }
 
@@ -333,10 +333,9 @@ public sealed class DafnyImplementationPhase : IPhase
     /// Build the Dafny generation/fix prompt. On correction, includes the previous
     /// Dafny and Z3 errors so the model can do a targeted fix.
     /// </summary>
-    private StringBuilder BuildDafnyPrompt(Component comp, PhaseContext context,
-        bool isCorrection, string? previousDafny, string[]? z3Errors)
+    private async Task<StringBuilder> BuildDafnyPromptAsync(Component comp, PhaseContext context,
+        bool isCorrection, string? previousDafny, string[]? z3Errors, CancellationToken ct)
     {
-        var referenceCard = LoadReferenceCard();
         var testCases = comp.TestCases.Length > 0
             ? string.Join("\n", comp.TestCases.Select(tc => $"  // test: {tc.Description} → {tc.ExpectedBehavior}"))
             : "";
@@ -354,121 +353,87 @@ public sealed class DafnyImplementationPhase : IPhase
             ? File.ReadAllText(skeletonPath)
             : null;
 
+        // Pre-generation wiki search: find relevant Dafny examples based on pseudocode content
+        var wikiExamples = "";
+        if (_wiki != null && !string.IsNullOrWhiteSpace(pseudocode))
+        {
+            // Search using the pseudocode + responsibility as query
+            var searchQuery = $"{comp.Responsibility} {pseudocode[..Math.Min(200, pseudocode.Length)]}";
+            wikiExamples = await _wiki.SearchAsync(searchQuery, limit: 3, ct);
+            if (!string.IsNullOrWhiteSpace(wikiExamples))
+                Console.Error.WriteLine($"[dafny-impl] {comp.Name}: pre-generation wiki search returned examples");
+        }
+
         var sb = new StringBuilder();
         if (isCorrection)
         {
-            sb.AppendLine("You are fixing a Dafny module that Z3 rejected. The compiler found errors.");
-            sb.AppendLine("Look at YOUR previous code below, find the specific lines that caused the errors,");
-            sb.AppendLine("and fix ONLY those lines. Keep everything else unchanged.");
+            sb.AppendLine("You are a Dafny coder fixing code that Z3 rejected.");
+            sb.AppendLine("Fix the specific lines that caused the errors. Keep everything else unchanged.");
             sb.AppendLine();
-
-            // Detect "not Dafny" errors — the model output JSON or prose instead of Dafny
-            var isNotDafnyError = z3Errors != null && z3Errors.Any(e =>
-                e.Contains("this symbol not expected", StringComparison.OrdinalIgnoreCase) ||
-                e.Contains("unexpected token", StringComparison.OrdinalIgnoreCase) ||
-                e.Contains("parse error", StringComparison.OrdinalIgnoreCase));
-            if (isNotDafnyError)
-            {
-                sb.AppendLine("⚠️  CRITICAL: Your previous output was NOT valid Dafny code!");
-                sb.AppendLine("The error 'this symbol not expected' means the compiler received something");
-                sb.AppendLine("that isn't Dafny (probably JSON or prose). You MUST output ONLY raw Dafny source code.");
-                sb.AppendLine("No JSON, no markdown, no explanations — just the Dafny module.");
-                sb.AppendLine("Start with 'module' and end with the closing '}'.");
-                sb.AppendLine();
-            }
 
             sb.AppendLine("═══ Z3 ERRORS (fix these) ═══");
             if (z3Errors != null)
                 foreach (var err in z3Errors)
                     sb.AppendLine($"  {err}");
             sb.AppendLine();
-            sb.AppendLine("═══ YOUR PREVIOUS OUTPUT (fix this, don't rewrite from scratch) ═══");
+            sb.AppendLine("═══ YOUR PREVIOUS CODE (fix this) ═══");
             sb.AppendLine(previousDafny);
-            sb.AppendLine("═══ END PREVIOUS OUTPUT ═══");
+            sb.AppendLine("═══ END PREVIOUS CODE ═══");
             sb.AppendLine();
-            if (isNotDafnyError)
-            {
-                sb.AppendLine("Output a COMPLETE Dafny module starting with 'module' and ending with '}'.");
-                sb.AppendLine("ONLY Dafny code. No JSON wrappers, no markdown fences, no explanations.");
-            }
-            else
-            {
-                sb.AppendLine("Look at the errors above, find the specific line(s) in your code that caused them,");
-                sb.AppendLine("and fix ONLY those lines. Keep method signatures, {:extern} declarations, and");
-                sb.AppendLine("module structure exactly as-is. Output the complete fixed Dafny module.");
-            }
         }
         else
         {
-            sb.AppendLine("You are refactoring reduced pseudocode into valid Dafny.");
-            sb.AppendLine("The pseudocode below IS the algorithm. Do NOT redesign it.");
-            sb.AppendLine("Your job: wrap it in the method signatures, add contracts, fix syntax to valid Dafny. That's all.");
-            sb.AppendLine("Z3 will verify your code — it must pass verification.");
+            sb.AppendLine("You are a Dafny coder. Implement the method bodies in the interface definition below.");
+            sb.AppendLine("The pseudocode IS the algorithm — translate it into valid Dafny. Do not redesign the logic.");
+            sb.AppendLine();
         }
-        sb.AppendLine();
+
         sb.AppendLine($"Component: {comp.Name}");
         sb.AppendLine($"Responsibility: {comp.Responsibility}");
-        sb.AppendLine($"Pattern: {comp.PatternName ?? "custom"}");
         sb.AppendLine();
-        sb.AppendLine("Method signatures to implement (USE THESE EXACT NAMES):");
+        sb.AppendLine("Method signatures (USE THESE EXACT NAMES):");
         sb.AppendLine(sigs);
         sb.AppendLine();
 
-        // Inject the skeleton — the model sees the FULL interface, not just signatures
+        // Inject the interface definition
         if (!string.IsNullOrWhiteSpace(skeleton))
         {
-            sb.AppendLine("═══ INTERFACE DEFINITION (module, types, contracts, extern declarations) ═══");
-            sb.AppendLine("This is the interface you are implementing. Fill in the method bodies. Do NOT change:");
-            sb.AppendLine("  - module name or include directives");
-            sb.AppendLine("  - datatype declarations (these are your types — use them, don't reinvent them)");
-            sb.AppendLine("  - {:extern} method declarations (I/O portals — leave as-is)");
-            sb.AppendLine("  - method signatures (names, params, return types)");
-            sb.AppendLine("  - requires/ensures contracts");
-            sb.AppendLine("Implement within this interface. Do not add new top-level declarations.");
+            sb.AppendLine("═══ INTERFACE DEFINITION ═══");
+            sb.AppendLine("Implement the method bodies within this interface. Do NOT change:");
+            sb.AppendLine("  - module name, includes, datatype declarations, {:extern} portals");
+            sb.AppendLine("  - method signatures, requires/ensures contracts");
+            sb.AppendLine("Use the declared types — do not invent new types.");
             sb.AppendLine(skeleton);
             sb.AppendLine("═══ END INTERFACE DEFINITION ═══");
             sb.AppendLine();
         }
 
-        sb.AppendLine("Test cases (your implementation MUST satisfy these):");
+        sb.AppendLine("Test cases (MUST satisfy these):");
         sb.AppendLine(testCases);
         sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(pseudocode))
         {
-            sb.AppendLine("Pseudocode to refactor into Dafny (this IS the algorithm — wrap it, don't redesign it):");
+            sb.AppendLine("Pseudocode (this IS the algorithm):");
             sb.AppendLine(pseudocode);
             sb.AppendLine();
         }
 
-        sb.AppendLine("Dafny Language Dictionary:");
-        sb.AppendLine(referenceCard);
-        sb.AppendLine();
-        sb.AppendLine("═══ SYNTAX ERRORS TO AVOID (these are NOT Dafny — do NOT write them) ═══");
-        sb.AppendLine("Dafny is NOT C#. These C# constructs do NOT work in Dafny:");
-        sb.AppendLine("  BAD: (char)('0' + d)      → GOOD: char('0' + d)  [no C-style casts]");
-        sb.AppendLine("  BAD: new string[|s|]       → GOOD: new char[|s|]   [Dafny arrays need element type]");
-        sb.AppendLine("  BAD: for (i=0; i<n; i++)   → GOOD: for i := 0 to n-1  [Dafny for loop syntax]");
-        sb.AppendLine("  BAD: map[string]int[]      → GOOD: map[string, int]  [comma, not concatenation]");
-        sb.AppendLine("  BAD: map<string,int>()     → GOOD: map[]              [empty map literal, no parens]");
-        sb.AppendLine("  BAD: seq[string]           → GOOD: seq<string>       [angle brackets for generics]");
-        sb.AppendLine("  BAD: arr[i] = x            → GOOD: arr[i] := x       [Dafny uses := not = for assignment]");
-        sb.AppendLine("  BAD: string.Join(...)      → GOOD: use recursive concatenation or Seq.Concat");
-        sb.AppendLine("  BAD: int.TryParse(...)     → GOOD: write a helper method with a loop");
-        sb.AppendLine();
+        // Inject wiki examples (replaces the 5.6K reference card + C#-ism cheat sheet)
+        if (!string.IsNullOrWhiteSpace(wikiExamples))
+        {
+            sb.AppendLine(wikiExamples);
+            sb.AppendLine();
+        }
+
+        // Lean rules — 3 rules, not 8
         sb.AppendLine("Rules:");
-        sb.AppendLine("1. Output ONLY raw Dafny code. No JSON, no markdown fences, no explanations.");
-        sb.AppendLine("2. Keep method signatures as specified above — use the EXACT method names.");
-        sb.AppendLine("3. Keep all {:extern} declarations unchanged.");
-        sb.AppendLine("4. ALWAYS use `method` — NEVER use `function`. Functions are pure expressions (no loops, no mutable assignment). Methods allow imperative code. Always use method.");
-        sb.AppendLine("5. The code must pass Z3 verification.");
-        sb.AppendLine("6. The pseudocode IS the algorithm — translate it into proper Dafny with contracts. Do not redesign the logic.");
-        sb.AppendLine("7. Add requires/ensures clauses, invariants, and decreases for loops.");
-        sb.AppendLine("8. Dafny is NOT C#. Do not write C# syntax. Use := for assignment, char() not (char), for i := 0 to n not for(i=0...), map[K,V] not map[K]V.");
+        sb.AppendLine("1. Output ONLY raw Dafny code starting with 'module'. No JSON, no markdown, no explanations.");
+        sb.AppendLine("2. ALWAYS use 'method' — NEVER use 'function'. Use types from the interface definition.");
+        sb.AppendLine("3. Add invariants and decreases for loops. The code must pass Z3 verification.");
 
         return sb;
     }
-
     /// <summary>
     /// Call the model with a prompt and extract Dafny from the response.
     /// Handles reasoning tags, markdown fences, and JSON wrappers.
@@ -796,18 +761,18 @@ public sealed class DafnyImplementationPhase : IPhase
     private async Task<string?> GenerateDafnyWithPseudocodeAsync(
         Component comp, PhaseContext context, string pseudocode, CancellationToken ct)
     {
-        var prompt = BuildDafnyPromptWithPseudocode(comp, context, pseudocode, isCorrection: false);
+        var prompt = await BuildDafnyPromptWithPseudocodeAsync(comp, context, pseudocode, isCorrection: false, ct);
         return await CallModelAndExtractDafny(prompt, context, ct);
     }
 
     /// <summary>
     /// Build a Dafny generation prompt using specific pseudocode (not from artifact).
     /// </summary>
-    private StringBuilder BuildDafnyPromptWithPseudocode(
-        Component comp, PhaseContext context, string pseudocode, bool isCorrection)
+    private async Task<StringBuilder> BuildDafnyPromptWithPseudocodeAsync(
+        Component comp, PhaseContext context, string pseudocode, bool isCorrection, CancellationToken ct)
     {
         // Reuse the existing prompt builder but inject the re-reduced pseudocode
-        var sb = BuildDafnyPrompt(comp, context, isCorrection, null, null);
+        var sb = await BuildDafnyPromptAsync(comp, context, isCorrection, null, null, ct);
         // The existing prompt already has the old pseudocode from ExtractPseudocodeForComponent.
         // We need to replace it. Find the pseudocode section and swap it.
         // Simplest: append the re-reduced pseudocode as an override.
