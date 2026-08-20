@@ -467,7 +467,19 @@ public sealed class DafnyImplementationPhase : IPhase
                 text, @"```(?:dafny)?\s*\n?(.*?)\n?```",
                 System.Text.RegularExpressions.RegexOptions.Singleline);
             if (fenceMatch.Success)
-                return CleanDafny(fenceMatch.Groups[1].Value);
+            {
+                var fenceContent = CleanDafny(fenceMatch.Groups[1].Value);
+                // Fence content might be JSON — extract Dafny from it
+                var fenceTrimmed = fenceContent.TrimStart();
+                if (fenceTrimmed.StartsWith('{') || fenceTrimmed.StartsWith('['))
+                {
+                    Console.Error.WriteLine($"[dafny-impl] Fence content is JSON, extracting Dafny from it");
+                    var fenceExtracted = ExtractDafnyFromJson(fenceTrimmed);
+                    if (fenceExtracted != null)
+                        return CleanDafny(fenceExtracted);
+                }
+                return fenceContent;
+            }
 
             // Model may wrap Dafny in JSON — extract by scanning for code-like string property
             // Check if text contains JSON (starts with { or [ OR has "json" prefix OR contains {" )
