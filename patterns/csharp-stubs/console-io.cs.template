@@ -3,6 +3,7 @@
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
 
 using System;
+using System.Linq;
 
 namespace {{ComponentName}}
 {
@@ -24,6 +25,38 @@ namespace {{ComponentName}}
         public static string ReadLine()
         {
             return Console.ReadLine() ?? "";
+        }
+
+        // Portal: ReadSplitLine(delimiter) returns (fields: seq<string>)
+        // Splits input by delimiter, returns as Dafny sequence
+        public static Dafny.ISequence<Dafny.ISequence<Dafny.Rune>> ReadSplitLine(string delimiter)
+        {
+            var line = Console.ReadLine() ?? "";
+            var fields = line.Split(new[] { delimiter }, StringSplitOptions.None);
+            return Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(
+                fields.Select(f => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(f)).ToArray());
+        }
+
+        // Portal: ReadArgs() returns (args: seq<string>)
+        // Splits input by space
+        public static Dafny.ISequence<Dafny.ISequence<Dafny.Rune>> ReadArgs()
+        {
+            var line = Console.ReadLine() ?? "";
+            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            return Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(
+                parts.Select(p => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(p)).ToArray());
+        }
+
+        // Portal: PrintError(text)
+        public static void PrintError(string text)
+        {
+            Console.Error.WriteLine(text);
+        }
+
+        // Portal: PrintResult(text)
+        public static void PrintResult(string text)
+        {
+            Console.WriteLine(text);
         }
 
         // Portal: ClearScreen()

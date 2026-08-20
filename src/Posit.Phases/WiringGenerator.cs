@@ -56,11 +56,36 @@ public static class WiringGenerator
 
         // Entry type: "stdin" reads Console.ReadLine(), "file" (default) reads args[0]
         var entryType = comp.EntryType ?? "file";
-        if (entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase))
+        var isStdin = entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase);
+
+        // Check if the first target method takes multiple params — if so, use ReadArgs
+        // to split the input, then map parts to params
+        var firstConn = comp.Connections.Length > 0 ? comp.Connections[0] : null;
+        var needsSplit = false;
+        if (firstConn != null && isStdin)
         {
-            // Stdin: just read the line. No args check — stdin programs don't take file args.
+            var targetComp = contract.Components.FirstOrDefault(c => c.Name == firstConn.ToComponent);
+            if (targetComp != null)
+            {
+                var targetSigs = GetSignatures(targetComp, translated, stubs);
+                if (targetSigs != null && targetSigs.Count > 0)
+                {
+                    var targetSig = ResolveMethod(firstConn, targetComp, targetSigs);
+                    if (targetSig != null && targetSig.ParamNames.Length > 1)
+                        needsSplit = true;
+                }
+            }
+        }
+
+        if (isStdin)
+        {
             sb.AppendLine("            var inputLine = Console.ReadLine() ?? \"\";");
             sb.AppendLine("            if (string.IsNullOrEmpty(inputLine)) { Console.Error.WriteLine(\"Error: no input provided.\"); return 1; }");
+            if (needsSplit)
+            {
+                // Multi-param method: split input by space and map to params
+                sb.AppendLine("            var inputParts = inputLine.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);");
+            }
         }
         else
         {
@@ -87,7 +112,7 @@ public static class WiringGenerator
             sb.AppendLine($"            var {inputArgs} = Dafny.Sequence<Dafny.Rune>.UnicodeFromString(args[0]);");
         }
 
-        AppendConnectionCalls(sb, comp, contract, translated, stubs, inputArgs, className);
+        AppendConnectionCalls(sb, comp, contract, translated, stubs, inputArgs, className, needsSplit);
         sb.AppendLine("            return 0;");
         sb.AppendLine("        }");
     }
@@ -106,7 +131,7 @@ public static class WiringGenerator
     private static void AppendConnectionCalls(
         StringBuilder sb, Component comp, ArchitectureContract contract,
         Dictionary<string, List<CsMethodSignature>> translated, Dictionary<string, List<CsMethodSignature>> stubs,
-        string entryVar, string className)
+        string entryVar, string className, bool needsSplit = false)
     {
         // DETERMINISTIC LINEAR CHAINING:
         // The pipeline is a linear chain. Output of step N feeds into step N+1.
@@ -140,8 +165,10 @@ public static class WiringGenerator
             var retType = targetSig.ReturnType;
 
             // Build args: first param gets the chained previous return,
-            // remaining params use argMappings as hints, then defaults
-            var args = BuildChainedArgs(conn, prevRet, prevType, targetSig);
+            // remaining params use argMappings as hints, then defaults.
+            // On first call with needsSplit, map inputParts[i] to params.
+            var args = BuildChainedArgs(conn, prevRet, prevType, targetSig,
+                needsSplit: ci == 0 && needsSplit);
 
             // Dafny multi-return translates to void + out params.
             // The first out param is the data return (chained to next step).
@@ -192,13 +219,21 @@ public static class WiringGenerator
         }
     }
 
-    /// <summary>Build args for linear chaining: first param = previous return, rest from mappings/defaults.</summary>
-    private static string BuildChainedArgs(ConnectionSpec conn, string prevRet, string prevType, CsMethodSignature targetSig)
+    /// <summary>Build args for linear chaining: first param = previous return, rest from mappings/defaults.
+    /// When needsSplit is true, maps inputParts[i] to param i (with type conversion).</summary>
+    private static string BuildChainedArgs(ConnectionSpec conn, string prevRet, string prevType, CsMethodSignature targetSig,
+        bool needsSplit = false)
     {
         var parts = new List<string>();
         for (var i = 0; i < targetSig.ParamNames.Length; i++)
         {
-            if (i == 0)
+            if (needsSplit && i < 10)  // safety cap
+            {
+                // Split mode: inputParts[i] → convert to param type
+                var converted = ConvertType("string", targetSig.ParamTypes[i], $"inputParts[{i}]");
+                parts.Add(converted ?? DefaultForType(targetSig.ParamTypes[i]));
+            }
+            else if (i == 0)
             {
                 // First param: the chained previous return (with type conversion)
                 var converted = ConvertType(prevType, targetSig.ParamTypes[i], prevRet);
