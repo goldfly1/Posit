@@ -243,7 +243,7 @@ public static class StaticChecker
         var ruleId = issues[0].RuleId;
         return ruleId switch
         {
-            "function-with-imperative-body" or "function-used" => "while-in-function",
+            "function-with-imperative-body" => "while-in-function",
             "cs-ism-for-loop" => "cs-ism-for-loop",
             "cs-ism-char-cast" => "cs-ism-char-cast",
             "cs-ism-map-syntax" or "cs-ism-seq-syntax" or "cs-ism-new-string-array" => "cs-ism-generic-syntax",
