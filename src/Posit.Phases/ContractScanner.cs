@@ -126,13 +126,21 @@ public static class ContractScanner
                 }
             }
 
-            // Check fromMethod exists on this component's own signatures
+            // Check fromMethod exists on this component's own signatures OR is a stub method
+            // Stub methods (ReadLines, ReadFile, PrintLine, etc.) are provided by the I/O stub
+            // and don't need to be in methodSignatures — they're inherited from the stub.
             var ownMethods = comp.MethodSignatures.Select(m => m.Name).ToHashSet();
+            var stubMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "ReadLines", "ReadFile", "PrintLine", "PrintLines", "PrintError",
+                "WriteFile", "AppendFile", "ReadStdin", "WriteStdout", "WriteStderr",
+                "ReadInt", "ReadBool"
+            };
             foreach (var conn in comp.Connections)
             {
-                if (!ownMethods.Contains(conn.FromMethod))
+                if (!ownMethods.Contains(conn.FromMethod) && !stubMethods.Contains(conn.FromMethod))
                     errors.Add(new ScanError(comp.Name, "connection.fromMethod",
-                        conn.FromMethod, "does not exist on this component's methodSignatures",
+                        conn.FromMethod, "does not exist on this component's methodSignatures or known stub methods",
                         [.. ownMethods]));
             }
 
