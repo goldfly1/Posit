@@ -156,8 +156,8 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         //      reduction — outputs 14 tokens = STOP on every pass).
         var modelId = phaseId.Value switch
         {
-            "dafny-implementation" => "deepseek-v4-pro:cloud",
-            "dafny-fix" => "deepseek-v4-pro:cloud",
+            "dafny-implementation" => "glm-5.2:cloud",
+            "dafny-fix" => "glm-5.2:cloud",
             _ => "deepseek-v4-flash:cloud"
         };
         return new ModelRoute
