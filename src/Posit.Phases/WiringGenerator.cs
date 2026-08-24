@@ -164,6 +164,29 @@ public static class WiringGenerator
             var retVarName = $"ret{retVarCounter++}";
             var retType = targetSig.ReturnType;
 
+            // If fromMethod is a stub method (ReadLines, ReadFile, etc.), emit the stub
+            // call first to transform the input, then pass the result to the target method.
+            var stubMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "ReadLines", "ReadFile", "ReadStdin"
+            };
+            if (stubMethods.Contains(conn.FromMethod) && ci == 0)
+            {
+                // Emit the stub call to transform input
+                if (conn.FromMethod.Equals("ReadLines", StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine($"            var linesResult = System.IO.File.ReadAllLines({prevRet});");
+                    prevRet = "linesResult";
+                    prevType = "string[]";
+                }
+                else if (conn.FromMethod.Equals("ReadFile", StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine($"            var fileResult = System.IO.File.ReadAllText({prevRet});");
+                    prevRet = "fileResult";
+                    prevType = "string";
+                }
+            }
+
             // Build args: first param gets the chained previous return,
             // remaining params use argMappings as hints, then defaults.
             // On first call with needsSplit, map inputParts[i] to params.
