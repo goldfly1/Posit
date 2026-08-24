@@ -16,10 +16,10 @@ public record ScanError(
 }
 
 /// <summary>
-/// Scans ArchitectureContract against the pattern registry BEFORE the pipeline proceeds.
-/// Checks every toMethod, fromMethod, patternName, stubName, dependency.
-/// If any name doesn't match the registry, returns a ScanError listing what's available.
-/// The correction listing is fed back to the model via CorrectionSignal.
+/// Scans ArchitectureContract before the pipeline proceeds.
+/// Validates: Dafny interface structure, method coverage, stub names against registry,
+/// dependency resolution, connection targets.
+/// Registry stays as a reference for name validation (stubs, types).
 /// </summary>
 public static class ContractScanner
 {
@@ -33,39 +33,32 @@ public static class ContractScanner
 
         foreach (var comp in contract.Components)
         {
-            // Check patternName for dafny/mixed modules.
-            // Components WITH connections don't need a patternName — the connections
-            // ARE the spec, the wiring IS the implementation. No dead pattern body.
-            if (comp.Classification != ModuleClassification.IoShell && comp.Connections.Length == 0)
+            // ── Dafny interface validation (new: replaces pattern method checks) ──
+            if (comp.Classification != ModuleClassification.IoShell)
             {
-                // null patternName = custom Dafny (no cut-out). Valid — skip validation.
-                if (string.IsNullOrWhiteSpace(comp.PatternName))
-                    continue;
-                if (!registry.HasPattern(comp.PatternName!))
+                if (!string.IsNullOrWhiteSpace(comp.DafnyInterface))
                 {
-                    errors.Add(new ScanError(comp.Name, "patternName", comp.PatternName!,
-                        "does not exist in the pattern registry",
-                        registry.GetAllPatterns().Select(p => p.Name).ToArray()));
+                    errors.AddRange(ValidateDafnyInterface(comp));
                 }
-                else
+                else if (string.IsNullOrWhiteSpace(comp.PatternName))
                 {
-                    // For cut-outs: check the model's declared method signatures match
-                    // the REAL method names from the Dafny source. The model must use
-                    // the real names, not invented ones.
-                    // EXCEPTION: error-path methods (WriteError, PrintError) are custom
-                    // additions by the architect for error handling — they won't be on
-                    // the cut-out. Allow them when branching is present.
+                    // No interface AND no pattern — can't create skeleton
+                    errors.Add(new ScanError(comp.Name, "dafnyInterface", "(missing)",
+                        "is null and patternName is null — the architect must provide a Dafny interface for dafny components",
+                        []));
+                }
+                // Legacy: pattern-based components still validated against registry
+                else if (registry.HasPattern(comp.PatternName!))
+                {
                     var realSigs = registry.GetMethodSignatures(comp.PatternName!);
                     if (realSigs.Count > 0)
                     {
                         var realMethodNames = realSigs.Select(s => s.Name).ToHashSet();
-                        // Check if this component has branching
                         var hasBranching = !string.IsNullOrWhiteSpace(comp.BranchCondition)
                             || comp.MethodSignatures.Any(m =>
                                 (m.ReturnDafnyType ?? m.ReturnType ?? "").Equals("bool", StringComparison.OrdinalIgnoreCase));
                         foreach (var ms in comp.MethodSignatures)
                         {
-                            // Skip error-path methods when branching is present
                             if (hasBranching && IsErrorPathMethod(ms.Name))
                                 continue;
                             if (!realMethodNames.Contains(ms.Name))
@@ -73,12 +66,18 @@ public static class ContractScanner
                                 errors.Add(new ScanError(comp.Name, "methodSignature.name",
                                     ms.Name,
                                     $"does not exist on cut-out '{comp.PatternName}' (real methods: {string.Join(", ", realMethodNames)}). " +
-                                    $"If this component needs methods the cut-out doesn't have, set patternName to null and write custom Dafny. " +
+                                    $"If this component needs methods the cut-out doesn't have, set patternName to null and write a dafnyInterface. " +
                                     $"Do NOT invent method names — use ONLY the real methods listed, or drop the cut-out.",
                                     [.. realMethodNames]));
                             }
                         }
                     }
+                }
+                else
+                {
+                    errors.Add(new ScanError(comp.Name, "patternName", comp.PatternName!,
+                        "does not exist in the pattern registry and no dafnyInterface provided",
+                        registry.GetAllPatterns().Select(p => p.Name).ToArray()));
                 }
             }
 
@@ -138,25 +137,17 @@ public static class ContractScanner
             }
 
             // Declaration/use consistency: every declared method should be used in a
-            // connection. Skip for connection-bearing components (orchestrators) —
-            // their wiring calls other components, not their own methods.
-            // EXCEPTION: when the component has a BranchCondition (error branching),
-            // allow error-path methods (WriteError, PrintError, etc.) to be declared
-            // but unused — they're called in the error branch, not the main chain.
+            // connection. Skip for connection-bearing components (orchestrators).
             if (comp.Connections.Length == 0)
             {
                 var allCalledMethods = new HashSet<string>();
-                // Methods called ON this component (via other components' connections)
                 foreach (var other in contract.Components)
                     foreach (var conn in other.Connections)
                         if (conn.ToComponent == comp.Name)
                             allCalledMethods.Add(conn.ToMethod);
-                // Methods called FROM this component
                 foreach (var conn in comp.Connections)
                     allCalledMethods.Add(conn.FromMethod);
 
-                // Determine if this component has branching (BranchCondition set, or
-                // any method signature returns bool — isValid pattern)
                 var hasBranching = !string.IsNullOrWhiteSpace(comp.BranchCondition)
                     || comp.MethodSignatures.Any(m =>
                         (m.ReturnDafnyType ?? m.ReturnType ?? "").Equals("bool", StringComparison.OrdinalIgnoreCase));
@@ -165,7 +156,6 @@ public static class ContractScanner
                 {
                     if (!allCalledMethods.Contains(declared))
                     {
-                        // Allow error-path methods when branching is present
                         if (hasBranching && IsErrorPathMethod(declared))
                             continue;
                         errors.Add(new ScanError(comp.Name, "methodSignature.name",
@@ -173,6 +163,54 @@ public static class ContractScanner
                             [.. allCalledMethods]));
                     }
                 }
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Validate the Dafny interface written by the architect.
+    /// Checks: module declaration matches component name, method coverage,
+    /// no method bodies, {:extern} portal presence.
+    /// </summary>
+    private static List<ScanError> ValidateDafnyInterface(Component comp)
+    {
+        var errors = new List<ScanError>();
+        var iface = comp.DafnyInterface!;
+
+        // Check module declaration matches component name
+        if (!iface.Contains($"module {comp.Name}", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(new ScanError(comp.Name, "dafnyInterface", "(module)",
+                $"must start with 'module {comp.Name} {{' — module name must match component name",
+                []));
+        }
+
+        // Check every declared MethodSignature appears in the interface
+        foreach (var ms in comp.MethodSignatures)
+        {
+            if (!iface.Contains($"method {ms.Name}", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(new ScanError(comp.Name, "dafnyInterface", ms.Name,
+                    $"declared in methodSignatures but not found in dafnyInterface — every method signature must appear in the interface",
+                    []));
+            }
+        }
+
+        // Check for method bodies (interface should be bodyless — signatures + contracts only)
+        // A body is `{ <statements> }` after a method signature. We look for var/:=/while/return
+        // inside the interface, which indicates the architect wrote implementation, not just interface.
+        var bodyIndicators = new[] { "var ", ":=", "while ", "return " };
+        foreach (var indicator in bodyIndicators)
+        {
+            if (iface.Contains(indicator, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(new ScanError(comp.Name, "dafnyInterface", indicator.Trim(),
+                    $"found in interface — the interface must be BODYLESS (signatures + contracts only). " +
+                    $"DafnyImpl fills in the bodies. Remove '{indicator.Trim()}' statements from the interface.",
+                    []));
+                break; // one warning is enough
             }
         }
 

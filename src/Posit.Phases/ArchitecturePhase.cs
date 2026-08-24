@@ -12,11 +12,13 @@ public sealed class ArchitecturePhase : IPhase
 {
     private readonly IModelGateway _model;
     private readonly PatternRegistry _registry;
+    private readonly WikiSearcher _wiki;
 
     public ArchitecturePhase(IModelGateway model, PatternRegistry registry)
     {
         _model = model;
         _registry = registry;
+        _wiki = new WikiSearcher(new HttpClient());
     }
 
     public PhaseId Id { get; } = new("architecture");
@@ -33,8 +35,25 @@ public sealed class ArchitecturePhase : IPhase
 
     public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
+        // Pre-generation wiki search: find relevant Dafny interface examples
+        var wikiExamples = "";
+        var searchQuery = context.UserRequest ?? "";
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            wikiExamples = await _wiki.SearchAsync(searchQuery, limit: 3, ct);
+            if (!string.IsNullOrWhiteSpace(wikiExamples))
+                Console.Error.WriteLine("[architecture] pre-generation wiki search returned examples");
+        }
+
+        // Inject wiki examples into the system prompt
+        var prompt = context.Prompt;
+        if (!string.IsNullOrWhiteSpace(wikiExamples))
+        {
+            prompt = prompt with { SystemPrompt = prompt.SystemPrompt + "\n" + wikiExamples };
+        }
+
         var result = await _model.GenerateAsync(
-            context.ModelRoute, context.Prompt, context, ct);
+            context.ModelRoute, prompt, context, ct);
 
         if (string.IsNullOrWhiteSpace(result.Text))
             return Fail(context, "Model returned empty output", result);
@@ -64,24 +83,6 @@ public sealed class ArchitecturePhase : IPhase
             chainMsg += "\nFix the method signatures or connection order so types chain correctly.";
             chainMsg += "\nCommon fixes: use ReadLines (seq<string>) for CSV, ReadFile (string) for JSON/text.";
             return Fail(context, chainMsg, result);
-        }
-
-        // Cut-out type cross-check: compare the architect's DECLARED return types
-        // against the cut-out's ACTUAL return types from the registry.
-        // This catches the #1 T4 bug: architect declares CountFrequency returns 'string'
-        // but the cut-out actually returns 'seq<seq<string>>'. The pre-Dafny checker
-        // can't catch this because it trusts the declared types.
-        var cutOutErrors = CheckCutOutTypes(contract, _registry);
-        if (cutOutErrors.Count > 0)
-        {
-            var msg = $"Cut-out type mismatch — {cutOutErrors.Count} error(s):\n";
-            foreach (var e in cutOutErrors)
-                msg += $"  {e}\n";
-            msg += "\nYour declared return types don't match the actual cut-out return types.";
-            msg += "\nFIX: Either (a) match the declared type to the cut-out's actual type,";
-            msg += "\n     (b) write custom Dafny instead of using this cut-out, or";
-            msg += "\n     (c) add a serialization step that converts the cut-out output to string.";
-            return Fail(context, msg, result);
         }
 
         return Success(context, contract, result);
@@ -120,10 +121,20 @@ public sealed class ArchitecturePhase : IPhase
         {
             if (comp.Classification == ModuleClassification.IoShell) continue;
 
-            // null patternName = custom Dafny (no cut-out). DafnyImplementationPhase
-            // will generate it from the reference card + method signatures. Z3 verifies.
+            // Primary path: architect wrote the Dafny interface — write it to disk as the carapace
+            if (!string.IsNullOrWhiteSpace(comp.DafnyInterface))
+            {
+                var path = Path.Combine(stagingDir, $"{comp.Name}.dfy");
+                File.WriteAllText(path, comp.DafnyInterface);
+                continue;
+            }
+
+            // Legacy path: pattern-based skeleton composition from registry
             if (string.IsNullOrWhiteSpace(comp.PatternName))
-                continue; // valid: custom Dafny, no skeleton to compose
+            {
+                errors.Add($"Component '{comp.Name}' has no dafnyInterface and no patternName — cannot create skeleton");
+                continue;
+            }
 
             if (!_registry.HasPattern(comp.PatternName!))
             {
@@ -133,8 +144,8 @@ public sealed class ArchitecturePhase : IPhase
 
             var skeleton = _registry.ComposeSkeleton(
                 comp.PatternName!, comp.StubNames, comp.Name);
-            var path = Path.Combine(stagingDir, $"{comp.Name}.dfy");
-            File.WriteAllText(path, skeleton);
+            var legacyPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
+            File.WriteAllText(legacyPath, skeleton);
 
             // Materialize pattern dependencies (includes like result.dfy)
             _registry.MaterializeDependencies(stagingDir, comp.PatternName!);
@@ -146,85 +157,6 @@ public sealed class ArchitecturePhase : IPhase
     private static string GetStagingDir(PhaseContext context) =>
         Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging",
             context.SessionId.Value, "dafny");
-
-    /// <summary>
-    /// Cross-check declared method return types against the cut-out's ACTUAL
-    /// return types from the registry. The architect often declares a return
-    /// type of 'string' when the cut-out actually returns 'seq<seq<string>>'.
-    /// This catches that BEFORE Dafny runs, so the correction routes to the
-    /// architect with the actual types.
-    /// </summary>
-    private static List<string> CheckCutOutTypes(ArchitectureContract contract, PatternRegistry registry)
-    {
-        var errors = new List<string>();
-        foreach (var comp in contract.Components)
-        {
-            if (comp.Classification == ModuleClassification.IoShell) continue;
-            if (string.IsNullOrWhiteSpace(comp.PatternName)) continue;
-            if (!registry.HasPattern(comp.PatternName!)) continue;
-
-            var realSigs = registry.GetMethodSignatures(comp.PatternName!);
-            if (realSigs.Count == 0) continue;
-
-            foreach (var declared in comp.MethodSignatures)
-            {
-                // Find the matching real method by name
-                var realSig = realSigs.FirstOrDefault(s => s.Name == declared.Name);
-                if (realSig == null) continue; // name mismatch caught by ContractScanner
-
-                var declaredRet = !string.IsNullOrWhiteSpace(declared.ReturnDafnyType)
-                    ? declared.ReturnDafnyType : declared.ReturnType;
-                // Real return type may include "name: type" prefix from Dafny returns clause
-                // e.g. "tokens: seq<string>" — strip the name prefix
-                var rawRealRet = realSig.ReturnType ?? "void";
-                var realRet = StripDafnyReturnName(rawRealRet);
-
-                // Normalize for comparison
-                var dNorm = declaredRet.Trim();
-                var rNorm = realRet.Trim();
-
-                if (dNorm == rNorm) continue;
-
-                // Check if they're compatible (same depth seq, etc.)
-                // string vs seq<...> is a mismatch unless the seq is 1D (string↔seq<string> is OK)
-                bool dIsSeq = dNorm.Contains("seq<");
-                bool rIsSeq = rNorm.Contains("seq<");
-                if (dIsSeq || rIsSeq)
-                {
-                    // seq<string> ↔ string is OK (1D, join/split at boundary)
-                    if ((dNorm == "string" && rNorm == "seq<string>") ||
-                        (rNorm == "string" && dNorm == "seq<string>"))
-                        continue;
-                    // Different types — mismatch
-                    errors.Add($"Component '{comp.Name}': method '{declared.Name}' declared as returning '{dNorm}' " +
-                               $"but cut-out '{comp.PatternName}' actually returns '{rNorm}'. " +
-                               $"Either declare the correct return type, or don't use this cut-out.");
-                }
-            }
-        }
-        return errors;
-    }
-
-    /// <summary>
-    /// Strip the "name: " prefix from a Dafny return type.
-    /// Dafny returns clause is "returns (name: type, name2: type2)" — the regex
-    /// captures the full content. We only want the type, not the name.
-    /// e.g. "tokens: seq<string>" → "seq<string>"
-    ///      "result: seq<seq<string>>" → "seq<seq<string>>"
-    /// For multi-return, take the first type (the data return).
-    /// </summary>
-    private static string StripDafnyReturnName(string raw)
-    {
-        var s = raw.Trim();
-        // Handle comma-separated multi-return: take first
-        if (s.Contains(','))
-            s = s.Split(',')[0].Trim();
-        // Strip "name: " prefix
-        var colonIdx = s.IndexOf(':');
-        if (colonIdx >= 0)
-            s = s[(colonIdx + 1)..].Trim();
-        return s;
-    }
 
     private static PhaseResult Fail(PhaseContext ctx, string error, GenerationResult gen) => new()
     {

@@ -16,8 +16,9 @@ using Posit.AI.Models;
 public sealed class WireFixer
 {
     private readonly IModelGateway _model;
+    private readonly WikiSearcher _wiki;
 
-    public WireFixer(IModelGateway model) => _model = model;
+    public WireFixer(IModelGateway model) { _model = model; _wiki = new WikiSearcher(new HttpClient()); }
 
     /// <summary>
     /// Fix compile errors in Wire.cs. Returns the fixed C# code, or null if
@@ -36,7 +37,18 @@ public sealed class WireFixer
         // Previously everything was in SystemPrompt and the user message was generic boilerplate
         // — the model ignored the type definitions because they were in the system message.
         var systemPrompt = BuildSystemPrompt();
-        var userPrompt = BuildUserContent(wireCsContent, compileErrors, translatedCSharpTypes);
+
+        // Wiki search: find relevant examples for the compile errors
+        var wikiExamples = "";
+        if (compileErrors.Length > 0)
+        {
+            var errorQuery = string.Join(" ", compileErrors.Take(3).Select(e => e.Length > 100 ? e[..100] : e));
+            wikiExamples = await _wiki.SearchAsync(errorQuery, limit: 2, ct);
+            if (!string.IsNullOrWhiteSpace(wikiExamples))
+                Console.Error.WriteLine("[wire-fixer] wiki search returned examples");
+        }
+
+        var userPrompt = BuildUserContent(wireCsContent, compileErrors, translatedCSharpTypes, wikiExamples);
 
         // Inject the actual content into the user message via UserRequest
         context = context with { UserRequest = userPrompt };
@@ -145,7 +157,7 @@ public sealed class WireFixer
     /// User content: errors + type definitions + Wire.cs. This goes in the USER message
     /// where the model's attention actually goes (not the system message).
     /// </summary>
-    private static string BuildUserContent(string wireCsContent, string[] compileErrors, string? translatedCSharpTypes)
+    private static string BuildUserContent(string wireCsContent, string[] compileErrors, string? translatedCSharpTypes, string wikiExamples = "")
     {
         var sb = new StringBuilder();
         sb.AppendLine("═══ PROBLEMS TO FIX ═══");
@@ -157,6 +169,12 @@ public sealed class WireFixer
         {
             sb.AppendLine("═══ TRANSLATED C# TYPE DEFINITIONS (use THESE exact property names — note the dtor_ prefix!) ═══");
             sb.AppendLine(translatedCSharpTypes);
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(wikiExamples))
+        {
+            sb.AppendLine(wikiExamples);
             sb.AppendLine();
         }
 

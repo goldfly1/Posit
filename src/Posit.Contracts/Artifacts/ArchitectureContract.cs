@@ -36,6 +36,13 @@ public record Component(
     public SharedTypeRef[] SharedTypes { get; init; } = [];
 
     /// <summary>
+    /// The Dafny interface written by the architect — module declaration, types,
+    /// method signatures with requires/ensures, {:extern} portals. Written to .dfy
+    /// on disk as the carapace. Null for io-shell components.
+    /// </summary>
+    public string? DafnyInterface { get; init; }
+
+    /// <summary>
     /// Data flow spec: how the orchestrator component reads input.
     /// "file" = args[0] is a file path (use ReadFile/ReadLines).
     /// "stdin" = read from Console.ReadLine().

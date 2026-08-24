@@ -170,56 +170,6 @@ public sealed class DafnyImplementationPhase : IPhase
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            // Check for repeated error class — escalate to pseudocode re-reduction
-            if (attempt >= 2 && errorClassHistory.Count >= 2)
-            {
-                var lastTwo = errorClassHistory.TakeLast(2).ToList();
-                // Same class twice → escalate
-                // Also: alternating parse-error / while-in-function → same root cause (function misuse)
-                var sameClass = lastTwo[0] == lastTwo[1] && lastTwo[0] != "unknown";
-                var functionFamily = (lastTwo[0] == "while-in-function" && lastTwo[1] == "parse-error") ||
-                                     (lastTwo[0] == "parse-error" && lastTwo[1] == "while-in-function");
-                if (sameClass || functionFamily)
-                {
-                    var escalateReason = sameClass ? lastTwo[0] : "function-misuse (alternating parse-error/while-in-function)";
-                    Console.Error.WriteLine($"[dafny-impl] {comp.Name} error pattern '{escalateReason}' — escalating to pseudocode re-reduction");
-
-                    var improvedPseudocode = await ReReducePseudocodeAsync(
-                        comp, context, currentPseudocode, currentDafny!, currentErrors, ct);
-
-                    if (improvedPseudocode != null && improvedPseudocode != currentPseudocode)
-                    {
-                        Console.Error.WriteLine($"[dafny-impl] {comp.Name} pseudocode re-reduced — retrying DafnyImpl from improved pseudocode");
-                        currentPseudocode = improvedPseudocode;
-                        // Reset to first attempt with new pseudocode — fresh start
-                        var freshDafny = await GenerateDafnyWithPseudocodeAsync(comp, context, improvedPseudocode, ct);
-                        if (!string.IsNullOrWhiteSpace(freshDafny))
-                        {
-                            currentDafny = freshDafny;
-                            await File.WriteAllTextAsync(dafnyPath, freshDafny, ct);
-                            var reVerifyResult = await _z3.VerifyAsync(dafnyPath, ct);
-                            if (reVerifyResult.Success)
-                            {
-                                var reTranslation = await _z3.TranslateAsync(dafnyPath, comp.Name, ct);
-                                if (reTranslation.Success && !string.IsNullOrWhiteSpace(reTranslation.CleanCsharp))
-                                {
-                                    Console.Error.WriteLine($"[dafny-impl] {comp.Name} Z3 verified + translated after re-reduction");
-                                    return (freshDafny, true, null, reTranslation.CleanCsharp, dafnyPath);
-                                }
-                            }
-                            // Still failing — continue the loop with the new pseudocode
-                            currentErrors = reVerifyResult.Errors.Length > 0
-                                ? reVerifyResult.Errors.Take(10).ToArray()
-                                : new[] { reVerifyResult.Stdout[..Math.Min(500, reVerifyResult.Stdout.Length)] };
-                            errorClassHistory.Add(ClassifyError(currentErrors));
-                            continue;
-                        }
-                    }
-                    // Re-reduction didn't help — fall through to normal retry
-                    Console.Error.WriteLine($"[dafny-impl] {comp.Name} re-reduction did not produce usable pseudocode — continuing with DafnyFixer");
-                }
-            }
-
             // Generate (or fix) the Dafny
             var generated = attempt == 0
                 ? await GenerateDafnyAsync(comp, context, ct)

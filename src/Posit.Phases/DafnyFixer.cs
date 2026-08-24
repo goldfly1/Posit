@@ -26,11 +26,13 @@ public sealed class DafnyFixer
 {
     private readonly IModelGateway _model;
     private readonly Z3Runner _z3;
+    private readonly WikiSearcher _wiki;
 
     public DafnyFixer(IModelGateway model, Z3Runner z3)
     {
         _model = model;
         _z3 = z3;
+        _wiki = new WikiSearcher(new HttpClient());
     }
 
     /// <summary>
@@ -53,7 +55,17 @@ public sealed class DafnyFixer
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            var systemPrompt = BuildFixerPrompt(currentSource, moduleName, responsibility, testCaseDescriptions, currentErrors);
+            // Wiki search: find relevant Dafny examples for the current errors
+            var wikiExamples = "";
+            if (_wiki != null && currentErrors.Length > 0)
+            {
+                var errorQuery = $"{moduleName} {string.Join(" ", currentErrors.Take(3))}";
+                wikiExamples = await _wiki.SearchAsync(errorQuery, limit: 2, ct);
+                if (!string.IsNullOrWhiteSpace(wikiExamples))
+                    Console.Error.WriteLine($"[dafny-fixer] wiki search returned examples for attempt {attempt + 1}");
+            }
+
+            var systemPrompt = BuildFixerPrompt(currentSource, moduleName, responsibility, testCaseDescriptions, currentErrors, wikiExamples);
 
             var prompt = new PromptTemplate
             {
@@ -152,7 +164,8 @@ public sealed class DafnyFixer
         string moduleName,
         string responsibility,
         string[] testCaseDescriptions,
-        string[] fixInstructions)
+        string[] fixInstructions,
+        string wikiExamples = "")
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are a Dafny logic fixer. The module below compiles and passes Z3 verification,");
@@ -183,8 +196,13 @@ public sealed class DafnyFixer
         sb.AppendLine();
 
         sb.AppendLine("Dafny syntax: method (not function), while+invariant, :=, char(), seq<T>, map[K,V].");
-        
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(wikiExamples))
+        {
+            sb.AppendLine(wikiExamples);
+            sb.AppendLine();
+        }
 
         sb.AppendLine("═══ DAFNY SOURCE TO FIX ═══");
         sb.AppendLine(dafnySource);
