@@ -88,7 +88,14 @@ public static class PromptBuilder
                 sb.AppendLine($"  {s.Name}{kws}");
             }
             sb.AppendLine();
-            sb.AppendLine("For CSV: ReadLines (seq<string>). For JSON/text: ReadFile (string).");
+            sb.AppendLine("STUB SELECTION — match the stub to the Dafny method's input type:");
+            sb.AppendLine("  If the Dafny method takes seq<string> (lines): use ReadLines (returns string[] → seq<string>).");
+            sb.AppendLine("  If the Dafny method takes string (file content): use ReadFile (returns string).");
+            sb.AppendLine("  If the Dafny method takes int/bool: parse from string args.");
+            sb.AppendLine("CONNECTION CHAIN: the orchestrator's Run method calls the stub FIRST, then passes the result to the Dafny method.");
+            sb.AppendLine("  Example: Run(filePath) → ReadLines(filePath) → AnalyzeLogs(lines, filterLevel)");
+            sb.AppendLine("  The connection fromMethod is the stub call (ReadLines/ReadFile), NOT Run directly to the Dafny method.");
+            sb.AppendLine("  argMappings map the orchestrator arg to the stub arg.");
             sb.AppendLine();
         }
 
