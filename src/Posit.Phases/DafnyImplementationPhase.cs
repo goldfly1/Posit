@@ -382,7 +382,7 @@ public sealed class DafnyImplementationPhase : IPhase
             sb.AppendLine();
         }
 
-        // Lean rules — 3 rules, not 8
+        // Lean rules — 3 rules + DON'T block
         sb.AppendLine("Rules:");
         sb.AppendLine("1. Output ONLY raw Dafny code starting with 'module'. No JSON, no markdown, no explanations.");
         sb.AppendLine("2. 'function' = pure expression (NO var, NO :=, NO while, NO return). Used in requires/ensures.");
@@ -390,6 +390,18 @@ public sealed class DafnyImplementationPhase : IPhase
         sb.AppendLine("   If a helper needs var or loops, it MUST be a 'method'. Call it from the method body, not from ensures.");
         sb.AppendLine("   If a helper is a pure calculation (e.g. ConvertCtoF(v: real): real { v * 9.0 / 5.0 + 32.0 }), use 'function'.");
         sb.AppendLine("3. Add invariants and decreases for loops. The code must pass Z3 verification.");
+        sb.AppendLine();
+        sb.AppendLine("DON'T LET THIS HAPPEN TO YOU — these ALWAYS fail:");
+        sb.AppendLine("  - function with var/while/:= → must be method (function is pure expression only)");
+        sb.AppendLine("  - while without invariant + decreases → Z3 always rejects. Keep invariants SIMPLE (0 <= i <= n).");
+        sb.AppendLine("  - method call in requires/ensures → must be function");
+        sb.AppendLine("  - set comprehension without type: {j | ...} → must be {j: int | ...}");
+        sb.AppendLine("  - (char) casts, new string[], C-style for loops → C#-isms, not Dafny");
+        sb.AppendLine("  - method called in expression (e.g. string concat) → must be function or use var first");
+        sb.AppendLine("  - map[K]V → must be map<K, V> (comma, angle brackets)");
+        sb.AppendLine("  - seq[T] → must be seq<T> (angle brackets, not square)");
+        sb.AppendLine("  - complex invariants → Z3 can't prove them. Use simple bounds (0 <= i <= n), let ensures capture the math.");
+        sb.AppendLine("  - don't reinvent string splitting as recursive function → use method with while loop");
 
         return sb;
     }

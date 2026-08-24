@@ -43,9 +43,12 @@ public static class StaticChecker
             if (funcBody.Contains("while") || funcBody.Contains("var ") ||
                 funcBody.Contains(":=") || funcBody.Contains("return"))
             {
+                // Extract the function name for a more specific error message
+                var funcNameMatch = Regex.Match(dafnySource[funcStart..], @"function\s+(\w+)");
+                var funcName = funcNameMatch.Success ? funcNameMatch.Groups[1].Value : "?";
                 issues.Add(new StaticIssue(
                     "function-with-imperative-body",
-                    $"Line {GetLineNumber(dafnySource, m.Index)}: 'function' with loops/assignment. Change to 'method'. Functions are pure expressions — no while, var, :=, or return."));
+                    $"Line {GetLineNumber(dafnySource, m.Index)}: 'function {funcName}' has var/while/:=/return — these are ILLEGAL in a function. Replace 'function {funcName}' with 'method {funcName}' (and add 'returns' clause). Functions are pure expressions only."));
             }
             // Pure functions (no loops/assignment) are ALLOWED — they can be called in requires/ensures
         }
