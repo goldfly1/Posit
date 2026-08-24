@@ -130,28 +130,30 @@ public sealed class OllamaModelGateway : IModelGateway
 
     private static string BuildUserPrompt(PromptTemplate prompt, PhaseContext context)
     {
-        var sb = new StringBuilder();
+        // If the phase has built its own user prompt (replaced UserRequest with its own content),
+        // send it as-is. The phase knows what it needs — don't add boilerplate, artifacts,
+        // or corrections on top. This is the case for DafnyImpl, WireFixer, and DafnyFixer.
+        // We detect this by checking if UserRequest contains phase-specific markers.
+        if (!string.IsNullOrWhiteSpace(context.UserRequest)
+            && (context.UserRequest.Contains("═══", StringComparison.Ordinal)
+                || context.UserRequest.Contains("INTERFACE DEFINITION", StringComparison.OrdinalIgnoreCase)
+                || context.UserRequest.Contains("WIRE.CS", StringComparison.OrdinalIgnoreCase)
+                || context.UserRequest.Contains("DAFNY SOURCE", StringComparison.OrdinalIgnoreCase)))
+        {
+            return context.UserRequest;
+        }
 
-        sb.AppendLine($"You are executing the '{context.PhaseId.Value}' phase of a software development lifecycle.");
-        sb.AppendLine();
+        var sb = new StringBuilder();
 
         if (!string.IsNullOrWhiteSpace(context.UserRequest))
         {
-            sb.AppendLine("User request:");
             sb.AppendLine(context.UserRequest);
             sb.AppendLine();
         }
 
-        // ── Correction Signal — feed validation errors back to the model ──
-        // Only inject if the phase hasn't already built its own correction prompt.
-        // DafnyImpl, DafnyFixer, and WireFixer build targeted correction prompts with
-        // the full previous code + specific errors. The gateway's generic injection
-        // would duplicate that, adding noise and confusing the model.
-        var phaseHandlesCorrections = prompt.SystemPrompt.Contains("YOUR PREVIOUS CODE", StringComparison.OrdinalIgnoreCase)
-            || prompt.SystemPrompt.Contains("Z3 ERRORS", StringComparison.OrdinalIgnoreCase)
-            || prompt.SystemPrompt.Contains("PROBLEMS TO FIX", StringComparison.OrdinalIgnoreCase);
-
-        if (context.CorrectionSignal is { Length: > 0 } && !phaseHandlesCorrections)
+        // CorrectionSignal — only for phases that don't build their own correction prompts.
+        // Architecture relies on this for retry feedback.
+        if (context.CorrectionSignal is { Length: > 0 })
         {
             sb.AppendLine("═══ CORRECTION SIGNAL — your previous output had these errors ═══");
             sb.AppendLine("Fix ALL of the following before resubmitting:");
@@ -161,43 +163,12 @@ public sealed class OllamaModelGateway : IModelGateway
                 sb.AppendLine($"• {signal}");
             }
             sb.AppendLine();
-
-            // Include the model's previous output so it can do a targeted fix
-            // instead of rewriting from scratch and repeating the same mistake.
-            // Truncate to 3000 chars to avoid drowning the model in its own output —
-            // the model needs to see the structure, not re-read every field.
-            if (!string.IsNullOrWhiteSpace(context.PreviousOutput))
-            {
-                var prevOutput = context.PreviousOutput;
-                if (prevOutput.Length > 3000)
-                    prevOutput = prevOutput[..3000] + "\n... (truncated — fix the errors above, keep the rest)";
-                sb.AppendLine("═══ YOUR PREVIOUS OUTPUT (fix this, don't rewrite from scratch) ═══");
-                sb.AppendLine(prevOutput);
-                sb.AppendLine();
-                sb.AppendLine("═══ END PREVIOUS OUTPUT ═══");
-                sb.AppendLine();
-                sb.AppendLine("Look at your previous output above, find the specific field(s) that caused");
-                sb.AppendLine("the errors, and fix ONLY those fields. Keep everything else unchanged.");
-            }
-
             sb.AppendLine("═══ END CORRECTION SIGNAL ═══");
             sb.AppendLine();
         }
 
-        if (!string.IsNullOrWhiteSpace(context.InheritedDecisions))
-        {
-            sb.AppendLine("Inherited decisions from previous phases:");
-            sb.AppendLine(context.InheritedDecisions);
-            sb.AppendLine();
-        }
-
-        if (!string.IsNullOrWhiteSpace(prompt.OutputFormatSpec))
-        {
-            sb.AppendLine("Output format specification:");
-            sb.AppendLine(prompt.OutputFormatSpec);
-            sb.AppendLine();
-        }
-
+        // Input artifacts — only for phases that need them (Architecture is first phase, has none;
+        // QA needs test cases; other phases extract what they need themselves).
         foreach (var artifact in context.InputArtifacts)
         {
             var payloadJson = Encoding.UTF8.GetString(artifact.PayloadJson);
