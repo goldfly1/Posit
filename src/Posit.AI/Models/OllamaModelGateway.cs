@@ -143,17 +143,15 @@ public sealed class OllamaModelGateway : IModelGateway
         }
 
         // ── Correction Signal — feed validation errors back to the model ──
-        // When a phase fails validation, the orchestrator stores the errors as
-        // CorrectionSignal in the session state. On retry, BuildContext passes them
-        // into PhaseContext. The gateway injects them here so the model sees exactly
-        // what was wrong and what's available to fix it. This is the carapace closing
-        // the loop: reject → send back with listing → model fixes → re-scan → repeat.
-        //
-        // CRITICAL: The model must see its OWN PREVIOUS OUTPUT alongside the errors.
-        // Without it, the model rewrites from scratch and makes the same mistake.
-        // With it, the model can do a targeted fix: "I see my JSON had X, the error
-        // says Y, I need to change X to fix Y." This is what a human does.
-        if (context.CorrectionSignal is { Length: > 0 })
+        // Only inject if the phase hasn't already built its own correction prompt.
+        // DafnyImpl, DafnyFixer, and WireFixer build targeted correction prompts with
+        // the full previous code + specific errors. The gateway's generic injection
+        // would duplicate that, adding noise and confusing the model.
+        var phaseHandlesCorrections = prompt.SystemPrompt.Contains("YOUR PREVIOUS CODE", StringComparison.OrdinalIgnoreCase)
+            || prompt.SystemPrompt.Contains("Z3 ERRORS", StringComparison.OrdinalIgnoreCase)
+            || prompt.SystemPrompt.Contains("PROBLEMS TO FIX", StringComparison.OrdinalIgnoreCase);
+
+        if (context.CorrectionSignal is { Length: > 0 } && !phaseHandlesCorrections)
         {
             sb.AppendLine("═══ CORRECTION SIGNAL — your previous output had these errors ═══");
             sb.AppendLine("Fix ALL of the following before resubmitting:");
