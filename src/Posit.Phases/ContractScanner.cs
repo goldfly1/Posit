@@ -104,13 +104,16 @@ public static class ContractScanner
 
             // Declaration/use consistency: every declared method should be used in a
             // connection. Skip for connection-bearing components (orchestrators).
-            if (comp.Connections.Length == 0)
+            if (comp.Connections is { Length: 0 })
             {
                 var allCalledMethods = new HashSet<string>();
                 foreach (var other in contract.Components)
+                {
+                    if (other.Connections == null) continue;
                     foreach (var conn in other.Connections)
-                        if (conn.ToComponent == comp.Name)
+                        if (conn?.ToComponent == comp.Name)
                             allCalledMethods.Add(conn.ToMethod);
+                }
                 foreach (var conn in comp.Connections)
                     allCalledMethods.Add(conn.FromMethod);
 

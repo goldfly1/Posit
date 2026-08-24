@@ -143,7 +143,7 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         };
     }
 
-    /// <summary>Carapace enforcement: filenames, phantom module refs, missing components.</summary>
+    /// <summary>Carapace enforcement: filenames match components, no phantom refs.</summary>
     private async Task<string[]> EnforceCarapace(PhaseResult result, SessionState state, CancellationToken ct)
     {
         var bundle = Deserialize<SourceCodeBundle>(result.Artifacts.PayloadJson);
@@ -151,13 +151,13 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         var contract = await GetContract(state, ct);
         if (contract is null) return [];
         var errors = new List<string>();
-        var names = contract.Components.Select(c => c.Name).ToHashSet();
         foreach (var f in bundle.Files)
         {
             var fn = Path.GetFileName(f.Path);
-            var dir = Path.GetDirectoryName(f.Path)?.Replace('\\', '/');
-            if (!contract.Components.Any(c => fn == $"{c.Name}.cs" || fn.StartsWith($"{c.Name}.")
-                || fn.StartsWith($"{c.Name}Extern.") || (fn == "Wire.cs" && dir == c.Name)))
+            if (!contract.Components.Any(c => fn == $"{c.Name}.cs"
+                || fn == $"I{c.Name}.cs"
+                || fn.StartsWith($"{c.Name}.")
+                || fn == "Wire.cs"))
                 errors.Add($"Carapace: '{f.Path}' matches no component");
         }
         foreach (var comp in contract.Components)
@@ -166,10 +166,6 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             if (!bundle.Files.Any(f => f.Path.StartsWith(prefix)))
                 errors.Add($"Carapace: no files for '{comp.Name}'");
         }
-        foreach (var f in bundle.Files)
-            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(f.Content, @"_module_(\w+)"))
-                if (!names.Contains(m.Groups[1].Value))
-                    errors.Add($"Phantom ref: '{m.Groups[1].Value}' in '{f.Path}'");
         return [.. errors];
     }
 

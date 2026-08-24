@@ -47,7 +47,7 @@ public enum OutputFormat { Json, Markdown, Yaml, Xml, PlainText }
 [JsonConverter(typeof(ModuleClassificationConverter))]
 public enum ModuleClassification
 {
-    Dafny,
+    Logic,
     IoShell,
     Mixed
 }
