@@ -122,7 +122,7 @@ public sealed class WireFixer
     private static string BuildSystemPrompt()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are a C# code fixer. The file Wire.cs has compile errors.");
+        sb.AppendLine("You are a Senior C# Developer. The file Wire.cs has compile errors.");
         sb.AppendLine("Fix ONLY the errors listed in the user message. Keep everything else unchanged.");
         sb.AppendLine("Output the complete fixed Wire.cs file — ONLY C# code, no explanations, no markdown fences.");
         sb.AppendLine();

@@ -191,8 +191,7 @@ public sealed class QaPhase : IPhase
         var isStdin = entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase);
 
         var systemPrompt = $"""
-            You are the QA phase of the Posit spec compiler.
-            Generate test data for this program based on the spec and the architect's test cases.
+            You are a Senior QA Engineer. Generate test data for this program based on the spec and the architect's test cases.
 
             Spec: {spec}
 

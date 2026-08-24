@@ -333,7 +333,7 @@ public sealed class DafnyImplementationPhase : IPhase
         var sb = new StringBuilder();
         if (isCorrection)
         {
-            sb.AppendLine("You are a Dafny coder fixing code that Z3 rejected.");
+            sb.AppendLine("You are a Senior Dafny Developer fixing code that Z3 rejected.");
             sb.AppendLine("Fix the specific lines that caused the errors. Keep everything else unchanged.");
             sb.AppendLine();
 
@@ -349,7 +349,7 @@ public sealed class DafnyImplementationPhase : IPhase
         }
         else
         {
-            sb.AppendLine("You are a Dafny coder. Implement the method bodies in the interface definition below.");
+            sb.AppendLine("You are a Senior Dafny Developer. Implement the method bodies in the interface definition below.");
             sb.AppendLine("The pseudocode IS the algorithm — translate it into valid Dafny. Do not redesign the logic.");
             sb.AppendLine();
         }

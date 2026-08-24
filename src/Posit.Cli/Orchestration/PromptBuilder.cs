@@ -17,7 +17,7 @@ public static class PromptBuilder
         var (system, format) = phaseId.Value switch
         {
             "architecture" => (BuildArchitecturePrompt(registry), BuildArchitectureFormat()),
-            _ => ($"You are executing the {phaseId.Value} phase of the Posit spec compiler. " +
+            _ => ($"You are a Senior Developer executing the {phaseId.Value} phase of the Posit spec compiler. " +
                   "Follow the input artifacts and correction signals. Respond with valid JSON only.",
                   "{ }")
         };
@@ -34,8 +34,7 @@ public static class PromptBuilder
     private static string BuildArchitecturePrompt(PatternRegistry? registry)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are the Architecture phase of the Posit spec compiler.");
-        sb.AppendLine("Decompose the user's spec into components that will be verified in Dafny and wired in C#.");
+        sb.AppendLine("You are a Senior Software Architect. Your job: decompose the user's spec into components that will be verified in Dafny and wired in C#.");
         sb.AppendLine();
         sb.AppendLine("KEEP IT SIMPLE: 2-3 components. One io-shell for I/O, one or two dafny for logic.");
         sb.AppendLine("NEVER more than 4. Over-decomposition is the #1 cause of failure.");

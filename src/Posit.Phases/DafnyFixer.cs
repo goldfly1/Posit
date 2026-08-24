@@ -168,7 +168,7 @@ public sealed class DafnyFixer
         string wikiExamples = "")
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are a Dafny logic fixer. The module below compiles and passes Z3 verification,");
+        sb.AppendLine("You are a Senior Dafny Developer. The module below compiles and passes Z3 verification,");
         sb.AppendLine("but produces WRONG OUTPUT when tested. The logic is incorrect (\"cotton candy\").");
         sb.AppendLine("Fix ONLY the logic that causes the test failures. Keep method signatures,");
         sb.AppendLine("{:extern} declarations, and requires/ensures contracts unchanged.");
