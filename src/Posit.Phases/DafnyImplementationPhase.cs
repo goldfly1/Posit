@@ -171,6 +171,7 @@ public sealed class DafnyImplementationPhase : IPhase
         string[] currentErrors = [];
         var errorClassHistory = new List<string>();  // track error classes for escalation
         var currentPseudocode = ExtractPseudocodeForComponent(comp.Name, context);
+        string? previousOutput = null;  // track for stuck-output detection
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
@@ -184,6 +185,15 @@ public sealed class DafnyImplementationPhase : IPhase
                 Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}: model returned empty");
                 return (null, false, "Model returned empty output", null, dafnyPath);
             }
+
+            // Stuck-output detection: if the model generates identical output twice,
+            // stop retrying — the correction signal isn't changing the model's behavior.
+            if (previousOutput != null && generated == previousOutput)
+            {
+                Console.Error.WriteLine($"[dafny-impl] {comp.Name} attempt {attempt + 1}: identical to previous — model is stuck, stopping correction loop");
+                return (generated, false, "Model generated identical output twice — correction signal not effective", null, dafnyPath);
+            }
+            previousOutput = generated;
 
             currentDafny = generated;
             await File.WriteAllTextAsync(dafnyPath, generated, ct);

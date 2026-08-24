@@ -194,6 +194,16 @@ public sealed class Z3Runner
         {
             translated.Add(err);
 
+            // ── Z3 verification errors (not parse errors) ──
+            // These are semantic failures: invariants not proved, decreases not bounded,
+            // method calls in expressions, etc. Translate to direct imperatives.
+            var z3Hint = GenerateZ3VerificationHint(err, dafnyPath, sourceLines);
+            if (z3Hint != null)
+            {
+                translated.Add($"  HINT: {z3Hint}");
+                continue; // don't also try CoCo hints
+            }
+
             // Detect generic CoCo parse errors — these all have the ID p_generic_syntax_error
             // and come in flavors like "invalid UnaryExpression", "rbracket expected",
             // "this symbol not expected", etc. The --verbose flag reveals the ID.
@@ -292,6 +302,90 @@ public sealed class Z3Runner
 
         // Generic fallback for opaque errors
         return $"The parser could not understand this line. Dafny's parser gives 'invalid X' errors when it encounters syntax it doesn't recognize. Check that this line uses valid Dafny syntax — see the reference card for correct forms.";
+    }
+
+    /// <summary>
+    /// Translate Z3 verification errors (not parse errors) into direct imperatives.
+    /// These are semantic failures: invariants not proved, decreases not bounded,
+    /// method calls in expression context, postconditions not satisfied.
+    /// The model needs to know exactly what to change, not just what's wrong.
+    /// </summary>
+    private static string? GenerateZ3VerificationHint(string errText, string dafnyPath, string[] sourceLines)
+    {
+        // ── decreases expression must be bounded below by 0 ──
+        if (errText.Contains("decreases expression must be bounded below by 0", StringComparison.OrdinalIgnoreCase))
+        {
+            var lineNum = ExtractLineNumber(errText);
+            if (lineNum != null && lineNum >= 1 && lineNum <= sourceLines.Length)
+            {
+                // Find the while loop's condition to suggest the right decreases
+                var errorLine = sourceLines[lineNum.Value - 1].Trim();
+                // Walk back to find the while condition
+                for (var i = lineNum.Value - 1; i >= 0 && i >= lineNum.Value - 10; i--)
+                {
+                    var l = sourceLines[i].Trim();
+                    if (l.StartsWith("while "))
+                    {
+                        // Extract the condition: while i < |lines| → decreases |lines| - i
+                        var condMatch = System.Text.RegularExpressions.Regex.Match(l, @"while\s+(\w+)\s*<\s*(.+)");
+                        if (condMatch.Success)
+                        {
+                            var counter = condMatch.Groups[1].Value;
+                            var bound = condMatch.Groups[2].Value.Trim();
+                            return $"The decreases clause must be an expression that is always >= 0. Replace your decreases clause with: decreases {bound} - {counter}. This counts down from {bound} to 0 as {counter} increases.";
+                        }
+                    }
+                }
+            }
+            return "The decreases clause must be an expression that is always >= 0. Use `decreases <upperBound> - <counter>` where <counter> increases toward <upperBound>. Example: `decreases |lines| - i` when the loop condition is `i < |lines|`.";
+        }
+
+        // ── invariant could not be proved to be maintained by the loop ──
+        if (errText.Contains("invariant could not be proved to be maintained by the loop", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Z3 cannot prove your invariant is maintained by the loop body. SIMPLIFY the invariant. Use basic bounds like `0 <= i <= |lines|` instead of complex mathematical relationships. Let the postcondition (ensures) capture the mathematical result — the invariant only needs to prove the loop terminates safely.";
+        }
+
+        // ── invariant could not be proved ── (variant without "maintained")
+        if (errText.Contains("invariant could not be proved", StringComparison.OrdinalIgnoreCase) &&
+            !errText.Contains("maintained", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Z3 cannot prove your invariant holds at loop entry. Check that the invariant is true BEFORE the loop starts (at initialization). If the invariant assumes something the loop body establishes, simplify it to only what's provably true at entry.";
+        }
+
+        // ── method call is not allowed to be used in an expression context ──
+        if (errText.Contains("method call is not allowed to be used in an expression context", StringComparison.OrdinalIgnoreCase) ||
+            errText.Contains("expression is not allowed to invoke a method", StringComparison.OrdinalIgnoreCase))
+        {
+            var lineNum = ExtractLineNumber(errText);
+            if (lineNum != null && lineNum >= 1 && lineNum <= sourceLines.Length)
+            {
+                var errorLine = sourceLines[lineNum.Value - 1].Trim();
+                // Extract the method name from the error
+                var methodMatch = System.Text.RegularExpressions.Regex.Match(errText, @"\((\w+)\)");
+                if (methodMatch.Success)
+                {
+                    var methodName = methodMatch.Groups[1].Value;
+                    return $"Method '{methodName}' cannot be called inside an expression. Call it in a separate statement first: `var result: string; {methodName}(arg, result);` then use `result` in the expression. Or change '{methodName}' from `method` to `function` if it's a pure calculation.";
+                }
+            }
+            return "Methods cannot be called inside expressions (string concatenation, conditions, etc.). Call the method in a separate `var` statement first, then use the variable. Or change the method to `function` if it's a pure calculation.";
+        }
+
+        // ── postcondition could not be proved ──
+        if (errText.Contains("could not be proved", StringComparison.OrdinalIgnoreCase) &&
+            (errText.Contains("ensures", StringComparison.OrdinalIgnoreCase) || errText.Contains("postcondition", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Z3 cannot prove your postcondition (ensures clause) holds after the method completes. Either: (1) simplify the postcondition to something the method body actually establishes, or (2) add stronger invariants to help Z3 connect the loop body to the postcondition.";
+        }
+
+        // ── assertion could not be proved ──
+        if (errText.Contains("assertion could not be proved", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Z3 cannot prove an assertion in the code. Check that the asserted condition actually follows from the preceding code. If the assertion is too strong, weaken it or add a preceding assert to help Z3 reason.";
+        }
+
+        return null; // not a Z3 verification error we recognize
     }
 }
 
