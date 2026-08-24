@@ -442,13 +442,18 @@ public sealed class DafnyImplementationPhase : IPhase
             }
 
             // Model may wrap Dafny in JSON — extract by scanning for code-like string property
-            // Check if text contains JSON (starts with { or [ OR has "json" prefix OR contains {" )
+            // Only trigger JSON extraction if the text STARTS with { or [ (actual JSON).
+            // Do NOT trigger on {" appearing inside Dafny code (set literals like {"C", "F"}).
             var trimmedForJson = text.TrimStart();
             if (trimmedForJson.StartsWith('{') || trimmedForJson.StartsWith('[')
-                || trimmedForJson.StartsWith("json", StringComparison.OrdinalIgnoreCase)
-                || trimmedForJson.Contains("{\""))
+                || trimmedForJson.StartsWith("json", StringComparison.OrdinalIgnoreCase))
             {
-                Console.Error.WriteLine($"[dafny-impl] JSON detection fired, text starts: {trimmedForJson[..Math.Min(40, trimmedForJson.Length)]}"); var extracted = ExtractDafnyFromJson(trimmedForJson); if (extracted == null) Console.Error.WriteLine("[dafny-impl] ExtractDafnyFromJson returned null!"); else Console.Error.WriteLine($"[dafny-impl] Extracted {extracted.Length} chars");
+                Console.Error.WriteLine($"[dafny-impl] JSON detection fired, text starts: {trimmedForJson[..Math.Min(40, trimmedForJson.Length)]}");
+                var extracted = ExtractDafnyFromJson(trimmedForJson);
+                if (extracted == null)
+                    Console.Error.WriteLine("[dafny-impl] ExtractDafnyFromJson returned null!");
+                else
+                    Console.Error.WriteLine($"[dafny-impl] Extracted {extracted.Length} chars");
                 if (extracted != null)
                     return CleanDafny(extracted);
             }
