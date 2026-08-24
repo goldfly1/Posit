@@ -26,21 +26,18 @@ public record Component(
 {
     public ComponentTestCase[] TestCases { get; init; } = [];
     public ModuleClassification Classification { get; init; } = ModuleClassification.IoShell;
-    public string? DafnyContractPath { get; init; }
-    public string? PatternName { get; init; }
+    public string? CSharpInterfacePath { get; init; }
     public string[] StubNames { get; init; } = [];
-    public string? ParametersJson { get; init; }
-    public bool IsVerified { get; init; }
     public MethodSignature[] MethodSignatures { get; init; } = [];
     public ConnectionSpec[] Connections { get; init; } = [];
     public SharedTypeRef[] SharedTypes { get; init; } = [];
 
     /// <summary>
-    /// The Dafny interface written by the architect — module declaration, types,
-    /// method signatures with requires/ensures, {:extern} portals. Written to .dfy
-    /// on disk as the carapace. Null for io-shell components.
+    /// The C# interface written by the architect — interface declaration, record types,
+    /// method signatures with XML doc contract intent. Written to .cs on disk as the
+    /// carapace. Null for io-shell components.
     /// </summary>
-    public string? DafnyInterface { get; init; }
+    public string? CSharpInterface { get; init; }
 
     /// <summary>
     /// Data flow spec: how the orchestrator component reads input.
@@ -62,13 +59,12 @@ public record Component(
 public record MethodSignature(
     string Name,
     MethodParam[] Params,
-    string ReturnType,
-    string? ReturnDafnyType)
+    string ReturnType)
 {
     public string? PatternMethod { get; init; }
 }
 
-public record MethodParam(string Name, string Type, string? DafnyType);
+public record MethodParam(string Name, string Type);
 
 public record ConnectionSpec(
     string FromMethod,

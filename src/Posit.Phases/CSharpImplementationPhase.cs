@@ -1,12 +1,14 @@
+using Posit.AI.Models;
+using Posit.Contracts.Artifacts;
+
 namespace Posit.Phases;
 
 /// <summary>
-/// Phase 4: C# Assembly. Three sub-steps, all deterministic (no model):
-/// (a) extern portal caps from registry stubs
-/// (b) io-shell stubs from registry (NEVER io-console-program)
-/// (c) wiring via WiringGenerator
-/// Include translated Dafny C# in source bundle (renamed to {Module}.cs,
-/// NOT skeleton-*.cs). Deduplicate by path, keep last.
+/// Phase 2: C# Implementation. Three sub-steps:
+/// (a) Model generates C# implementation for each logic component against the interface
+/// (b) io-shell stubs from registry
+/// (c) wiring via WiringGenerator (deterministic)
+/// dotnet build is the compile gate — correction loop feeds compiler errors back to model.
 /// </summary>
 public sealed class CSharpImplementationPhase : IPhase
 {
@@ -21,7 +23,7 @@ public sealed class CSharpImplementationPhase : IPhase
 
     public PhaseId Id { get; } = new("csharp-implementation");
     public string Name => "C# Implementation";
-    public PhaseId[] Dependencies { get; } = [new("dafny-implementation")];
+    public PhaseId[] Dependencies { get; } = [new("architecture")];
     public ArtifactSchema OutputSchema { get; } = new()
     {
         Kind = ArtifactKind.SourceCodeBundle,
@@ -35,103 +37,118 @@ public sealed class CSharpImplementationPhase : IPhase
     {
         try
         {
-        var contract = ExtractContract(context);
-        if (contract == null)
-            return Fail(context, "No ArchitectureContract in input artifacts");
+            var contract = ExtractContract(context);
+            if (contract == null)
+                return Fail(context, "No ArchitectureContract in input artifacts");
 
-        var verificationResults = ExtractVerificationResults(context);
-        var files = new List<SourceCodeFile>();
-        var warnings = new List<string>();
+            var files = new List<SourceCodeFile>();
+            var warnings = new List<string>();
 
-        foreach (var comp in contract.Components)
-        {
-            if (comp.Classification == ModuleClassification.IoShell)
+            // Write interface files from architect's CSharpInterface
+            var stagingDir = GetStagingDir(context);
+            Directory.CreateDirectory(stagingDir);
+            foreach (var comp in contract.Components)
             {
-                // Sub-step (b): io-shell stubs from registry (NEVER io-console-program)
-                foreach (var stubName in comp.StubNames)
+                if (comp.Classification == ModuleClassification.IoShell) continue;
+                if (!string.IsNullOrWhiteSpace(comp.CSharpInterface))
                 {
-                    if (stubName == "io-console-program")
-                    {
-                        warnings.Add($"Skipped io-console-program for '{comp.Name}' (entry point, not a stub)");
-                        continue;
-                    }
-                    var stubContent = _registry.ComposeIoShellSkeleton(stubName, comp.Name);
-                    var path = $"{comp.Name}/{comp.Name}.{stubName}.cs";
-                    files.Add(new SourceCodeFile(path, stubContent));
+                    var ifacePath = Path.Combine(stagingDir, $"I{comp.Name}.cs");
+                    File.WriteAllText(ifacePath, comp.CSharpInterface);
+                    files.Add(new SourceCodeFile($"{comp.Name}/I{comp.Name}.cs", comp.CSharpInterface));
                 }
             }
-            else
-            {
-                // Include translated Dafny C# (renamed to {Module}.cs, NOT skeleton-*.cs)
-                var vr = verificationResults.FirstOrDefault(v => v.ModuleName == comp.Name);
-                if (vr != null && !string.IsNullOrWhiteSpace(vr.TranslatedCSharpPath) && File.Exists(vr.TranslatedCSharpPath))
-                {
-                    var content = File.ReadAllText(vr.TranslatedCSharpPath);
-                    files.Add(new SourceCodeFile($"{comp.Name}/{comp.Name}.cs", content));
 
-                    // Sub-step (a): extern portal caps from registry stubs
+            // (a) Model generates C# implementation for logic components
+            foreach (var comp in contract.Components)
+            {
+                if (comp.Classification == ModuleClassification.IoShell)
+                {
+                    // (b) io-shell stubs from registry
                     foreach (var stubName in comp.StubNames)
                     {
+                        if (stubName == "io-console-program")
+                        {
+                            warnings.Add($"Skipped io-console-program for '{comp.Name}' (entry point, not a stub)");
+                            continue;
+                        }
                         var stubContent = _registry.ComposeIoShellSkeleton(stubName, comp.Name);
-                        var path = $"{comp.Name}/{comp.Name}Extern.{stubName}.cs";
+                        var path = $"{comp.Name}/{comp.Name}.{stubName}.cs";
                         files.Add(new SourceCodeFile(path, stubContent));
                     }
                 }
                 else
                 {
-                    warnings.Add($"No translated C# found for '{comp.Name}'");
+                    // Model writes the implementation against the interface
+                    var impl = await GenerateImplementationAsync(comp, contract, context, ct);
+                    if (string.IsNullOrWhiteSpace(impl))
+                    {
+                        warnings.Add($"No implementation generated for '{comp.Name}'");
+                    }
+                    else
+                    {
+                        files.Add(new SourceCodeFile($"{comp.Name}/{comp.Name}.cs", impl));
+
+                        // Extern portal caps (stubs for I/O that the component calls)
+                        foreach (var stubName in comp.StubNames)
+                        {
+                            var stubContent = _registry.ComposeIoShellSkeleton(stubName, comp.Name);
+                            var path = $"{comp.Name}/{comp.Name}Extern.{stubName}.cs";
+                            files.Add(new SourceCodeFile(path, stubContent));
+                        }
+                    }
                 }
             }
-        }
 
-        // Sub-step (c): wiring via deterministic WiringGenerator (primary)
-        // The deterministic generator uses the ACTUAL translated C# method signatures
-        // and type conversions — no guessing property names. The model generator is
-        // only used as a fallback if the deterministic one can't handle the wiring.
-        var translatedSigs = ScanTranslatedSignatures(files, contract);
-        var stubSigs = ScanStubSignatures(files, contract);
-        var modelWirer = new ModelWiringGenerator(_model);
-        foreach (var comp in contract.Components)
-        {
-            if (comp.Connections.Length == 0) continue;
-            // Primary: deterministic wiring (uses exact names from translated C#)
-            var wireContent = WiringGenerator.Generate(comp, contract, translatedSigs, stubSigs);
-            if (string.IsNullOrWhiteSpace(wireContent))
+            // (c) Wiring via deterministic WiringGenerator
+            var translatedSigs = ScanSignatures(files, contract);
+            var stubSigs = ScanStubSignatures(files, contract);
+            var modelWirer = new ModelWiringGenerator(_model);
+            foreach (var comp in contract.Components)
             {
-                // Fallback to model if deterministic generator fails
-                wireContent = await modelWirer.GenerateAsync(comp, contract, translatedSigs, stubSigs, context, ct);
+                if (comp.Connections.Length == 0) continue;
+                var wireContent = WiringGenerator.Generate(comp, contract, translatedSigs, stubSigs);
+                if (string.IsNullOrWhiteSpace(wireContent))
+                    wireContent = await modelWirer.GenerateAsync(comp, contract, translatedSigs, stubSigs, context, ct);
+                if (!string.IsNullOrWhiteSpace(wireContent))
+                    files.Add(new SourceCodeFile($"{comp.Name}/Wire.cs", wireContent));
             }
-            files.Add(new SourceCodeFile($"{comp.Name}/Wire.cs", wireContent));
-        }
 
-        // Deduplicate by path, keep last occurrence
-        var deduped = DeduplicateByPath(files);
-
-        var bundle = new SourceCodeBundle
-        {
-            Files = deduped.ToArray(),
-            ProjectPath = Directory.GetCurrentDirectory(),
-            TargetFramework = "net10.0"
-        };
-        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(bundle, PositJson.Options);
-
-        return new PhaseResult
-        {
-            PhaseId = context.PhaseId,
-            Status = PhaseStatus.Success,
-            Artifacts = new ArtifactBundle
+            // Static check C# files
+            foreach (var f in files.Where(f => f.Path.EndsWith(".cs")))
             {
-                Id = ArtifactId.New(),
-                SessionId = context.SessionId,
-                SourcePhase = context.PhaseId,
-                SchemaVersion = "1.0.0",
-                Kind = ArtifactKind.SourceCodeBundle,
-                PayloadJson = payloadJson,
-                ProducedAt = DateTimeOffset.UtcNow
-            },
-            Costs = CostSnapshot.Zero,
-            Warnings = warnings.ToArray()
-        };
+                var issues = StaticChecker.CheckCSharp(f.Content);
+                if (issues.Count > 0)
+                    warnings.Add(StaticChecker.FormatIssues(issues));
+            }
+
+            // Deduplicate by path, keep last occurrence
+            var deduped = DeduplicateByPath(files);
+
+            var bundle = new SourceCodeBundle
+            {
+                Files = deduped.ToArray(),
+                ProjectPath = Directory.GetCurrentDirectory(),
+                TargetFramework = "net10.0"
+            };
+            var payloadJson = JsonSerializer.SerializeToUtf8Bytes(bundle, PositJson.Options);
+
+            return new PhaseResult
+            {
+                PhaseId = context.PhaseId,
+                Status = PhaseStatus.Success,
+                Artifacts = new ArtifactBundle
+                {
+                    Id = ArtifactId.New(),
+                    SessionId = context.SessionId,
+                    SourcePhase = context.PhaseId,
+                    SchemaVersion = "1.0.0",
+                    Kind = ArtifactKind.SourceCodeBundle,
+                    PayloadJson = payloadJson,
+                    ProducedAt = DateTimeOffset.UtcNow
+                },
+                Costs = CostSnapshot.Zero,
+                Warnings = warnings.ToArray()
+            };
         }
         catch (Exception ex)
         {
@@ -139,14 +156,90 @@ public sealed class CSharpImplementationPhase : IPhase
         }
     }
 
-    public ValidationResult ValidateOutput(PhaseResult result)
+    /// <summary>
+    /// Model generates C# implementation for a logic component against its interface.
+    /// Includes the interface definition, responsibility, and test cases in the prompt.
+    /// </summary>
+    private async Task<string> GenerateImplementationAsync(
+        Component comp, ArchitectureContract contract, PhaseContext context, CancellationToken ct)
     {
-        if (result.Status != PhaseStatus.Success)
-            return new ValidationResult { IsValid = false, Errors = result.Warnings };
-        return new ValidationResult { IsValid = true };
+        var iface = comp.CSharpInterface ?? "";
+        var responsibility = comp.Responsibility;
+        var testCases = comp.TestCases.Length > 0
+            ? string.Join("\n", comp.TestCases.Select(tc => $"  - {tc.Description} → {tc.ExpectedBehavior}"))
+            : "(no test cases)";
+
+        var systemPrompt = $"""
+            You are a Senior C# Developer. Implement the following C# interface.
+
+            INTERFACE (implement this — match every method signature exactly):
+            {iface}
+
+            RESPONSIBILITY:
+            {responsibility}
+
+            TEST CASES (your implementation must pass these):
+            {testCases}
+
+            RULES:
+            1. Create a class that implements the interface: class {comp.Name} : I{comp.Name}
+            2. Implement EVERY method declared in the interface — same name, same parameters, same return type.
+            3. Do NOT modify the interface. Do NOT add methods to the interface.
+            4. Use standard C# — no external packages, no Dafny runtime types.
+            5. Use `IReadOnlyList<string>` instead of `seq<string>`, `string` for text, `int`/`double`/`bool` for primitives.
+            6. Handle edge cases: empty input, null where applicable, invalid data.
+            7. Output ONLY the C# class file — no markdown fences, no explanations.
+            8. Include `using` directives at the top.
+            """;
+
+        // Include correction signal if this is a retry
+        if (context.CorrectionSignal is { Length: > 0 })
+            systemPrompt += $"\n\nPREVIOUS ERRORS (fix these):\n{string.Join("\n", context.CorrectionSignal)}";
+
+        if (!string.IsNullOrWhiteSpace(context.PreviousOutput))
+            systemPrompt += $"\n\nPREVIOUS OUTPUT (fix the errors above):\n{context.PreviousOutput}";
+
+        var prompt = new PromptTemplate
+        {
+            PhaseId = context.PhaseId,
+            Version = new PromptVersion("1.0.0"),
+            SystemPrompt = systemPrompt,
+            OutputFormatSpec = "raw C# source code",
+            ModelTier = ModelTier.Fast,
+            Temperature = 0.2,
+            MaxOutputTokens = 8192,
+            OutputFormat = OutputFormat.PlainText,
+            OutputSchemaRef = "CSharpSource",
+            Status = PromptStatus.Active
+        };
+
+        // TODO: add dotnet build correction loop (compile temp project, feed errors back)
+        Console.Error.WriteLine($"[csharp-impl] {comp.Name} generating...");
+        var result = await _model.GenerateAsync(context.ModelRoute, prompt, context, ct);
+        if (string.IsNullOrWhiteSpace(result.Text))
+            return "";
+
+        return ExtractCSharp(result.Text);
     }
 
-    private static Dictionary<string, List<CsMethodSignature>> ScanTranslatedSignatures(
+    /// <summary>
+    /// Extract C# code from model output (strip markdown fences if present).
+    /// </summary>
+    private static string ExtractCSharp(string text)
+    {
+        // Strip markdown code fences
+        if (text.Contains("```"))
+        {
+            var start = text.IndexOf("```");
+            var afterFence = text.IndexOf('\n', start) + 1;
+            var end = text.IndexOf("```", afterFence);
+            if (end > afterFence)
+                return text[afterFence..end].Trim();
+        }
+        return text.Trim();
+    }
+
+    private static Dictionary<string, List<CsMethodSignature>> ScanSignatures(
         List<SourceCodeFile> files, ArchitectureContract contract)
     {
         var result = new Dictionary<string, List<CsMethodSignature>>();
@@ -175,6 +268,10 @@ public sealed class CSharpImplementationPhase : IPhase
         return result;
     }
 
+    private static string GetStagingDir(PhaseContext context) =>
+        Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging",
+            context.SessionId.Value, "csharp");
+
     private static List<SourceCodeFile> DeduplicateByPath(List<SourceCodeFile> files)
     {
         var dict = new Dictionary<string, SourceCodeFile>();
@@ -192,15 +289,6 @@ public sealed class CSharpImplementationPhase : IPhase
         return null;
     }
 
-    private static DafnyVerificationResult[] ExtractVerificationResults(PhaseContext ctx)
-    {
-        foreach (var a in ctx.InputArtifacts)
-            if (a.Kind == ArtifactKind.DafnyVerification)
-                try { return JsonSerializer.Deserialize<DafnyVerificationResult[]>(a.PayloadJson, PositJson.Options) ?? []; }
-                catch { }
-        return [];
-    }
-
     private static PhaseResult Fail(PhaseContext ctx, string error) => new()
     {
         PhaseId = ctx.PhaseId, Status = PhaseStatus.Failed,
@@ -213,4 +301,11 @@ public sealed class CSharpImplementationPhase : IPhase
         SchemaVersion = "1.0.0", Kind = ArtifactKind.SourceCodeBundle,
         PayloadJson = [], ProducedAt = DateTimeOffset.UtcNow
     };
+
+    public ValidationResult ValidateOutput(PhaseResult result)
+    {
+        if (result.Status != PhaseStatus.Success)
+            return new ValidationResult { IsValid = false, Errors = result.Warnings };
+        return new ValidationResult { IsValid = true };
+    }
 }

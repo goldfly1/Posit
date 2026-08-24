@@ -1,7 +1,7 @@
 namespace Posit.Phases;
 
 /// <summary>
-/// A single scan error found when validating ArchitectureContract against the pattern registry.
+/// A single scan error found when validating ArchitectureContract.
 /// </summary>
 public record ScanError(
     string Component,
@@ -17,15 +17,12 @@ public record ScanError(
 
 /// <summary>
 /// Scans ArchitectureContract before the pipeline proceeds.
-/// Validates: Dafny interface structure, method coverage, stub names against registry,
+/// Validates: C# interface structure, method coverage, stub names against registry,
 /// dependency resolution, connection targets.
-/// Registry stays as a reference for name validation (stubs, types).
+/// Registry stays as a reference for stub name validation.
 /// </summary>
 public static class ContractScanner
 {
-    /// <summary>
-    /// Scan the contract. Returns list of errors (empty = clean).
-    /// </summary>
     public static List<ScanError> Scan(ArchitectureContract contract, PatternRegistry registry)
     {
         var errors = new List<ScanError>();
@@ -33,52 +30,15 @@ public static class ContractScanner
 
         foreach (var comp in contract.Components)
         {
-            // ── Dafny interface validation (new: replaces pattern method checks) ──
+            // ── C# interface validation for logic components ──
             if (comp.Classification != ModuleClassification.IoShell)
             {
-                if (!string.IsNullOrWhiteSpace(comp.DafnyInterface))
-                {
-                    errors.AddRange(ValidateDafnyInterface(comp));
-                }
-                else if (string.IsNullOrWhiteSpace(comp.PatternName))
-                {
-                    // No interface AND no pattern — can't create skeleton
-                    errors.Add(new ScanError(comp.Name, "dafnyInterface", "(missing)",
-                        "is null and patternName is null — the architect must provide a Dafny interface for dafny components",
-                        []));
-                }
-                // Legacy: pattern-based components still validated against registry
-                else if (registry.HasPattern(comp.PatternName!))
-                {
-                    var realSigs = registry.GetMethodSignatures(comp.PatternName!);
-                    if (realSigs.Count > 0)
-                    {
-                        var realMethodNames = realSigs.Select(s => s.Name).ToHashSet();
-                        var hasBranching = !string.IsNullOrWhiteSpace(comp.BranchCondition)
-                            || comp.MethodSignatures.Any(m =>
-                                (m.ReturnDafnyType ?? m.ReturnType ?? "").Equals("bool", StringComparison.OrdinalIgnoreCase));
-                        foreach (var ms in comp.MethodSignatures)
-                        {
-                            if (hasBranching && IsErrorPathMethod(ms.Name))
-                                continue;
-                            if (!realMethodNames.Contains(ms.Name))
-                            {
-                                errors.Add(new ScanError(comp.Name, "methodSignature.name",
-                                    ms.Name,
-                                    $"does not exist on cut-out '{comp.PatternName}' (real methods: {string.Join(", ", realMethodNames)}). " +
-                                    $"If this component needs methods the cut-out doesn't have, set patternName to null and write a dafnyInterface. " +
-                                    $"Do NOT invent method names — use ONLY the real methods listed, or drop the cut-out.",
-                                    [.. realMethodNames]));
-                            }
-                        }
-                    }
-                }
+                if (!string.IsNullOrWhiteSpace(comp.CSharpInterface))
+                    errors.AddRange(ValidateCSharpInterface(comp));
                 else
-                {
-                    errors.Add(new ScanError(comp.Name, "patternName", comp.PatternName!,
-                        "does not exist in the pattern registry and no dafnyInterface provided",
-                        registry.GetAllPatterns().Select(p => p.Name).ToArray()));
-                }
+                    errors.Add(new ScanError(comp.Name, "csharpInterface", "(missing)",
+                        "is null — the architect must provide a C# interface for logic components",
+                        []));
             }
 
             // io-shell components MUST have at least one stub
@@ -127,8 +87,6 @@ public static class ContractScanner
             }
 
             // Check fromMethod exists on this component's own signatures OR is a stub method
-            // Stub methods (ReadLines, ReadFile, PrintLine, etc.) are provided by the I/O stub
-            // and don't need to be in methodSignatures — they're inherited from the stub.
             var ownMethods = comp.MethodSignatures.Select(m => m.Name).ToHashSet();
             var stubMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -158,7 +116,7 @@ public static class ContractScanner
 
                 var hasBranching = !string.IsNullOrWhiteSpace(comp.BranchCondition)
                     || comp.MethodSignatures.Any(m =>
-                        (m.ReturnDafnyType ?? m.ReturnType ?? "").Equals("bool", StringComparison.OrdinalIgnoreCase));
+                        m.ReturnType.Equals("bool", StringComparison.OrdinalIgnoreCase));
 
                 foreach (var declared in ownMethods)
                 {
@@ -178,56 +136,52 @@ public static class ContractScanner
     }
 
     /// <summary>
-    /// Validate the Dafny interface written by the architect.
-    /// Checks: module declaration matches component name, method coverage,
-    /// no method bodies, {:extern} portal presence.
+    /// Validate the C# interface written by the architect.
+    /// Checks: interface declaration matches component name, method coverage,
+    /// no method bodies (interface methods are signatures only).
     /// </summary>
-    private static List<ScanError> ValidateDafnyInterface(Component comp)
+    private static List<ScanError> ValidateCSharpInterface(Component comp)
     {
         var errors = new List<ScanError>();
-        var iface = comp.DafnyInterface!;
+        var iface = comp.CSharpInterface!;
 
-        // Check module declaration matches component name
-        if (!iface.Contains($"module {comp.Name}", StringComparison.OrdinalIgnoreCase))
+        // Check interface declaration matches component name
+        if (!iface.Contains($"interface I{comp.Name}", StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add(new ScanError(comp.Name, "dafnyInterface", "(module)",
-                $"must start with 'module {comp.Name} {{' — module name must match component name",
+            errors.Add(new ScanError(comp.Name, "csharpInterface", "(interface)",
+                $"must contain 'interface I{comp.Name}' — interface name must match component name",
                 []));
         }
 
         // Check every declared MethodSignature appears in the interface
         foreach (var ms in comp.MethodSignatures)
         {
-            if (!iface.Contains($"method {ms.Name}", StringComparison.OrdinalIgnoreCase))
+            if (!iface.Contains(ms.Name, StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add(new ScanError(comp.Name, "dafnyInterface", ms.Name,
-                    $"declared in methodSignatures but not found in dafnyInterface — every method signature must appear in the interface",
+                errors.Add(new ScanError(comp.Name, "csharpInterface", ms.Name,
+                    "declared in methodSignatures but not found in csharpInterface — every method signature must appear in the interface",
                     []));
             }
         }
 
-        // Check for method bodies (interface should be bodyless — signatures + contracts only)
-        // A body is `{ <statements> }` after a method signature. We look for var/:=/while/return
-        // inside the interface, which indicates the architect wrote implementation, not just interface.
-        var bodyIndicators = new[] { "var ", ":=", "while ", "return " };
+        // Check for method bodies (interface should be signatures only)
+        // A body is `{ <statements> }` after a method signature. Look for implementation indicators.
+        var bodyIndicators = new[] { "var ", "while ", "for ", "return " };
         foreach (var indicator in bodyIndicators)
         {
             if (iface.Contains(indicator, StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add(new ScanError(comp.Name, "dafnyInterface", indicator.Trim(),
-                    $"found in interface — the interface must be BODYLESS (signatures + contracts only). " +
-                    $"DafnyImpl fills in the bodies. Remove '{indicator.Trim()}' statements from the interface.",
+                errors.Add(new ScanError(comp.Name, "csharpInterface", indicator.Trim(),
+                    $"found in interface — the interface must be SIGNATURES ONLY. " +
+                    $"C#Impl fills in the bodies. Remove '{indicator.Trim()}' statements from the interface.",
                     []));
-                break; // one warning is enough
+                break;
             }
         }
 
         return errors;
     }
 
-    /// <summary>
-    /// Format the correction listing for the model via CorrectionSignal.
-    /// </summary>
     public static string FormatCorrectionListing(List<ScanError> errors)
     {
         if (errors.Count == 0) return string.Empty;
@@ -238,11 +192,6 @@ public static class ContractScanner
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Heuristic: does this method name look like an error-path method?
-    /// Error-path methods are called in the branch (if !isValid), not the main chain.
-    /// They don't need to appear in connections.
-    /// </summary>
     private static bool IsErrorPathMethod(string methodName) =>
         methodName.Contains("Error", StringComparison.OrdinalIgnoreCase)
         || methodName.Contains("WriteStderr", StringComparison.OrdinalIgnoreCase)

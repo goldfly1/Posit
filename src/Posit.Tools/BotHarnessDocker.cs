@@ -12,7 +12,7 @@ internal static class BotHarnessDocker
 {
     /// <summary>
     /// Generate the Dockerfile.run for multi-stage build:
-    /// build stage compiles the solution, runtime stage copies output + DafnyRuntime.dll.
+    /// build stage compiles the solution, runtime stage copies output.
     /// </summary>
     internal static string GenerateDockerfileRun(string cliComponentName)
     {
@@ -24,10 +24,7 @@ internal static class BotHarnessDocker
         sb.AppendLine();
         sb.AppendLine("FROM mcr.microsoft.com/dotnet/runtime:10.0");
         sb.AppendLine("WORKDIR /app");
-        // Copy from per-project output dir (includes runtimeconfig.json)
         sb.AppendLine($"COPY --from=build /src/{cliComponentName}/bin/Release/net10.0/ ./");
-        // Copy DafnyRuntime.dll from build context (not build stage)
-        sb.AppendLine("COPY DafnyRuntime/DafnyRuntime.dll ./");
         // Copy test data files so the program can read them at runtime
         sb.AppendLine("COPY testdata_*.csv ./");
         sb.AppendLine("COPY testdata_*.json ./");

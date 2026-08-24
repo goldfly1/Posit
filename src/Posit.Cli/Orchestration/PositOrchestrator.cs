@@ -60,25 +60,7 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
             var result = await _controller.ExecuteAsync(context, ct);
             var validation = phase.ValidateOutput(result);
 
-            // Post-Dafny type chain check: after dafny-implementation, before C# impl.
-            // Real C# types exist now. If the chain breaks, kick back to Architecture.
-            if (validation.IsValid && phaseId.Value == "dafny-implementation")
-            {
-                var chainErrors = await CheckTypeChain(result, state, ct);
-                if (chainErrors.Count > 0)
-                {
-                    var msgs = TypeChainChecker.FormatErrors(chainErrors);
-                    msgs += "\nThe C# types from Z3-translated Dafny don't chain. Fix the architecture's method signatures.";
-                    validation = new ValidationResult { IsValid = false, Errors = [msgs] };
-                    // Force rollback to architecture — retrying dafny-implementation
-                    // won't fix a type chain error that originates in the architecture.
-                    result = result with { Status = PhaseStatus.Failed, Warnings = [msgs], ForceRollback = true };
-                }
-            }
-
             // C# implementation failure → route back to architecture for correction.
-            // The wiring was built from the architecture's connections. If it fails,
-            // the architecture needs to fix the connections, not retry the wiring.
             if (validation.IsValid && phaseId.Value == "csharp-implementation")
             {
                 var carapaceErrors = await EnforceCarapace(result, state, ct);
@@ -150,14 +132,8 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
 
     private static ModelRoute GetModelForPhase(PhaseId phaseId)
     {
-        // Per-phase model routing: flash for fast phases, pro for Dafny writing.
-        // Flash: proven fast at architecture + pseudocode reduction (1-2s per call).
-        // Pro: reasons better through Dafny type relationships (but fails at pseudocode
-        //      reduction — outputs 14 tokens = STOP on every pass).
         var modelId = phaseId.Value switch
         {
-            "dafny-implementation" => "glm-5.2:cloud",
-            "dafny-fix" => "glm-5.2:cloud",
             _ => "deepseek-v4-flash:cloud"
         };
         return new ModelRoute
@@ -202,36 +178,6 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         var a = (await _artifactRepo.GetByPhaseAsync(state.SessionId, new PhaseId("architecture"), ct))
             .FirstOrDefault();
         return a is null ? null : Deserialize<ArchitectureContract>(a.PayloadJson);
-    }
-
-    /// <summary>
-    /// Post-Dafny type chain check. Reads scanned C# signatures from the Dafny
-    /// Implementation result and checks that consecutive connections have
-    /// compatible types. Returns errors if the chain breaks.
-    /// </summary>
-    private async Task<List<TypeChainError>> CheckTypeChain(PhaseResult result, SessionState state, CancellationToken ct)
-    {
-        var contract = await GetContract(state, ct);
-        if (contract is null) return [];
-
-        // The Dafny implementation result contains DafnyVerificationResult[] with
-        // TranslatedCSharpPath for each component. Scan those files.
-        var scannedSigs = new Dictionary<string, List<CsMethodSignature>>();
-        var dafnyResults = Deserialize<DafnyVerificationResult[]>(result.Artifacts.PayloadJson);
-        if (dafnyResults is null) return [];
-
-        foreach (var dr in dafnyResults)
-        {
-            if (dr.IsVerified && !string.IsNullOrWhiteSpace(dr.TranslatedCSharpPath) && File.Exists(dr.TranslatedCSharpPath))
-            {
-                var content = await File.ReadAllTextAsync(dr.TranslatedCSharpPath, ct);
-                var sigs = TranslatedCSharpScanner.ScanContent(content);
-                if (sigs.Count > 0)
-                    scannedSigs[dr.ModuleName] = sigs;
-            }
-        }
-
-        return TypeChainChecker.Check(contract, scannedSigs);
     }
 
     private static T? Deserialize<T>(byte[] payload) where T : class

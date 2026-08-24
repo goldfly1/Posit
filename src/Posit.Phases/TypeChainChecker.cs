@@ -98,8 +98,7 @@ public static class TypeChainChecker
 
     /// <summary>
     /// Get the return type from the contract's declared method signatures.
-    /// Uses ReturnDafnyType (Dafny notation) if available, falls back to ReturnType.
-    /// Handles void+out params: first out param is the data return.
+    /// Uses ReturnType (C# notation).
     /// </summary>
     private static string? GetDeclaredReturnType(ConnectionSpec conn, ArchitectureContract contract)
     {
@@ -107,29 +106,12 @@ public static class TypeChainChecker
         if (comp == null) return null;
         var ms = comp.MethodSignatures.FirstOrDefault(x => x.Name == conn.ToMethod);
         if (ms == null) return null;
-        // If returnType is void but there are out params (Dafny multi-return),
-        // the first param with DafnyType containing "out" or just the first param
-        // is the data return. But in the contract, out params aren't marked.
-        // Use ReturnDafnyType if available, otherwise ReturnType.
-        var ret = !string.IsNullOrWhiteSpace(ms.ReturnDafnyType) ? ms.ReturnDafnyType : ms.ReturnType;
-        // If void, check if any param has a DafnyType that looks like a bool (isValid)
-        // — the first non-bool param is the data return
-        if (ret == "void" || ret == "Void")
-        {
-            // For Dafny multi-return, the contract's returnType might be void
-            // but the method actually returns multiple values. In Dafny notation,
-            // the return type would be something like "(seq<seq<string>>, bool)".
-            // If ReturnDafnyType captures this, use it. Otherwise skip.
-            if (!string.IsNullOrWhiteSpace(ms.ReturnDafnyType) && ms.ReturnDafnyType != "void")
-                return ms.ReturnDafnyType;
-            return "void"; // can't determine — skip
-        }
-        return ret;
+        return ms.ReturnType;
     }
 
     /// <summary>
     /// Get the first param type from the contract's declared method signatures.
-    /// Uses DafnyType if available, falls back to Type.
+    /// Uses Type (C# notation).
     /// </summary>
     private static string? GetDeclaredFirstParamType(ConnectionSpec conn, ArchitectureContract contract)
     {
@@ -137,8 +119,7 @@ public static class TypeChainChecker
         if (comp == null) return null;
         var ms = comp.MethodSignatures.FirstOrDefault(x => x.Name == conn.ToMethod);
         if (ms == null || ms.Params.Length == 0) return null;
-        var p = ms.Params[0];
-        return !string.IsNullOrWhiteSpace(p.DafnyType) ? p.DafnyType : p.Type;
+        return ms.Params[0].Type;
     }
 
     /// <summary>

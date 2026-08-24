@@ -32,13 +32,6 @@ internal static class BotHarnessProjects
         // Include all .cs files from the project directory recursively (single glob, no duplicates)
         sb.AppendLine("    <Compile Include=\"**\\*.cs\" />");
         sb.AppendLine("  </ItemGroup>");
-        sb.AppendLine();
-        sb.AppendLine("  <ItemGroup>");
-        // Reference DafnyRuntime.dll from the DafnyRuntime/ subdir
-        sb.AppendLine("    <Reference Include=\"DafnyRuntime\">");
-        sb.AppendLine("      <HintPath>..\\DafnyRuntime\\DafnyRuntime.dll</HintPath>");
-        sb.AppendLine("    </Reference>");
-        sb.AppendLine("  </ItemGroup>");
         // Add project references for dependencies (Wire.cs calls into other components)
         if (projectReferences is { Count: > 0 })
         {

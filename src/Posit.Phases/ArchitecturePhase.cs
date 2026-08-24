@@ -2,9 +2,8 @@ namespace Posit.Phases;
 
 /// <summary>
 /// Phase 1: Architecture. The architect decomposes the spec, classifies
-/// components, selects patterns from the registry, and fills the carapace.
-/// The gateway injects CorrectionSignal into the prompt (handled by IModelGateway).
-/// After model output, compose .dfy skeletons from PatternRegistry, then
+/// components, writes C# interfaces, and defines test cases.
+/// After model output, write C# interface files to staging, then
 /// run ContractScanner validation. If scan fails, return Failed with correction
 /// listing so the FSM retries.
 /// </summary>
@@ -35,7 +34,7 @@ public sealed class ArchitecturePhase : IPhase
 
     public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
-        // Pre-generation wiki search: find relevant Dafny interface examples
+        // Pre-generation wiki search: find relevant C# pattern examples
         var wikiExamples = "";
         var searchQuery = context.UserRequest ?? "";
         if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -62,12 +61,12 @@ public sealed class ArchitecturePhase : IPhase
         if (contract == null)
             return Fail(context, "Failed to parse ArchitectureContract from model output", result);
 
-        // Compose .dfy skeletons from PatternRegistry for dafny/mixed components
-        var composeErrors = ComposeSkeletons(contract, context);
+        // Write C# interface files to staging for logic components
+        var composeErrors = WriteInterfaces(contract, context);
         if (composeErrors.Count > 0)
             return Fail(context, string.Join("\n", composeErrors), result);
 
-        // Scan contract against registry — reject if any name doesn't match
+        // Scan contract — validate C# interface structure and stub names
         var scanErrors = ContractScanner.Scan(contract, _registry);
         if (scanErrors.Count > 0)
         {
@@ -75,13 +74,12 @@ public sealed class ArchitecturePhase : IPhase
             return Fail(context, listing, result);
         }
 
-        // Pre-Dafny type chain check — the data flow spec validation.
+        // Type chain check — validate data flow types
         var chainErrors = TypeChainChecker.CheckPreDafny(contract);
         if (chainErrors.Count > 0)
         {
             var chainMsg = TypeChainChecker.FormatErrors(chainErrors);
             chainMsg += "\nFix the method signatures or connection order so types chain correctly.";
-            chainMsg += "\nCommon fixes: use ReadLines (seq<string>) for CSV, ReadFile (string) for JSON/text.";
             return Fail(context, chainMsg, result);
         }
 
@@ -111,7 +109,11 @@ public sealed class ArchitecturePhase : IPhase
         }
     }
 
-    private List<string> ComposeSkeletons(ArchitectureContract contract, PhaseContext context)
+    /// <summary>
+    /// Write C# interface files to staging for logic components.
+    /// The interface IS the carapace — method signatures, types, records.
+    /// </summary>
+    private List<string> WriteInterfaces(ArchitectureContract contract, PhaseContext context)
     {
         var errors = new List<string>();
         var stagingDir = GetStagingDir(context);
@@ -121,34 +123,15 @@ public sealed class ArchitecturePhase : IPhase
         {
             if (comp.Classification == ModuleClassification.IoShell) continue;
 
-            // Primary path: architect wrote the Dafny interface — write it to disk as the carapace
-            if (!string.IsNullOrWhiteSpace(comp.DafnyInterface))
+            if (!string.IsNullOrWhiteSpace(comp.CSharpInterface))
             {
-                var path = Path.Combine(stagingDir, $"{comp.Name}.dfy");
-                File.WriteAllText(path, comp.DafnyInterface);
-                continue;
+                var path = Path.Combine(stagingDir, $"I{comp.Name}.cs");
+                File.WriteAllText(path, comp.CSharpInterface);
             }
-
-            // Legacy path: pattern-based skeleton composition from registry
-            if (string.IsNullOrWhiteSpace(comp.PatternName))
+            else
             {
-                errors.Add($"Component '{comp.Name}' has no dafnyInterface and no patternName — cannot create skeleton");
-                continue;
+                errors.Add($"Component '{comp.Name}' has no csharpInterface — cannot create carapace");
             }
-
-            if (!_registry.HasPattern(comp.PatternName!))
-            {
-                errors.Add($"Component '{comp.Name}' pattern '{comp.PatternName}' not in registry");
-                continue;
-            }
-
-            var skeleton = _registry.ComposeSkeleton(
-                comp.PatternName!, comp.StubNames, comp.Name);
-            var legacyPath = Path.Combine(stagingDir, $"{comp.Name}.dfy");
-            File.WriteAllText(legacyPath, skeleton);
-
-            // Materialize pattern dependencies (includes like result.dfy)
-            _registry.MaterializeDependencies(stagingDir, comp.PatternName!);
         }
 
         return errors;
@@ -156,7 +139,7 @@ public sealed class ArchitecturePhase : IPhase
 
     private static string GetStagingDir(PhaseContext context) =>
         Path.Combine(Directory.GetCurrentDirectory(), ".posit", "staging",
-            context.SessionId.Value, "dafny");
+            context.SessionId.Value, "csharp");
 
     private static PhaseResult Fail(PhaseContext ctx, string error, GenerationResult gen) => new()
     {

@@ -8,24 +8,10 @@ internal sealed class PatternRegistryAdapter : IPatternRegistry
     private readonly PatternRegistry _inner;
     public PatternRegistryAdapter(PatternRegistry inner) => _inner = inner;
 
-    public string PatternsDirectory => "patterns";
-    public Dictionary<string, string> CSharpStubs =>
-        _inner.GetAllCSharpStubs().ToDictionary(s => s.Name, s => s.Template);
-    public bool HasPattern(string name) => _inner.HasPattern(name);
-    public string GetPattern(string name) => _inner.GetPattern(name)?.Body ?? "";
-    public string[] GetPatternSignatures(string patternName) =>
-        _inner.GetPatternSignatures(patternName).Split('\n', StringSplitOptions.RemoveEmptyEntries);
-    public MethodSignature[] ExtractMethodSignatures(string patternName) => [];
-    public string[] SelectCSharpStubs(string[] stubNames) =>
-        [.. _inner.SelectCSharpStubs("", stubNames).Select(s => s.Name)];
-    public string ComposeSkeleton(string patternName, string[] stubNames, string? parametersJson) =>
-        _inner.ComposeSkeleton(patternName, stubNames, parametersJson ?? patternName);
     public string ComposeIoShellSkeleton(string stubName, string componentName) =>
-        _inner.ComposeIoShellSkeleton([stubName], componentName);
+        _inner.ComposeIoShellSkeleton(stubName, componentName);
     public (string Name, string Responsibility)[] GetAllPatterns() =>
         _inner.GetAllPatterns().Select(p => (p.Name, p.Responsibility ?? "")).ToArray();
-    public string[] MaterializeDependencies(string patternName, string stagingDir)
-    { _inner.MaterializeDependencies(stagingDir, patternName); return []; }
 }
 
 /// <summary>CLI entry point: run, harness, status, resume, artifacts.</summary>
@@ -85,10 +71,8 @@ internal static class Program
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
 
         // Retry loop: build failures → WireFixer (C# wiring).
-        // Test failures → WireFixer first (might be type conversion),
-        // then DafnyFixer (cotton candy: compiles+Z3-green but wrong logic).
+        // Test failures → WireFixer (type conversion / serialization).
         const int maxRetries = 6;
-        var wireFixAttempted = false;
         for (var retry = 0; retry < maxRetries && !result.Success; retry++)
         {
             var isBuildFailure = IsDockerBuildFailure(result);
@@ -97,7 +81,6 @@ internal static class Program
             if (!isBuildFailure && !isTestFailure) break;
 
             List<string> fixInstructions;
-            var useDafnyFixer = false;
 
             if (isBuildFailure)
             {
@@ -108,112 +91,51 @@ internal static class Program
             else
             {
                 // Test failure: build succeeded but program produces wrong output.
-                // First try WireFixer (might be type conversion / serialization).
-                // If WireFixer already tried and failed, escalate to DafnyFixer
-                // (the Dafny logic itself is wrong — "cotton candy").
-                useDafnyFixer = wireFixAttempted;
-                fixInstructions = new List<string> { useDafnyFixer
-                    ? "Dafny logic failures (program compiles but produces wrong output — logic is wrong):"
-                    : "Wire.cs test failures (program compiles but produces wrong output):" };
+                fixInstructions = new List<string> { "Wire.cs test failures (program compiles but produces wrong output):" };
                 foreach (var tc in result.Results.Where(r => !r.Matches))
                 {
                     fixInstructions.Add($"  Test '{tc.Id}': expected '{tc.Expected}', got '{tc.Output}'");
                 }
-                Console.Error.WriteLine($"[harness] Test failures — calling {(useDafnyFixer ? "DafnyFixer" : "WireFixer")} ({retry + 1}/{maxRetries})...");
+                Console.Error.WriteLine($"[harness] Test failures — calling WireFixer ({retry + 1}/{maxRetries})...");
             }
 
             foreach (var fi in fixInstructions)
                 Console.Error.WriteLine($"  {fi}");
 
-            if (useDafnyFixer)
+            // WireFixer: fix the C# wiring
+            var prevWire = await ExtractPreviousWireCsAsync(result.TempDir, sessionId);
+            if (string.IsNullOrWhiteSpace(prevWire))
             {
-                // DafnyFixer: fix the Dafny logic, Z3 re-verify, translate to C#
-                var dafnyInfo = await ExtractDafnySourceAsync(sessionId);
-                if (dafnyInfo == null || string.IsNullOrWhiteSpace(dafnyInfo.Value.Source))
-                {
-                    Console.Error.WriteLine("[harness] No Dafny source found in DB — cannot run DafnyFixer");
-                    break;
-                }
-
-                var z3 = new Z3Runner(
-                    @"C:\Users\goldf\.dotnet\tools\dafny.exe",
-                    @"C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe");
-                var dafnyFixer = new DafnyFixer(gateway, z3);
-                var dafnyFixContext = new PhaseContext
-                {
-                    SessionId = sessionId,
-                    PhaseId = new PhaseId("dafny-fix"),
-                    Prompt = new PromptTemplate
-                    {
-                        PhaseId = new PhaseId("dafny-fix"), Version = new PromptVersion("1.0.0"),
-                        SystemPrompt = "", OutputFormatSpec = "Dafny source code",
-                        ModelTier = ModelTier.Fast, Temperature = 0.1, MaxOutputTokens = 8192,
-                        OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "DafnyModule",
-                        Status = PromptStatus.Active
-                    },
-                    ModelRoute = GetModelForFixer(),
-                    BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
-                };
-                var dafnyFix = await dafnyFixer.FixAsync(
-                    dafnyInfo.Value.Source,
-                    dafnyInfo.Value.ModuleName,
-                    dafnyInfo.Value.Responsibility,
-                    dafnyInfo.Value.TestCaseDescriptions,
-                    fixInstructions.ToArray(),
-                    dafnyFixContext);
-
-                if (dafnyFix == null)
-                {
-                    Console.Error.WriteLine("[harness] DafnyFixer could not fix (model failed or Z3 rejected)");
-                    break;
-                }
-
-                // Update BOTH the Dafny artifact AND the translated C# in the SourceCodeBundle
-                await UpdateDafnyInDbAsync(sessionId, dafnyFix, new ArtifactRepository());
-                Console.Error.WriteLine($"[harness] DafnyFixer applied — re-running harness...");
-
-                // Reset wireFixAttempted so WireFixer gets another shot —
-                // the translated C# changed, wiring may need to adapt.
-                wireFixAttempted = false;
+                Console.Error.WriteLine("[harness] No previous Wire.cs found — cannot fix, falling back to full re-run");
+                break;
             }
-            else
+
+            var fixer = new WireFixer(gateway);
+            var translatedTypes = await ExtractTranslatedCSharpAsync(sessionId);
+            var fixContext = new PhaseContext
             {
-                // WireFixer: fix the C# wiring
-                var prevWire = await ExtractPreviousWireCsAsync(result.TempDir, sessionId);
-                if (string.IsNullOrWhiteSpace(prevWire))
+                SessionId = sessionId,
+                PhaseId = new PhaseId("wire-fix"),
+                Prompt = new PromptTemplate
                 {
-                    Console.Error.WriteLine("[harness] No previous Wire.cs found — cannot fix, falling back to full re-run");
-                    break;
-                }
+                    PhaseId = new PhaseId("wire-fix"), Version = new PromptVersion("1.0.0"),
+                    SystemPrompt = "", OutputFormatSpec = "C# code",
+                    ModelTier = ModelTier.Fast, Temperature = 0.1, MaxOutputTokens = 4096,
+                    OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "WireCs",
+                    Status = PromptStatus.Active
+                },
+                ModelRoute = GetModelForFixer(),
+                BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
+            };
+            var fixedWire = await fixer.FixAsync(prevWire, fixInstructions.ToArray(), translatedTypes, fixContext);
 
-                var fixer = new WireFixer(gateway);
-                var translatedTypes = await ExtractTranslatedCSharpAsync(sessionId);
-                var fixContext = new PhaseContext
-                {
-                    SessionId = sessionId,
-                    PhaseId = new PhaseId("wire-fix"),
-                    Prompt = new PromptTemplate
-                    {
-                        PhaseId = new PhaseId("wire-fix"), Version = new PromptVersion("1.0.0"),
-                        SystemPrompt = "", OutputFormatSpec = "C# code",
-                        ModelTier = ModelTier.Fast, Temperature = 0.1, MaxOutputTokens = 4096,
-                        OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "WireCs",
-                        Status = PromptStatus.Active
-                    },
-                    ModelRoute = GetModelForFixer(),
-                    BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
-                };
-                var fixedWire = await fixer.FixAsync(prevWire, fixInstructions.ToArray(), translatedTypes, fixContext);
-
-                if (string.IsNullOrWhiteSpace(fixedWire))
-                {
-                    Console.Error.WriteLine("[harness] WireFixer returned empty — cannot fix");
-                    break;
-                }
-
-                await UpdateWireCsInDbAsync(sessionId, fixedWire, new ArtifactRepository());
-                wireFixAttempted = true;
+            if (string.IsNullOrWhiteSpace(fixedWire))
+            {
+                Console.Error.WriteLine("[harness] WireFixer returned empty — cannot fix");
+                break;
             }
+
+            await UpdateWireCsInDbAsync(sessionId, fixedWire, new ArtifactRepository());
 
             // Re-run harness with the fix applied (from DB)
             result = await harness.RunAsync(sessionId);
@@ -294,9 +216,6 @@ internal static class Program
     private static (PositOrchestrator, StateStore) BuildOrchestrator()
     {
         var gateway = new OllamaModelGateway(new HttpClient());
-        var z3 = new Z3Runner(
-            @"C:\Users\goldf\.dotnet\tools\dafny.exe",
-            @"C:\Users\goldf\.dotnet\tools\z3\bin\z3.exe");
         var registry = new PatternRegistry(@"C:\Users\goldf\Posit\patterns");
         var adapter = new PatternRegistryAdapter(registry);
         var artifactRepo = new ArtifactRepository();
@@ -306,10 +225,6 @@ internal static class Program
 
         var controller = new PhaseController();
         controller.Register(new ArchitecturePhase(gateway, registry));
-        // Pseudocode phase disabled — wiki search + interface definition replace it
-        // controller.Register(new PseudocodeReductionPhase(gateway));
-        controller.Register(new DafnyContractsPhase(z3));
-        controller.Register(new DafnyImplementationPhase(z3, gateway));
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
         controller.Register(new QaPhase(gateway, adapter));
 
@@ -321,7 +236,7 @@ internal static class Program
         Id = new ProjectId($"posit-{sessionId.Value[..8]}"),
         Name = "Posit Run",
         Phases = [KnownPhases.Architecture,
-                  KnownPhases.DafnyContracts, KnownPhases.DafnyImplementation, KnownPhases.CSharpImplementation, KnownPhases.Qa],
+                  KnownPhases.CSharpImplementation, KnownPhases.Qa],
         MaxRetriesPerPhase = 5,
         Budget = new BudgetRemaining { Amount = 10m, Cap = 10m },
         Approvals = new ApprovalConfig
@@ -333,10 +248,8 @@ internal static class Program
 
     private static DependencyGraph BuildGraph() => new DependencyGraphEngine().Build(
         [KnownPhases.Architecture,
-         KnownPhases.DafnyContracts, KnownPhases.DafnyImplementation,
          KnownPhases.CSharpImplementation, KnownPhases.Qa],
-        [[], [KnownPhases.Architecture],
-         [KnownPhases.DafnyContracts], [KnownPhases.DafnyImplementation], [KnownPhases.CSharpImplementation]]);
+        [[], [KnownPhases.Architecture], [KnownPhases.CSharpImplementation]]);
 
     private static string? ParseStringArg(string[] args, string name)
     {
@@ -528,136 +441,6 @@ internal static class Program
 
         // Re-stage with same ID — ON CONFLICT updates payload_json
         await repo.StageAsync(bundle with { PayloadJson = payloadJson });
-    }
-
-    /// <summary>
-    /// Extract the Dafny source + component info from the DB.
-    /// Reads the DafnyVerification artifact (which has DafnySource per module)
-    /// and the ArchitectureContract (which has component responsibility + test cases).
-    /// Returns the first non-io-shell component's Dafny source + metadata.
-    /// </summary>
-    private static async Task<(string Source, string ModuleName, string Responsibility, string[] TestCaseDescriptions)?> ExtractDafnySourceAsync(SessionId sessionId)
-    {
-        try
-        {
-            var repo = new ArtifactRepository();
-            var artifacts = await repo.ListBySessionAsync(sessionId);
-
-            // Get Dafny verification results
-            var dafnyArtifact = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.DafnyVerification);
-            if (dafnyArtifact == null)
-            {
-                Console.Error.WriteLine("[harness] No DafnyVerification artifact found in DB");
-                return null;
-            }
-            var dafnyResults = Deserialize<DafnyVerificationResult[]>(dafnyArtifact.PayloadJson);
-            if (dafnyResults == null || dafnyResults.Length == 0) return null;
-
-            // Get architecture contract for component metadata
-            var archArtifact = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.ArchitectureContract);
-            if (archArtifact == null) return null;
-            var contract = Deserialize<ArchitectureContract>(archArtifact.PayloadJson);
-            if (contract == null) return null;
-
-            // Find the first non-io-shell component that has Dafny source
-            foreach (var comp in contract.Components)
-            {
-                if (comp.Classification == ModuleClassification.IoShell) continue;
-                var dafnyResult = dafnyResults.FirstOrDefault(r => r.ModuleName == comp.Name);
-                if (dafnyResult == null) continue;
-
-                // Prefer DafnySource from the artifact; fall back to file on disk
-                var source = dafnyResult.DafnySource;
-                if (string.IsNullOrWhiteSpace(source) && File.Exists(dafnyResult.DafnyPath))
-                    source = await File.ReadAllTextAsync(dafnyResult.DafnyPath);
-                if (string.IsNullOrWhiteSpace(source)) continue;
-
-                var testDescs = comp.TestCases.Length > 0
-                    ? comp.TestCases.Select(tc => $"{tc.Description} → {tc.ExpectedBehavior}").ToArray()
-                    : new[] { $"Smoke test: {comp.Responsibility}" };
-
-                return (source, comp.Name, comp.Responsibility ?? "", testDescs);
-            }
-
-            Console.Error.WriteLine("[harness] No non-io-shell component with Dafny source found");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[harness] Error extracting Dafny source: {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Update the translated C# in the SourceCodeBundle after DafnyFixer
-    /// produces a new verified Dafny + translated C#. Replaces the component's
-    /// .cs file content (the translated Dafny output) in the bundle.
-    /// </summary>
-    private static async Task UpdateDafnyInDbAsync(SessionId sessionId, DafnyFixResult fix, ArtifactRepository repo)
-    {
-        var artifacts = await repo.ListBySessionAsync(sessionId);
-        var bundle = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.SourceCodeBundle);
-        if (bundle == null)
-        {
-            Console.Error.WriteLine("[harness] No SourceCodeBundle found in DB — cannot update Dafny fix");
-            return;
-        }
-
-        var sourceCode = Deserialize<SourceCodeBundle>(bundle.PayloadJson);
-        if (sourceCode == null) return;
-
-        // The translated C# file is named <ComponentName>.cs in the bundle.
-        // Replace its content with the DafnyFixer's translated output.
-        var updated = false;
-        var files = sourceCode.Files.Select(f =>
-        {
-            // Match by .cs extension in a component-named directory, or a file
-            // whose name matches the module name (e.g. "WordCounter.cs")
-            if (f.Path.EndsWith(".cs") && !f.Path.EndsWith("Wire.cs"))
-            {
-                var fn = Path.GetFileName(f.Path);
-                // Heuristic: if the filename contains the module name, update it
-                // But since we don't know the exact module name here, we update
-                // all non-Wire.cs files that look like translated Dafny output
-                // (they're in a component directory and named <ComponentName>.cs)
-                // For safety, update the first non-Wire.cs .cs file we find
-                if (!updated)
-                {
-                    updated = true;
-                    return f with { Content = fix.TranslatedCSharp };
-                }
-            }
-            return f;
-        }).ToArray();
-
-        if (!updated)
-        {
-            Console.Error.WriteLine("[harness] No translated C# file found in SourceCodeBundle — cannot update Dafny fix");
-            return;
-        }
-
-        var newBundle = new SourceCodeBundle
-        {
-            Files = files,
-            ProjectPath = sourceCode.ProjectPath,
-            TargetFramework = sourceCode.TargetFramework
-        };
-        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(newBundle, PositJson.Options);
-        await repo.StageAsync(bundle with { PayloadJson = payloadJson });
-
-        // Also update the DafnyVerification artifact so the DafnySource is current
-        var dafnyArtifact = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.DafnyVerification);
-        if (dafnyArtifact != null)
-        {
-            var dafnyResults = Deserialize<DafnyVerificationResult[]>(dafnyArtifact.PayloadJson);
-            if (dafnyResults != null)
-            {
-                var updatedResults = dafnyResults.Select(r => r with { DafnySource = fix.FixedDafny }).ToArray();
-                var dafnyPayload = JsonSerializer.SerializeToUtf8Bytes(updatedResults, PositJson.Options);
-                await repo.StageAsync(dafnyArtifact with { PayloadJson = dafnyPayload });
-            }
-        }
     }
 
     private static T? Deserialize<T>(byte[] payload) where T : class

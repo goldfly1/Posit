@@ -35,6 +35,17 @@ public sealed partial class PatternRegistry
     public IReadOnlyCollection<CSharpStubEntry> GetAllCSharpStubs() => _csharpStubs.Values;
 
     /// <summary>
+    /// Compose an io-shell skeleton from a C# stub template + component name.
+    /// Replaces {ComponentName} placeholder in the template.
+    /// </summary>
+    public string ComposeIoShellSkeleton(string stubName, string componentName)
+    {
+        if (!_csharpStubs.TryGetValue(stubName, out var stub))
+            return $"// Stub '{stubName}' not found";
+        return stub.Template.Replace("{ComponentName}", componentName);
+    }
+
+    /// <summary>
     /// Select C# stubs for a component based on responsibility keywords and stub names.
     /// NEVER returns io-console-program — uses console-io as fallback.
     /// </summary>

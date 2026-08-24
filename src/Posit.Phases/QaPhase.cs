@@ -4,12 +4,10 @@ using Posit.Contracts.Artifacts;
 namespace Posit.Phases;
 
 /// <summary>
-/// Phase 5: QA. AI-assisted test data generation + failure analysis.
+/// Phase 3: QA. AI-assisted test data generation + Docker harness execution.
 /// - Generates spec-specific test data via LLM (edge cases, boundary conditions)
 /// - Bot harness runs the tests deterministically
-/// - LLM analyzes failures and classifies them
-/// - Verified (Dafny) modules: "proof IS the test" — no test generation needed
-/// - Unverified (io-shell) modules: bot harness tests with AI-generated data
+/// - All components get tests (no Z3-verified shortcut)
 /// </summary>
 public sealed class QaPhase : IPhase
 {
@@ -36,7 +34,6 @@ public sealed class QaPhase : IPhase
         var contract = ExtractContract(context);
         var moduleResults = new List<QaModuleResult>();
         var testDataFiles = new List<TestDataFile>();
-        var newCutoutCandidates = 0;
 
         if (contract != null)
         {
@@ -49,14 +46,10 @@ public sealed class QaPhase : IPhase
                     testDataFiles.AddRange(generated);
                 else
                 {
-                    // AI generation failed — fall back to architect's test cases, NOT hardcoded CSV.
-                    // Extract the actual input value from the test case description.
-                    // Test cases are written like: Input '32 F' should convert to Celsius...
-                    // We extract the quoted value as the stdin content.
+                    // AI generation failed — fall back to architect's test cases
                     var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
                     foreach (var tc in cliComp.TestCases)
                     {
-                        // Extract quoted input from description: "Input '32 F' should..." → "32 F"
                         var inputMatch = System.Text.RegularExpressions.Regex.Match(
                             tc.Description, @"'([^']+)'");
                         var inputContent = inputMatch.Success ? inputMatch.Groups[1].Value : tc.Description;
@@ -69,7 +62,6 @@ public sealed class QaPhase : IPhase
                             Description = tc.ExpectedBehavior ?? tc.Description
                         });
                     }
-                    // If no test cases either, use a minimal generic input (not CSV)
                     if (testDataFiles.Count == 0)
                     {
                         testDataFiles.Add(new TestDataFile
@@ -83,8 +75,7 @@ public sealed class QaPhase : IPhase
             }
             else if (cliComp != null && _model == null)
             {
-                // No model available — fall back to architect's test cases
-                // Extract quoted input from description (same as AI-fail fallback)
+                // No model — fall back to architect's test cases
                 var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
                 foreach (var tc in cliComp.TestCases)
                 {
@@ -110,31 +101,17 @@ public sealed class QaPhase : IPhase
                 }
             }
 
-            // Read verified status from DesignContext (snowballed after Z3), not ArchitectureContract
-            var verifiedModules = new HashSet<string>(
-                (context.DesignContext?.DafnyContracts ?? [])
-                    .Where(c => c.IsVerified)
-                    .Select(c => c.ModuleName));
-
-            // Count registry candidates: verified modules NOT already in the registry
-            var registryNames = _registry?.GetAllPatterns().Select(p => p.Name).ToHashSet() ?? new HashSet<string>();
-
+            // All components get tests — no Z3-verified shortcut
             foreach (var comp in contract.Components)
             {
-                var isVerified = comp.Classification != ModuleClassification.IoShell
-                    && verifiedModules.Contains(comp.Name);
-
-                // Track new cut-out candidates for DafnyDB flywheel
-                if (isVerified && comp.PatternName != null && !registryNames.Contains(comp.PatternName))
-                    newCutoutCandidates++;
                 moduleResults.Add(new QaModuleResult
                 {
                     ModuleName = comp.Name,
-                    IsVerified = isVerified,
-                    TestCount = isVerified ? 0 : testDataFiles.Count,
-                    Notes = isVerified
-                        ? "Z3-verified (proof IS the test) — Dafny cut-out, no tests needed"
-                        : "io-shell stub (bot harness tests I/O) — C# portal, not Z3-proven by design"
+                    IsVerified = false,
+                    TestCount = testDataFiles.Count,
+                    Notes = comp.Classification == ModuleClassification.IoShell
+                        ? "io-shell stub (bot harness tests I/O)"
+                        : "logic component (bot harness tests behavior)"
                 });
             }
         }
@@ -143,11 +120,7 @@ public sealed class QaPhase : IPhase
         {
             TestFiles = testDataFiles.Select(t => new SourceCodeFile(t.FileName, t.Content)).ToArray(),
             ModuleResults = moduleResults.ToArray(),
-            Summary = $"QA: {moduleResults.Count} modules — " +
-                      $"{moduleResults.Count(m => m.IsVerified)} Z3-verified (proof IS the test), " +
-                      $"{moduleResults.Count(m => !m.IsVerified)} io-shell (bot harness tests I/O). " +
-                      $"{testDataFiles.Count} test data file(s). " +
-                      $"{newCutoutCandidates} new cut-out candidate(s) for DafnyDB."
+            Summary = $"QA: {moduleResults.Count} modules — {testDataFiles.Count} test data file(s)."
         };
 
         var payloadJson = JsonSerializer.SerializeToUtf8Bytes(testSuite, PositJson.Options);
@@ -170,23 +143,14 @@ public sealed class QaPhase : IPhase
         };
     }
 
-    /// <summary>
-    /// Generate spec-specific test data with edge cases using the LLM.
-    /// The model sees the spec, the CLI component's connections, and the
-    /// edge case catalog, then generates concrete test input files.
-    /// </summary>
     private async Task<List<TestDataFile>?> GenerateTestDataAsync(
         Component cliComp, ArchitectureContract contract, PhaseContext context, CancellationToken ct)
     {
         var spec = context.UserRequest ?? "";
         var connections = string.Join(", ", cliComp.Connections.Select(c => $"{c.FromMethod}→{c.ToComponent}.{c.ToMethod}"));
-
-        // Use the architect's test cases as the basis for test data (Decision 11)
         var testCasesText = cliComp.TestCases.Length > 0
             ? string.Join("\n", cliComp.TestCases.Select(tc => $"  - {tc.Description} → {tc.ExpectedBehavior}"))
             : "(no test cases defined by architect — generate from spec)";
-
-        // Check if this is a stdin program (entry type) vs file-based
         var entryType = cliComp.EntryType ?? "file";
         var isStdin = entryType.Equals("stdin", StringComparison.OrdinalIgnoreCase);
 

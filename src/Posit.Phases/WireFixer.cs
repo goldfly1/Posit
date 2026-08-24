@@ -132,7 +132,7 @@ public sealed class WireFixer
         sb.AppendLine();
         sb.AppendLine("═══ DAFNY RUNTIME API — ISequence<T> interface ═══");
         sb.AppendLine("  ISequence<T> is the C# type for Dafny seq<T>. It implements IEnumerable<T>.");
-        sb.AppendLine("  REAL API (from DafnyRuntime source):");
+        sb.AppendLine("  REAL API (from C# interface):");
         sb.AppendLine("    .Count           — int property for length (NOT .Length, NOT .Count())");
         sb.AppendLine("    .Select(i)       — element at index i (NOT seq[i] — Select IS the indexer!)");
         sb.AppendLine("    .CloneAsArray()  — returns T[] copy");

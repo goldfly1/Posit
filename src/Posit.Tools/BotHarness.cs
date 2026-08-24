@@ -78,12 +78,6 @@ public sealed class BotHarness
         File.WriteAllText(Path.Combine(tempDir, "PositGenerated.sln"),
             BotHarnessProjects.GenerateSln("PositGenerated", projectNames));
 
-        var runtimeDir = Path.Combine(tempDir, "DafnyRuntime");
-        Directory.CreateDirectory(runtimeDir);
-        var runtimeDllSource = FindDafnyRuntimeDll();
-        if (runtimeDllSource != null)
-            File.Copy(runtimeDllSource, Path.Combine(runtimeDir, "DafnyRuntime.dll"), true);
-
         File.WriteAllText(Path.Combine(tempDir, "Dockerfile.run"),
             BotHarnessDocker.GenerateDockerfileRun(cliComponent.Name));
 
@@ -91,10 +85,10 @@ public sealed class BotHarness
         // Use AI-generated test data from QA artifact if available, else stopgap.
         var testCases = ExtractTestCases(cliComponent, testSuite);
         var aiTestData = testSuite?.TestFiles ?? [];
-        // Build a spec hint from component pattern names for test data generation
+        // Build a spec hint from component responsibilities for test data generation
         var specHint = string.Join(" ", contract.Components
-            .Where(c => c.PatternName != null)
-            .Select(c => c.PatternName!));
+            .Where(c => c.Classification != ModuleClassification.IoShell)
+            .Select(c => c.Responsibility));
         foreach (var tc in testCases)
         {
             // Try AI-generated test data first (from QA phase)
@@ -229,17 +223,6 @@ public sealed class BotHarness
         var dict = new Dictionary<string, SourceCodeFile>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in files) dict[f.Path] = f; // keep last occurrence (dedup by path)
         return [.. dict.Values];
-    }
-
-    internal static string? FindDafnyRuntimeDll()
-    {
-        var candidates = new[]
-        {
-            Path.Combine(AppContext.BaseDirectory, "DafnyRuntime.dll"),
-            Path.Combine(AppContext.BaseDirectory, "..", "DafnyRuntime.dll"),
-            "C:/Users/goldf/Posit/src/Posit.DafnyRuntime/DafnyRuntime.dll",
-        };
-        return candidates.FirstOrDefault(File.Exists);
     }
 
     internal static TestCaseInfo[] ExtractTestCases(Component component, TestSuite? testSuite)
@@ -400,7 +383,7 @@ public sealed class BotHarness
                 ModelRoute = route,
                 BudgetRemaining = new BudgetRemaining { Amount = 1000, Cap = 1000 },
                 AttemptNumber = 1,
-                CorrectionSignal = null,
+                CorrectionSignal = [],
                 DesignContext = null
             }, ct);
             return gen.Text;
