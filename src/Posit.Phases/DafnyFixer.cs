@@ -124,6 +124,8 @@ public sealed class DafnyFixer
             var stagingDir = Path.Combine(Path.GetTempPath(), "posit-dafny-fixer", context.SessionId.Value);
             Directory.CreateDirectory(stagingDir);
             var dafnyPath = Path.Combine(stagingDir, $"{moduleName}.dfy");
+            // Auto-fix deterministic syntax errors before Z3
+            fixedDafny = StaticChecker.AutoFixDafny(fixedDafny);
             await File.WriteAllTextAsync(dafnyPath, fixedDafny, ct);
 
             var verifyResult = await _z3.VerifyAsync(dafnyPath, ct);

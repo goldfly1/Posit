@@ -195,6 +195,8 @@ public sealed class DafnyImplementationPhase : IPhase
             }
             previousOutput = generated;
 
+            // Auto-fix deterministic syntax errors (map[K,V] → map<K,V>, seq[T] → seq<T>) before Z3
+            generated = StaticChecker.AutoFixDafny(generated);
             currentDafny = generated;
             await File.WriteAllTextAsync(dafnyPath, generated, ct);
 

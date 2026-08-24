@@ -21,6 +21,61 @@ public static class StaticChecker
     /// Returns a list of issues — each with a specific, actionable message
     /// the model can fix. Empty list = no issues found, safe to send to Z3.
     /// </summary>
+    /// <summary>
+    /// Auto-fix deterministic syntax errors that don't need a model — just string replacement.
+    /// Called BEFORE CheckDafny and BEFORE Z3. Saves model correction attempts for real issues.
+    /// </summary>
+    public static string AutoFixDafny(string dafnySource)
+    {
+        var fixed_code = dafnySource;
+
+        // Fix: map[K, V] → map<K, V> (square brackets to angle brackets for map types)
+        // Matches: map[string, int], map[int, bool], etc. — but NOT map[expr] (indexing)
+        // Type declarations use map<K, V>; indexing uses map[key]. We only fix type declarations.
+        fixed_code = Regex.Replace(fixed_code, @"\bmap\[([\w\s,]+)\]", m =>
+        {
+            var inner = m.Groups[1].Value;
+            // Only fix if it looks like a type declaration (has a comma — key, value)
+            if (inner.Contains(','))
+                return "map<" + inner + ">";
+            return m.Value; // leave indexing alone
+        });
+
+        // Fix: seq[T] → seq<T> (square brackets to angle brackets for seq types)
+        // Matches: seq[string], seq<int>, seq<seq<string>> already correct — only fix seq[...]
+        fixed_code = Regex.Replace(fixed_code, @"\bseq\[([\w<>()]+)\]", m =>
+        {
+            var inner = m.Groups[1].Value;
+            // Don't fix if it already has angle brackets (already correct)
+            if (inner.Contains('<'))
+                return m.Value;
+            return "seq<" + inner + ">";
+        });
+
+        // Fix: set[T] → set<T> (same pattern)
+        fixed_code = Regex.Replace(fixed_code, @"\bset\[([\w<>()]+)\]", m =>
+        {
+            var inner = m.Groups[1].Value;
+            if (inner.Contains('<'))
+                return m.Value;
+            return "set<" + inner + ">";
+        });
+
+        // Fix: iset[T] → iset<T>
+        fixed_code = Regex.Replace(fixed_code, @"\biset\[([\w<>()]+)\]", m =>
+        {
+            var inner = m.Groups[1].Value;
+            if (inner.Contains('<'))
+                return m.Value;
+            return "iset<" + inner + ">";
+        });
+
+        if (fixed_code != dafnySource)
+            Console.Error.WriteLine("[static-checker] AutoFix applied syntax corrections (map/seq/set brackets → angle brackets)");
+
+        return fixed_code;
+    }
+
     public static List<StaticIssue> CheckDafny(string dafnySource)
     {
         var issues = new List<StaticIssue>();
