@@ -334,10 +334,10 @@ public sealed class DafnyImplementationPhase : IPhase
         if (isCorrection)
         {
             sb.AppendLine("You are a Senior Dafny Developer fixing code that Z3 rejected.");
-            sb.AppendLine("Fix the specific lines that caused the errors. Keep everything else unchanged.");
+            sb.AppendLine("Z3 is the verifier — its errors are authoritative. Read them carefully and fix the specific lines.");
             sb.AppendLine();
 
-            sb.AppendLine("═══ Z3 ERRORS (fix these) ═══");
+            sb.AppendLine("═══ Z3 VERIFICATION ERRORS (raw output from the verifier) ═══");
             if (z3Errors != null)
                 foreach (var err in z3Errors)
                     sb.AppendLine($"  {err}");
@@ -385,9 +385,17 @@ public sealed class DafnyImplementationPhase : IPhase
             sb.AppendLine();
         }
 
-        // Inject wiki examples (replaces the 5.6K reference card + C#-ism cheat sheet)
+        // Inject wiki examples — on correction, framed as "we searched for solutions to YOUR errors"
         if (!string.IsNullOrWhiteSpace(wikiExamples))
         {
+            if (isCorrection)
+            {
+                sb.AppendLine("═══ DAFNY STDLIB SOLUTIONS (searched based on YOUR Z3 errors) ═══");
+                sb.AppendLine("We searched the Dafny standard library for examples that solve the specific");
+                sb.AppendLine("verification errors above. Study how the stdlib handles these patterns and");
+                sb.AppendLine("APPLY the solution to your code. These are proven, Z3-verified examples.");
+                sb.AppendLine();
+            }
             sb.AppendLine(wikiExamples);
             sb.AppendLine();
         }
