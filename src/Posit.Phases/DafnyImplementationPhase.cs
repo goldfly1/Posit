@@ -46,14 +46,18 @@ public sealed class DafnyImplementationPhase : IPhase
             if (comp.Classification == ModuleClassification.IoShell) continue;
 
             var skeletonPath = ResolveDafnyPath(context, comp);
-            var isCutOut = File.Exists(skeletonPath);
+            // A component needs DafnyImpl (model generation) when:
+            // - It has a DafnyInterface (architect wrote the interface, bodies need filling)
+            // - It has no patternName (no cut-out skeleton with pre-written bodies)
+            // Legacy cut-outs (patternName set, skeleton composed by registry) skip DafnyImpl.
+            var needsModelGeneration = !string.IsNullOrWhiteSpace(comp.DafnyInterface)
+                || (string.IsNullOrWhiteSpace(comp.PatternName) && _model != null);
+            var isCutOut = !needsModelGeneration && File.Exists(skeletonPath);
 
-            // If no skeleton (not a cut-out), generate Dafny with the model
-            // using a Z3 correction loop: generate → Z3 reject → feed previous
-            // Dafny + Z3 errors back → fix → verify. Max 3 attempts.
-            // This is what a human does: write code, compiler says "error", look
-            // at the error, look at the code, fix one line, recompile.
-            if (!isCutOut && _model != null)
+            // If needs model generation (architect wrote interface, no bodies), generate Dafny
+            // with the model using a Z3 correction loop: generate → Z3 reject → feed previous
+            // Dafny + Z3 errors back → fix → verify. Max 4 attempts.
+            if (needsModelGeneration && _model != null)
             {
                 var (generatedDafny, verifyOk, verifyOutput, translateOutput, translatePath) =
                     await GenerateAndVerifyDafnyAsync(comp, context, stagingDir, ct);
