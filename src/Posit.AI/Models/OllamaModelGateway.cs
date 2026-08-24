@@ -120,7 +120,7 @@ public sealed class OllamaModelGateway : IModelGateway
     {
         var sb = new StringBuilder();
         sb.AppendLine(prompt.SystemPrompt);
-        if (!string.IsNullOrWhiteSpace(prompt.OutputFormatSpec))
+        if (prompt.OutputFormat == OutputFormat.Json && !string.IsNullOrWhiteSpace(prompt.OutputFormatSpec))
         {
             sb.AppendLine();
             sb.AppendLine("You must respond with a single JSON object matching the schema reference above. Do not include Markdown prose, explanations, or code fences outside the JSON. Ensure the JSON is valid and complete.");
@@ -211,7 +211,10 @@ public sealed class OllamaModelGateway : IModelGateway
         if (sb.Length == 0)
             sb.AppendLine("Respond according to the system instructions.");
 
-        sb.AppendLine("Respond with valid JSON only.");
+        if (prompt.OutputFormat == OutputFormat.Json)
+            sb.AppendLine("Respond with valid JSON only.");
+        else
+            sb.AppendLine("Respond with raw code only — no JSON wrapping, no markdown fences, no explanations.");
 
         return sb.ToString();
     }
