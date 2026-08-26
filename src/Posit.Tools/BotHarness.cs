@@ -188,8 +188,23 @@ public sealed class BotHarness
             }
             var runResult = await BotHarnessDocker.RunContainerAsync(
                 _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct, stdinInput);
+
+            // Exact comparison when expected output is available, fuzzy fallback otherwise
+            bool matches;
+            if (!string.IsNullOrEmpty(tc.ExpectedOutput))
+            {
+                // Exact match: trim whitespace and compare
+                matches = runResult.Output.Trim().Equals(tc.ExpectedOutput.Trim(), StringComparison.Ordinal)
+                         && runResult.ExitCode == tc.ExpectedExitCode;
+            }
+            else
+            {
+                // Fuzzy fallback: keyword/shape matching
+                matches = CompareOutput(runResult.Output, tc.ExpectedBehavior);
+            }
+
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
-                tc.ExpectedBehavior, CompareOutput(runResult.Output, tc.ExpectedBehavior)));
+                tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior, matches));
         }
 
         // LLM failure analysis: if any tests failed, ask the model to classify
@@ -228,7 +243,16 @@ public sealed class BotHarness
     internal static TestCaseInfo[] ExtractTestCases(Component component, TestSuite? testSuite)
     {
         if (component.TestCases.Length > 0)
-            return [.. component.TestCases.Select(tc => new TestCaseInfo(tc.Id, tc.Name, tc.Description, tc.ExpectedBehavior))];
+        {
+            var cases = component.TestCases.Select((tc, i) =>
+            {
+                var key = $"tc{i + 1}";
+                var expectedOutput = testSuite?.ExpectedOutputs?.TryGetValue(key, out var eo) == true ? eo : "";
+                var expectedExit = testSuite?.ExpectedExitCodes?.TryGetValue(key, out var ee) == true ? ee : 0;
+                return new TestCaseInfo(tc.Id, tc.Name, tc.Description, tc.ExpectedBehavior, expectedOutput, expectedExit);
+            }).ToArray();
+            return cases;
+        }
         return [new TestCaseInfo("smoke", "Smoke test", "", "exit code 0")];
     }
 
@@ -397,4 +421,4 @@ public sealed class BotHarness
 
 public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error);
 public sealed record TestCaseResult(string Id, string Name, bool Ran, string Output, string Expected, bool Matches);
-internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior);
+internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string ExpectedOutput = "", int ExpectedExitCode = 0);

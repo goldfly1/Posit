@@ -41,7 +41,7 @@ internal static class BotHarnessDocker
     {
         var dockerfilePath = Path.Combine(contextDir, "Dockerfile.run");
         if (!File.Exists(dockerfilePath))
-            return new DockerResult(false, "Dockerfile.run not found");
+            return new DockerResult(false, "Dockerfile.run not found", -1);
 
         // Sanitize tag: Docker tags can't start with _ or contain invalid chars
         var safeTag = new string(tag.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '.' ? c : '-').ToArray());
@@ -75,11 +75,11 @@ internal static class BotHarnessDocker
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
             var output = string.IsNullOrEmpty(stderr) ? stdout : stdout + "\n" + stderr;
-            return new DockerResult(process.ExitCode == 0, output);
+            return new DockerResult(process.ExitCode == 0, output, process.ExitCode);
         }
         catch (Exception ex)
         {
-            return new DockerResult(false, $"Docker execution failed: {ex.Message}");
+            return new DockerResult(false, $"Docker execution failed: {ex.Message}", -1);
         }
     }
 
@@ -139,11 +139,11 @@ internal static class BotHarnessDocker
             var stderr = await stderrTask;
 
             var output = string.IsNullOrEmpty(stderr) ? stdout : stdout + "\n" + stderr;
-            return new DockerResult(process.ExitCode == 0, output);
+            return new DockerResult(process.ExitCode == 0, output, process.ExitCode);
         }
         catch (Exception ex)
         {
-            return new DockerResult(false, $"Docker execution failed: {ex.Message}");
+            return new DockerResult(false, $"Docker execution failed: {ex.Message}", -1);
         }
     }
 
@@ -155,4 +155,4 @@ internal static class BotHarnessDocker
     }
 }
 
-internal sealed record DockerResult(bool Success, string Output);
+internal sealed record DockerResult(bool Success, string Output, int ExitCode);

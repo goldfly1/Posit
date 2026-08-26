@@ -116,10 +116,22 @@ public sealed class QaPhase : IPhase
             }
         }
 
+        // Build expected output maps keyed by test case index
+        var expectedOutputs = new Dictionary<string, string>();
+        var expectedExitCodes = new Dictionary<string, int>();
+        for (var i = 0; i < testDataFiles.Count; i++)
+        {
+            var key = $"tc{i + 1}";
+            expectedOutputs[key] = testDataFiles[i].ExpectedOutput;
+            expectedExitCodes[key] = testDataFiles[i].ExpectedExitCode;
+        }
+
         var testSuite = new TestSuite
         {
             TestFiles = testDataFiles.Select(t => new SourceCodeFile(t.FileName, t.Content)).ToArray(),
             ModuleResults = moduleResults.ToArray(),
+            ExpectedOutputs = expectedOutputs,
+            ExpectedExitCodes = expectedExitCodes,
             Summary = $"QA: {moduleResults.Count} modules — {testDataFiles.Count} test data file(s)."
         };
 
@@ -168,13 +180,15 @@ public sealed class QaPhase : IPhase
 
             Rules:
             1. Output a JSON ARRAY directly — NOT wrapped in an object. Start with [ and end with ].
-            2. Each element has: "fileName" (string), "content" (string), "description" (string).
+            2. Each element has: "fileName" (string), "content" (string), "description" (string), "expectedOutput" (string), "expectedExitCode" (int).
             3. Generate 3-6 test cases covering: valid input, edge case, invalid input, and empty input.
             4. Content must be the ACTUAL input the program would receive.
             5. For stdin programs: content is the line(s) typed at the console.
             6. For file-based programs: content is the file content.
             7. Match the input format described in the spec — do NOT default to CSV or JSON unless the spec requires it.
-            8. For file-not-found: use fileName "NONEXISTENT" and content "".
+            8. For file-not-found: use fileName "NONEXISTENT", content "", expectedOutput "", expectedExitCode 1.
+            9. expectedOutput is the EXACT stdout the program should produce. For error cases, expectedOutput is "" and expectedExitCode is 1.
+            10. Be precise — the expectedOutput will be compared exactly (after whitespace trimming).
             """;
 
         var prompt = new PromptTemplate
@@ -182,7 +196,7 @@ public sealed class QaPhase : IPhase
             PhaseId = context.PhaseId,
             Version = new PromptVersion("1.0.0"),
             SystemPrompt = systemPrompt,
-            OutputFormatSpec = "[{\"fileName\":\"...\",\"content\":\"...\",\"description\":\"...\"}]",
+            OutputFormatSpec = "[{\"fileName\":\"...\",\"content\":\"...\",\"description\":\"...\",\"expectedOutput\":\"...\",\"expectedExitCode\":0}]",
             ModelTier = ModelTier.Fast,
             Temperature = 0.3,
             MaxOutputTokens = 4096,
@@ -249,4 +263,13 @@ public record TestDataFile
     public string FileName { get; init; } = "";
     public string Content { get; init; } = "";
     public string Description { get; init; } = "";
+    /// <summary>
+    /// The exact stdout output expected when the program processes this test input.
+    /// Empty string = no exact match (use fuzzy comparison).
+    /// </summary>
+    public string ExpectedOutput { get; init; } = "";
+    /// <summary>
+    /// Expected exit code. 0 = success, 1 = error. Default 0.
+    /// </summary>
+    public int ExpectedExitCode { get; init; } = 0;
 }
