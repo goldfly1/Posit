@@ -22,6 +22,7 @@ public static class WiringGenerator
         var sb = new StringBuilder();
         sb.AppendLine($"// {comp.Name}/Wire.cs — auto-generated wiring");
         sb.AppendLine("using System;");
+        sb.AppendLine("using System.IO;");
         sb.AppendLine("using System.Linq;");
 
         // Add using directives for each referenced component's namespace
@@ -142,13 +143,26 @@ public static class WiringGenerator
             var args = BuildChainedArgs(conn, prevRet, prevType, targetSig);
             var retVoid = retType == "void" || retType == "Void";
 
+            // Logic components are instance classes — need to instantiate.
+            // Io-shell stubs are static classes — call directly.
+            var isInstance = targetComp.Classification != ModuleClassification.IoShell;
+            var callTarget = targetClass;
+            if (isInstance)
+            {
+                var instanceVar = $"inst_{conn.ToComponent}";
+                // Only declare once per component
+                if (!sb.ToString().Contains($"var {instanceVar} ="))
+                    sb.AppendLine($"            var {instanceVar} = new {targetClass}();");
+                callTarget = instanceVar;
+            }
+
             if (retVoid)
             {
-                sb.AppendLine($"            {targetClass}.{targetSig.Name}({args});");
+                sb.AppendLine($"            {callTarget}.{targetSig.Name}({args});");
             }
             else
             {
-                sb.AppendLine($"            var {retVarName} = {targetClass}.{targetSig.Name}({args});");
+                sb.AppendLine($"            var {retVarName} = {callTarget}.{targetSig.Name}({args});");
 
                 // If return type is bool (validation result), emit error branch
                 if (retType == "bool")

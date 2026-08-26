@@ -62,9 +62,12 @@ public static class TranslatedCSharpScanner
                 continue;
             }
 
-            // Extract public static methods
-            if (!line.Contains("public static")) continue;
-            if (!line.Contains("(") && !line.Contains(")")) continue;
+            // Extract public methods (static or instance)
+            if (!line.Contains("public")) continue;
+            if (!line.Contains("(") || !line.Contains(")")) continue;
+            // Skip properties (get/set) and fields
+            if (line.Contains("{ get;") || line.Contains("{ set;")) continue;
+            if (line.TrimEnd().EndsWith(";") && !line.Contains("(")) continue;
 
             var sig = ExtractMethod(line, cls, ns, lines, i);
             if (sig != null) results.Add(sig);
@@ -89,8 +92,8 @@ public static class TranslatedCSharpScanner
 
     private static CsMethodSignature? ExtractMethod(string line, string cls, string ns, string[] lines, int lineIdx)
     {
-        // Find method name and return type: "public static RETURNTYPE Name(..."
-        var stripped = line.Replace("public static", "").Trim();
+        // Find method name and return type: "public [static] RETURNTYPE Name(..."
+        var stripped = line.Replace("public static", "").Replace("public", "").Trim();
         var parenIdx = stripped.IndexOf('(');
         if (parenIdx < 0) return null;
 
