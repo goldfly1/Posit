@@ -76,24 +76,35 @@ If the deterministic generator returns empty, falls back to `ModelWiringGenerato
 **Input:** SourceCodeBundle + ArchitectureContract (test cases)
 **Output:** `QaResult` (test pass/fail per test case)
 
-The QA model generates test input data matching each test case description:
-- LLM generates 3-6 test cases (valid input, edge case, invalid input, empty input)
-- Model may return a bare JSON array `[...]` or a wrapped object `{"testData":[...]}`
-- Deserializer handles both formats — unwraps the array if wrapped
+The architect **frames** the test — test case descriptions with expected behavior prose.
+The QA model **generates concrete input + derives expected output** from the architect's frame:
+
+1. QA model generates 3-6 test cases (valid input, edge case, invalid input, empty input)
+2. Each test case includes: fileName, content (concrete input), expectedOutput (exact stdout),
+   expectedExitCode (0 or 1)
+3. Model may return a bare JSON array `[...]` or a wrapped object `{"testData":[...]}` — deserializer handles both
 
 The Docker harness:
 1. Creates test data files from QA output (matched by index to test cases)
 2. Builds the C# project (`dotnet build` in Docker)
 3. Runs each test case with generated input
-4. Checks output against expected behavior shape (fuzzy match: JSON shape, error keywords, "prints" keywords)
+4. **Compares output EXACTLY** (whitespace-trimmed) against expectedOutput + expectedExitCode
+5. Falls back to fuzzy comparison (keyword/shape matching) only when no expected output is available
+
+**Exact comparison catches real bugs that fuzzy matching rubber-stamps.**
+Example: program outputs `[]` (empty array) instead of `[{"name":"Alice",...}]`.
+Fuzzy matcher passes (output starts with `[`). Exact comparison fails.
 
 **Build failures** → WireFixer (fixes C# wiring/type mismatches)
 **Test failures** → WireFixer (fixes type conversion/serialization)
 Retry loop: max 6 attempts.
 
+**Note:** WireFixer can only fix wiring, not implementation bugs. If the C# implementation
+produces wrong output (e.g., empty array), the fix belongs in the C# implementation phase,
+not WireFixer.
+
 **Fallback:** If AI test data generation fails, the harness uses the architect's test case descriptions
-or its own deterministic `GenerateTestData` heuristic (pattern-matches test case names to generate
-appropriate CSV, JSON, text, empty, invalid, or file-not-found input).
+or its own deterministic `GenerateTestData` heuristic.
 
 ## What We Keep
 
