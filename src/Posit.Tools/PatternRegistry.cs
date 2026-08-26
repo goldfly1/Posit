@@ -42,7 +42,7 @@ public sealed partial class PatternRegistry
     {
         if (!_csharpStubs.TryGetValue(stubName, out var stub))
             return $"// Stub '{stubName}' not found";
-        return stub.Template.Replace("{ComponentName}", componentName);
+        return stub.Template.Replace("{{ComponentName}}", componentName);
     }
 
     /// <summary>

@@ -1,78 +1,58 @@
-// {{ComponentName}} — Console I/O portal caps
-// Auto-bound to Dafny stub: console-io
-// DO NOT invent new structure. This file only inlays function behind pre-cut portals.
-
+// {{ComponentName}} — Console I/O stub
 using System;
 using System.Linq;
 
 namespace {{ComponentName}}
 {
-    public static partial class ConsoleIO
+    public static class ConsoleIO
     {
-        // Portal: PrintLine(message)
         public static void PrintLine(string message)
         {
             Console.WriteLine(message);
         }
 
-        // Portal: Print(message)
         public static void Print(string message)
         {
             Console.Write(message);
         }
 
-        // Portal: ReadLine() returns (line: string)
         public static string ReadLine()
         {
             return Console.ReadLine() ?? "";
         }
 
-        // Portal: ReadSplitLine(delimiter) returns (fields: seq<string>)
-        // Splits input by delimiter, returns as Dafny sequence
-        public static Dafny.ISequence<Dafny.ISequence<Dafny.Rune>> ReadSplitLine(string delimiter)
+        public static string[] ReadSplitLine(string delimiter)
         {
             var line = Console.ReadLine() ?? "";
-            var fields = line.Split(new[] { delimiter }, StringSplitOptions.None);
-            return Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(
-                fields.Select(f => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(f)).ToArray());
+            return line.Split(new[] { delimiter }, StringSplitOptions.None);
         }
 
-        // Portal: ReadArgs() returns (args: seq<string>)
-        // Splits input by space
-        public static Dafny.ISequence<Dafny.ISequence<Dafny.Rune>> ReadArgs()
+        public static string[] ReadArgs()
         {
             var line = Console.ReadLine() ?? "";
-            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            return Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(
-                parts.Select(p => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(p)).ToArray());
+            return line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
         }
 
-        // Portal: PrintError(text)
         public static void PrintError(string text)
         {
             Console.Error.WriteLine(text);
         }
 
-        // Portal: PrintResult(text)
         public static void PrintResult(string text)
         {
             Console.WriteLine(text);
         }
 
-        // Portal: ClearScreen()
         public static void ClearScreen()
         {
             Console.Clear();
         }
 
-        // Portal: ReadKey() returns (key: string)
         public static string ReadKey()
         {
             return Console.ReadKey(true).KeyChar.ToString();
         }
 
-        // Portal: ReadChar() returns (ch: string)
-        // ensures |ch| <= 1
         public static string ReadChar()
         {
             return Console.ReadKey(true).KeyChar.ToString();

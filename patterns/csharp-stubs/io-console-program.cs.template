@@ -1,5 +1,5 @@
 // {{ComponentName}} — Console entry point for the workflow engine CLI
-// Auto-bound to Dafny stub: console-io
+// C# stub: console-io
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
 
 using System;

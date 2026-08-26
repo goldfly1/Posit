@@ -1,7 +1,7 @@
 // {{ComponentName}} — Stream I/O portal caps
-// Auto-bound to Dafny stub: stream-io
+// C# stub: stream-io
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
-// Requires guards enforce the Dafny contracts at runtime.
+// Runtime guards enforce input validation.
 
 using System;
 using System.Collections.Generic;

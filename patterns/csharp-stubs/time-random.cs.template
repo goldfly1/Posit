@@ -1,7 +1,7 @@
 // {{ComponentName}} — Time and Random portal caps
-// Auto-bound to Dafny stub: time-random
+// C# stub: time-random
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
-// Requires guards enforce the Dafny contracts at runtime.
+// Runtime guards enforce input validation.
 
 using System;
 

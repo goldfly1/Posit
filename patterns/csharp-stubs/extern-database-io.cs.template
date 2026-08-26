@@ -1,7 +1,7 @@
 // {{ComponentName}} — {:extern} database I/O portal implementations
-// Auto-bound to Dafny stub: database-io
+// C# stub: database-io
 // DO NOT invent new structure. This file only inlays function behind pre-cut portals.
-// Requires guards enforce the Dafny contracts at runtime.
+// Runtime guards enforce input validation.
 
 using System;
 using System.Collections.Generic;

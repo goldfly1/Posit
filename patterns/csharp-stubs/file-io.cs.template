@@ -1,67 +1,49 @@
-// {{ComponentName}} — File I/O portal caps
-// Auto-bound to Dafny stub: file-io
-// DO NOT invent new structure. This file only inlays function behind pre-cut portals.
-// Requires guards enforce the Dafny contracts at runtime.
-
+// {{ComponentName}} — File I/O stub
 using System.IO;
 
 namespace {{ComponentName}}
 {
-    public static partial class FileIO
+    public static class FileIO
     {
-        // Portal: ReadFile(path: string) returns (content: string)
-        // requires |path| > 0
-        // ensures |content| >= 0
         public static string ReadFile(string path)
         {
             if (string.IsNullOrEmpty(path))
-                throw new ArgumentException("requires |path| > 0", nameof(path));
+                throw new ArgumentException("path must not be empty", nameof(path));
             return File.ReadAllText(path);
         }
 
-        // Portal: WriteFile(path: string, content: string)
-        // requires |path| > 0
         public static void WriteFile(string path, string content)
         {
             if (string.IsNullOrEmpty(path))
-                throw new ArgumentException("requires |path| > 0", nameof(path));
+                throw new ArgumentException("path must not be empty", nameof(path));
             File.WriteAllText(path, content);
         }
 
-        // Portal: AppendFile(path: string, content: string)
-        // requires |path| > 0
         public static void AppendFile(string path, string content)
         {
             if (string.IsNullOrEmpty(path))
-                throw new ArgumentException("requires |path| > 0", nameof(path));
+                throw new ArgumentException("path must not be empty", nameof(path));
             File.AppendAllText(path, content);
         }
 
-        // Portal: ReadLines(path: string) returns (lines: seq<string>)
-        // requires |path| > 0
-        // ensures |lines| >= 0
         public static string[] ReadLines(string path)
         {
             if (string.IsNullOrEmpty(path))
-                throw new ArgumentException("requires |path| > 0", nameof(path));
+                throw new ArgumentException("path must not be empty", nameof(path));
             return File.ReadAllLines(path);
         }
 
-        // Portal: WriteLines(path: string, lines: seq<string>)
-        // requires |path| > 0
         public static void WriteLines(string path, string[] lines)
         {
             if (string.IsNullOrEmpty(path))
-                throw new ArgumentException("requires |path| > 0", nameof(path));
+                throw new ArgumentException("path must not be empty", nameof(path));
             File.WriteAllLines(path, lines);
         }
 
-        // Portal: FileExists(path: string) returns (found: bool)
-        // requires |path| > 0
         public static bool FileExists(string path)
         {
             if (string.IsNullOrEmpty(path))
-                throw new ArgumentException("requires |path| > 0", nameof(path));
+                throw new ArgumentException("path must not be empty", nameof(path));
             return File.Exists(path);
         }
     }
