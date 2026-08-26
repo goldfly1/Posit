@@ -194,6 +194,7 @@ public sealed class CSharpImplementationPhase : IPhase
             6. Handle edge cases: empty input, null where applicable, invalid data.
             7. Output ONLY the C# class file — no markdown fences, no explanations.
             8. Include `using` directives at the top.
+            9. Put the class in `namespace {comp.Name}` — the wiring code references it as {comp.Name}.{comp.Name}.
             """;
 
         string? previousCode = null;

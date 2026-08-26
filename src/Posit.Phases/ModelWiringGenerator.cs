@@ -232,9 +232,9 @@ namespace {comp.Name}
             var m = transMethods[0];
             if (!string.IsNullOrEmpty(m.Namespace))
                 return $"{m.Namespace}.{m.ClassName}";
-            return m.ClassName;
+            // Default: namespace = component name, class = component name
+            return $"{targetComp.Name}.{targetComp.Name}";
         }
-        return targetComp.Classification == ModuleClassification.IoShell
-            ? targetComp.Name : targetComp.Name;
+        return $"{targetComp.Name}.{targetComp.Name}";
     }
 }
