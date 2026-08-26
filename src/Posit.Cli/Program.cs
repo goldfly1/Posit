@@ -152,6 +152,136 @@ internal static class Program
                 Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
         }
 
+        // ── Implementation correction loop ──────────────────────────────────
+        // If WireFixer couldn't fix the test failures, the bug is in the component
+        // implementation, not the wiring. Feed the test failures back to the model
+        // to regenerate the failing component code.
+        const int maxImplRetries = 3;
+        for (var implRetry = 0; implRetry < maxImplRetries && !result.Success; implRetry++)
+        {
+            // Only engage if there are test failures (not build failures)
+            if (IsDockerBuildFailure(result)) break;
+            var testFailures = result.Results.Where(r => !r.Matches).ToArray();
+            if (testFailures.Length == 0) break;
+
+            Console.Error.WriteLine($"[impl-fixer] WireFixer couldn't fix — feeding test failures to implementation ({implRetry + 1}/{maxImplRetries})...");
+
+            // Get the architecture contract (interfaces + test cases)
+            var repo = new ArtifactRepository();
+            var artifacts = await repo.ListBySessionAsync(sessionId);
+            var contractArtifact = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.ArchitectureContract);
+            var bundleArtifact = artifacts.FirstOrDefault(a => a.Kind == ArtifactKind.SourceCodeBundle);
+            if (contractArtifact == null || bundleArtifact == null)
+            {
+                Console.Error.WriteLine("[impl-fixer] No contract or bundle found — cannot fix");
+                break;
+            }
+
+            var contract = Deserialize<ArchitectureContract>(contractArtifact.PayloadJson);
+            var bundle = Deserialize<SourceCodeBundle>(bundleArtifact.PayloadJson);
+            if (contract == null || bundle == null) break;
+
+            // Build failure feedback for the model
+            var failureReport = new List<string>();
+            foreach (var tc in testFailures)
+                failureReport.Add($"Test '{tc.Id}': expected '{tc.Expected}', got '{tc.Output}'");
+
+            // Regenerate each logic component with test failure feedback
+            var updatedFiles = bundle.Files.ToDictionary(f => f.Path, f => f.Content);
+            var anyUpdated = false;
+
+            foreach (var comp in contract.Components)
+            {
+                if (comp.Classification == ModuleClassification.IoShell) continue;
+                if (string.IsNullOrWhiteSpace(comp.CSharpInterface)) continue;
+
+                var compPath = $"{comp.Name}/{comp.Name}.cs";
+                if (!updatedFiles.TryGetValue(compPath, out var currentCode)) continue;
+
+                Console.Error.WriteLine($"[impl-fixer] Regenerating {comp.Name}...");
+
+                var fixPrompt = $"""
+                    You are a Senior C# Developer. Your implementation has a bug — it produces wrong output.
+
+                    INTERFACE (implement this — match every method signature exactly):
+                    {comp.CSharpInterface}
+
+                    RESPONSIBILITY:
+                    {comp.Responsibility}
+
+                    TEST FAILURES (your code produces wrong output — fix the logic):
+                    {string.Join("\n", failureReport)}
+
+                    YOUR CURRENT CODE (has a bug — find and fix it):
+                    {currentCode}
+
+                    RULES:
+                    1. Keep the same class name, namespace, and interface implementation.
+                    2. Fix the logic that produces wrong output.
+                    3. Do NOT modify the interface.
+                    4. Output ONLY the C# class file — no markdown fences, no explanations.
+                    5. Include `using` directives at the top.
+                    6. Put the class in `namespace {comp.Name}`.
+                    """;
+
+                var fixPromptTemplate = new PromptTemplate
+                {
+                    PhaseId = new PhaseId("impl-fix"), Version = new PromptVersion("1.0.0"),
+                    SystemPrompt = fixPrompt, OutputFormatSpec = "raw C# source code",
+                    ModelTier = ModelTier.Fast, Temperature = 0.3, MaxOutputTokens = 8192,
+                    OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "CSharpSource",
+                    Status = PromptStatus.Active
+                };
+                var fixResult = await gateway.GenerateAsync(
+                    new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
+                        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.3 },
+                    fixPromptTemplate,
+                    new PhaseContext
+                    {
+                        SessionId = sessionId, PhaseId = new PhaseId("impl-fix"),
+                        Prompt = fixPromptTemplate,
+                        ModelRoute = new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
+                            ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.3 },
+                        BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
+                    },
+                    CancellationToken.None);
+
+                var newCode = ExtractCSharpFromModel(fixResult.Text);
+                if (!string.IsNullOrWhiteSpace(newCode))
+                {
+                    updatedFiles[compPath] = newCode;
+                    anyUpdated = true;
+                    Console.Error.WriteLine($"[impl-fixer] Updated {compPath} ({newCode.Length} chars)");
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[impl-fixer] Model returned empty for {comp.Name}");
+                }
+            }
+
+            if (!anyUpdated)
+            {
+                Console.Error.WriteLine("[impl-fixer] No components updated — stopping");
+                break;
+            }
+
+            // Update the SourceCodeBundle in DB
+            var newBundle = new SourceCodeBundle
+            {
+                Files = updatedFiles.Select(kv => new SourceCodeFile(kv.Key, kv.Value)).ToArray(),
+                ProjectPath = bundle.ProjectPath,
+                TargetFramework = bundle.TargetFramework
+            };
+            var newPayload = JsonSerializer.SerializeToUtf8Bytes(newBundle, PositJson.Options);
+            await repo.StageAsync(bundleArtifact with { PayloadJson = newPayload });
+
+            // Re-run harness
+            result = await harness.RunAsync(sessionId);
+            Console.Error.WriteLine($"[impl-fixer] retry {implRetry + 1}: success={result.Success} tests={result.Results.Length}");
+            foreach (var tc in result.Results)
+                Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
+        }
+
         return result.Success ? 0 : 1;
     }
 
@@ -395,6 +525,23 @@ internal static class Program
         Tier = ModelTier.Fast, ProviderId = "ollama",
         ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 4096, Temperature = 0.1
     };
+
+    /// <summary>
+    /// Extract C# code from model output — strips markdown fences if present.
+    /// </summary>
+    private static string ExtractCSharpFromModel(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        if (text.Contains("```"))
+        {
+            var start = text.IndexOf("```");
+            var afterFence = text.IndexOf('\n', start) + 1;
+            var end = text.IndexOf("```", afterFence);
+            if (end > afterFence)
+                return text[afterFence..end].Trim();
+        }
+        return text.Trim();
+    }
 
     /// <summary>
     /// Update Wire.cs in the DB's SourceCodeBundle artifact so the harness
