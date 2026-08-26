@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Posit.AI.Models;
 using Posit.Contracts.Artifacts;
 
@@ -156,9 +157,12 @@ public sealed class CSharpImplementationPhase : IPhase
         }
     }
 
+    private const int MaxBuildAttempts = 4;
+
     /// <summary>
-    /// Model generates C# implementation for a logic component against its interface.
-    /// Includes the interface definition, responsibility, and test cases in the prompt.
+    /// Model generates C# implementation for a logic component against its interface,
+    /// with a dotnet build correction loop. The model generates code, we compile it
+    /// against the interface in a temp project, and feed compiler errors back on retry.
     /// </summary>
     private async Task<string> GenerateImplementationAsync(
         Component comp, ArchitectureContract contract, PhaseContext context, CancellationToken ct)
@@ -169,7 +173,7 @@ public sealed class CSharpImplementationPhase : IPhase
             ? string.Join("\n", comp.TestCases.Select(tc => $"  - {tc.Description} → {tc.ExpectedBehavior}"))
             : "(no test cases)";
 
-        var systemPrompt = $"""
+        var basePrompt = $"""
             You are a Senior C# Developer. Implement the following C# interface.
 
             INTERFACE (implement this — match every method signature exactly):
@@ -192,34 +196,181 @@ public sealed class CSharpImplementationPhase : IPhase
             8. Include `using` directives at the top.
             """;
 
-        // Include correction signal if this is a retry
-        if (context.CorrectionSignal is { Length: > 0 })
-            systemPrompt += $"\n\nPREVIOUS ERRORS (fix these):\n{string.Join("\n", context.CorrectionSignal)}";
+        string? previousCode = null;
+        string[]? buildErrors = null;
 
-        if (!string.IsNullOrWhiteSpace(context.PreviousOutput))
-            systemPrompt += $"\n\nPREVIOUS OUTPUT (fix the errors above):\n{context.PreviousOutput}";
-
-        var prompt = new PromptTemplate
+        for (var attempt = 1; attempt <= MaxBuildAttempts; attempt++)
         {
-            PhaseId = context.PhaseId,
-            Version = new PromptVersion("1.0.0"),
-            SystemPrompt = systemPrompt,
-            OutputFormatSpec = "raw C# source code",
-            ModelTier = ModelTier.Fast,
-            Temperature = 0.2,
-            MaxOutputTokens = 8192,
-            OutputFormat = OutputFormat.PlainText,
-            OutputSchemaRef = "CSharpSource",
-            Status = PromptStatus.Active
-        };
+            var systemPrompt = basePrompt;
 
-        // TODO: add dotnet build correction loop (compile temp project, feed errors back)
-        Console.Error.WriteLine($"[csharp-impl] {comp.Name} generating...");
-        var result = await _model.GenerateAsync(context.ModelRoute, prompt, context, ct);
-        if (string.IsNullOrWhiteSpace(result.Text))
-            return "";
+            if (buildErrors is { Length: > 0 })
+            {
+                systemPrompt += $"\n\nPREVIOUS CODE (had compile errors):\n{previousCode}";
+                systemPrompt += $"\n\nCOMPILER ERRORS (fix these — keep everything else the same):\n{string.Join("\n", buildErrors)}";
+            }
+            else if (context.CorrectionSignal is { Length: > 0 } && attempt == 1)
+            {
+                systemPrompt += $"\n\nCORRECTION SIGNAL:\n{string.Join("\n", context.CorrectionSignal)}";
+            }
 
-        return ExtractCSharp(result.Text);
+            var prompt = new PromptTemplate
+            {
+                PhaseId = context.PhaseId,
+                Version = new PromptVersion("1.0.0"),
+                SystemPrompt = systemPrompt,
+                OutputFormatSpec = "raw C# source code",
+                ModelTier = ModelTier.Fast,
+                Temperature = attempt == 1 ? 0.2 : 0.3,
+                MaxOutputTokens = 8192,
+                OutputFormat = OutputFormat.PlainText,
+                OutputSchemaRef = "CSharpSource",
+                Status = PromptStatus.Active
+            };
+
+            Console.Error.WriteLine($"[csharp-impl] {comp.Name} attempt {attempt}/{MaxBuildAttempts}");
+            var result = await _model.GenerateAsync(context.ModelRoute, prompt, context, ct);
+            if (string.IsNullOrWhiteSpace(result.Text))
+            {
+                Console.Error.WriteLine($"[csharp-impl] {comp.Name} empty model output on attempt {attempt}");
+                buildErrors = ["Model returned empty output"];
+                continue;
+            }
+
+            var code = ExtractCSharp(result.Text);
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                Console.Error.WriteLine($"[csharp-impl] {comp.Name} no C# extracted on attempt {attempt}");
+                buildErrors = ["No C# code found in model output"];
+                continue;
+            }
+
+            // Static check first (free, instant)
+            var staticIssues = StaticChecker.CheckCSharp(code);
+            if (staticIssues.Count > 0)
+            {
+                Console.Error.WriteLine($"[csharp-impl] {comp.Name} static check failed on attempt {attempt}");
+                buildErrors = staticIssues.Select(i => $"[{i.RuleId}] {i.Message}").ToArray();
+                previousCode = code;
+                continue;
+            }
+
+            // Compile in a temp project
+            var (compiles, errors) = await TryCompileAsync(comp, code, iface, context, ct);
+            if (compiles)
+            {
+                Console.Error.WriteLine($"[csharp-impl] {comp.Name} compiled successfully on attempt {attempt}");
+                return code;
+            }
+
+            Console.Error.WriteLine($"[csharp-impl] {comp.Name} build failed on attempt {attempt}: {errors.Length} errors");
+            buildErrors = errors;
+            previousCode = code;
+        }
+
+        // All attempts failed — return the last code we got (if any)
+        Console.Error.WriteLine($"[csharp-impl] {comp.Name} exhausted {MaxBuildAttempts} attempts, returning last output");
+        return previousCode ?? "";
+    }
+
+    /// <summary>
+    /// Compile generated C# against its interface in a temp project.
+    /// Returns (true, []) on success, (false, errors) on failure.
+    /// </summary>
+    private static async Task<(bool Success, string[] Errors)> TryCompileAsync(
+        Component comp, string implCode, string interfaceCode, PhaseContext context, CancellationToken ct)
+    {
+        var shortId = Guid.NewGuid().ToString("N")[..8];
+        var tempDir = Path.Combine(Path.GetTempPath(), "posit-build",
+            $"{context.SessionId.Value}-{comp.Name}-{shortId}");
+
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            // Write interface file
+            var ifacePath = Path.Combine(tempDir, $"I{comp.Name}.cs");
+            File.WriteAllText(ifacePath, interfaceCode);
+
+            // Write implementation file
+            var implPath = Path.Combine(tempDir, $"{comp.Name}.cs");
+            File.WriteAllText(implPath, implCode);
+
+            // Write a minimal .csproj
+            var csprojContent = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                    <OutputType>Library</OutputType>
+                    <Nullable>enable</Nullable>
+                    <ImplicitUsings>enable</ImplicitUsings>
+                    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <Compile Include="**\*.cs" />
+                  </ItemGroup>
+                </Project>
+                """;
+            File.WriteAllText(Path.Combine(tempDir, $"{comp.Name}.csproj"), csprojContent);
+
+            // Run dotnet build
+            var psi = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"build \"{Path.Combine(tempDir, $"{comp.Name}.csproj")}\" --nologo -v q",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = tempDir
+            };
+
+            using var process = new Process { StartInfo = psi };
+            process.Start();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+            await process.WaitForExitAsync(ct);
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (process.ExitCode == 0)
+                return (true, []);
+
+            // Parse errors from stdout/stderr
+            var output = string.IsNullOrEmpty(stderr) ? stdout : stdout + "\n" + stderr;
+            var errors = ParseBuildErrors(output);
+            return (false, errors.Length > 0 ? errors : [output.Trim()]);
+        }
+        catch (Exception ex)
+        {
+            return (false, [$"Build exception: {ex.Message}"]);
+        }
+        finally
+        {
+            // Clean up temp dir
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Parse dotnet build output for error messages.
+    /// Lines with "error CS" are compiler errors.
+    /// </summary>
+    private static string[] ParseBuildErrors(string buildOutput)
+    {
+        var errors = new List<string>();
+        foreach (var line in buildOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Contains("error CS", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Contains("error NET", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(trimmed);
+            }
+        }
+        return errors.Count > 0
+            ? errors.Distinct().ToArray()
+            : [buildOutput.Trim()];
     }
 
     /// <summary>
