@@ -96,19 +96,12 @@ public sealed class ModelWiringGenerator
             // If the model returned a full file (has class Wire), use it as-is
             if (text.Contains("class Wire") || text.Contains("static class Wire"))
             {
-                // Ensure it has the required using statements
-                if (!text.Contains("using System.Numerics"))
-                    text = "using System.Numerics;\n" + text;
-                if (!text.Contains("using Dafny"))
-                    text = "using Dafny;\n" + text;
                 return text;
             }
 
             // Otherwise wrap in boilerplate
             return $@"using System;
 using System.Linq;
-using System.Numerics;
-using Dafny;
 
 namespace {comp.Name}
 {{
@@ -132,7 +125,7 @@ namespace {comp.Name}
         Dictionary<string, List<CsMethodSignature>> stubSigs)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are writing Wire.cs — the C# entry point that wires together Dafny components.");
+        sb.AppendLine("You are writing Wire.cs — the C# entry point that wires together C# components.");
         sb.AppendLine("Write a complete C# Main method that calls the components in order, passing results between them.");
         sb.AppendLine();
         sb.AppendLine($"Component: {comp.Name}");
@@ -155,7 +148,7 @@ namespace {comp.Name}
         sb.AppendLine();
 
         // List method signatures for each target component
-        sb.AppendLine("Method signatures (ACTUAL C# types from translated Dafny):");
+        sb.AppendLine("Method signatures (native C# types from the interface):");
         foreach (var conn in comp.Connections)
         {
             var targetComp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
@@ -178,31 +171,15 @@ namespace {comp.Name}
         }
         sb.AppendLine();
 
-        // Type conversion reference
-        sb.AppendLine("TYPE CONVERSIONS (Dafny <-> C#):");
-        sb.AppendLine("  string -> ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)");
-        sb.AppendLine("  ISequence<Rune> -> string: new string(seq.Select(r => (char)r.Value).ToArray())");
-        sb.AppendLine("  ISequence<ISequence<Rune>> -> string: string.Join(\"\\n\", seq.Select(row => string.Join(\" \", row.Select(r => (char)r.Value))))");
-        sb.AppendLine("  ISequence<ISequence<ISequence<Rune>>> -> string: string.Join(\"\\n\", seq.Select(row => string.Join(\" \", row.Select(field => new string(field.Select(r => (char)r.Value).ToArray())))))");
-        sb.AppendLine("  string[] -> ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(string.Join(\"\\n\", arr))");
-        sb.AppendLine("  string[] -> ISequence<ISequence<Rune>>: Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(arr.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())");
-        sb.AppendLine("  int/BigInteger: use BigInteger.Zero for default, BigInteger for arithmetic");
-        sb.AppendLine();
-        sb.AppendLine("CRITICAL DAFNY RUNTIME API — ISequence<T> interface:");
-        sb.AppendLine("  ISequence<T> is the C# type for Dafny seq<T>. It implements IEnumerable<T>.");
-        sb.AppendLine("  REAL API (from C# interface):");
-        sb.AppendLine("    .Count           — int property for length (NOT .Length, NOT .Count())");
-        sb.AppendLine("    .Select(i)       — element at index i (NOT seq[i] — Select IS the indexer!)");
-        sb.AppendLine("    .CloneAsArray()  — returns T[] copy");
-        sb.AppendLine("    .Contains(g)     — bool membership check");
-        sb.AppendLine("    .Take(n)/.Drop(n) — subsequence operations");
-        sb.AppendLine("  Since ISequence<T> implements IEnumerable<T>, LINQ works too:");
-        sb.AppendLine("    .Select(r => (char)r.Value)  — LINQ projection (note: same name as indexer, different signature)");
-        sb.AppendLine("    .Count()                      — LINQ count (method call, not property)");
-        sb.AppendLine("    .ElementAt(i)                 — LINQ indexer");
-        sb.AppendLine("  For ISequence<ISequence<T>> (2D): unwrap with .Select(row => ...) first.");
-        sb.AppendLine("  Type conversions: string→ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)");
-        sb.AppendLine("                     ISequence<Rune>→string: new string(seq.Select(r => (char)r.Value).ToArray())");
+        // Type conversion reference — native C# only
+        sb.AppendLine("TYPE CONVERSIONS (native C#):");
+        sb.AppendLine("  string -> int: int.Parse(s)");
+        sb.AppendLine("  string -> double: double.Parse(s)");
+        sb.AppendLine("  string -> bool: bool.Parse(s)");
+        sb.AppendLine("  string[] -> string: string.Join(\"\\n\", arr)");
+        sb.AppendLine("  string -> string[]: s.Split('\\n')");
+        sb.AppendLine("  List<string> -> string[]: list.ToArray()");
+        sb.AppendLine("  string[] -> List<string>: arr.ToList()");
         sb.AppendLine();
 
         // Rules
@@ -223,7 +200,7 @@ namespace {comp.Name}
         if (!string.IsNullOrWhiteSpace(comp.BranchCondition))
             sb.AppendLine($"5a. Branch condition from architect: {comp.BranchCondition}. Implement this branching.");
         sb.AppendLine("6. The last call should print the result to stdout. Print the VALUE, not just a unit/type name.");
-        sb.AppendLine("7. Apply type conversions at Dafny/io-shell boundaries (see table above).");
+        sb.AppendLine("7. Use native C# types only — string, int, double, bool, string[], List<string>.");
         sb.AppendLine("8. Output ONLY the Main method body (no class/namespace wrapper).");
         sb.AppendLine("9. If args.Length == 0, print usage and return 1.");
 
@@ -258,6 +235,6 @@ namespace {comp.Name}
             return m.ClassName;
         }
         return targetComp.Classification == ModuleClassification.IoShell
-            ? targetComp.Name : "_module_" + targetComp.Name + ".__default";
+            ? targetComp.Name : targetComp.Name;
     }
 }

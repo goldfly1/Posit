@@ -4,7 +4,7 @@ namespace Posit.Phases;
 
 /// <summary>
 /// Abstraction over the pattern registry.
-/// Only C# stub composition is needed — Dafny pattern methods removed.
+/// Only C# stub composition is needed — pattern methods removed.
 /// </summary>
 public interface IPatternRegistry
 {

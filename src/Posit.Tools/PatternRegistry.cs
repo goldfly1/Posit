@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Posit.Tools;
 
 /// <summary>
-/// Loads patterns (Dafny .dfy), Dafny stubs, and C# stub templates from the
+/// Loads patterns, C# stubs, and C# stub templates from the
 /// patterns/ directory. Provides skeleton composition, dependency materialization,
 /// and pattern suggestion.
 /// </summary>
@@ -90,13 +90,13 @@ public sealed partial class PatternRegistry
         foreach (var file in Directory.GetFiles(_patternsRoot, "*.dfy"))
         {
             var name = Path.GetFileNameWithoutExtension(file);
-            if (name == "dafny-reference-card") continue;
+            if (name == "dafny-reference-card") continue; // legacy skip, harmless
             var content = File.ReadAllText(file);
             var (patternName, responsibility) = ParsePatternHeader(content);
             _patterns[name] = new PatternEntry(name, patternName, responsibility, content,
                 ExtractKeywords(responsibility), content.Contains("include \"result.dfy\""));
         }
-        // Load cut-outs (domain-specific pre-cut Dafny modules)
+        // Load cut-outs (domain-specific pre-cut modules)
         var cutOutsDir = Path.Combine(_patternsRoot, "cut-outs");
         if (Directory.Exists(cutOutsDir))
         {

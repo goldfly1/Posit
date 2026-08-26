@@ -75,7 +75,7 @@ public sealed class ArchitecturePhase : IPhase
         }
 
         // Type chain check — validate data flow types
-        var chainErrors = TypeChainChecker.CheckPreDafny(contract);
+        var chainErrors = TypeChainChecker.CheckPreImpl(contract);
         if (chainErrors.Count > 0)
         {
             var chainMsg = TypeChainChecker.FormatErrors(chainErrors);

@@ -90,9 +90,9 @@ public static class PromptLogger
     }
 
     /// <summary>
-    /// Log a Dafny verification result to posit_qa.dafny_results.
-    /// Captures the Dafny source, Z3 output, and translated C# for every
-    /// verification attempt (both skeleton and body phases).
+    /// Log an implementation result to posit_qa.dafny_results (legacy table name).
+    /// Captures the C# source and build output for every implementation attempt.
+    /// (Table name kept for DB compatibility — method is legacy but functional.)
     /// </summary>
     public static async Task LogDafnyResultAsync(
         string sessionId,

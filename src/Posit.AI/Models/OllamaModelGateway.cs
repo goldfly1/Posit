@@ -86,7 +86,7 @@ public sealed class OllamaModelGateway : IModelGateway
 
         var text = body.Message?.Content ?? string.Empty;
         text = StripReasoningTags(text);
-        // Only extract JSON for JSON-format prompts — Dafny/plain text output must not be mangled
+        // Only extract JSON for JSON-format prompts — plain text output must not be mangled
         if (prompt.OutputFormat == OutputFormat.Json)
             text = ExtractJson(text);
 
@@ -132,7 +132,7 @@ public sealed class OllamaModelGateway : IModelGateway
     {
         // If the phase has built its own user prompt (replaced UserRequest with its own content),
         // send it as-is. The phase knows what it needs — don't add boilerplate, artifacts,
-        // or corrections on top. This is the case for DafnyImpl, WireFixer, and DafnyFixer.
+        // or corrections on top. This is the case for C#Impl, WireFixer.
         // We detect this by checking if UserRequest contains phase-specific markers.
         if (!string.IsNullOrWhiteSpace(context.UserRequest)
             && (context.UserRequest.Contains("═══", StringComparison.Ordinal)

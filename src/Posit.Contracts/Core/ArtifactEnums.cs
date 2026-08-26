@@ -40,9 +40,8 @@ public enum PromptStatus { Active, Superseded, Deprecated }
 public enum OutputFormat { Json, Markdown, Yaml, Xml, PlainText }
 
 /// <summary>
-/// How the architect classifies a module for the Dafny-first pipeline.
-/// dafny = pure logic, verified by Z3. io-shell = side effects, C# only.
-/// mixed = split into both.
+/// How the architect classifies a module for the C#-direct pipeline.
+/// logic = pure logic, no I/O. io-shell = side effects, I/O handling.
 /// </summary>
 [JsonConverter(typeof(ModuleClassificationConverter))]
 public enum ModuleClassification

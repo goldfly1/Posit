@@ -163,9 +163,9 @@ public sealed class FsmReducer
     }
 
     /// <summary>
-    /// Rollback to Architecture phase. Used when Dafny Contracts skeleton
-    /// verification fails and the correction signal needs to go back to the
-    /// architect. Removes Architecture from completed phases so the dependency
+    /// Rollback to Architecture phase. Used when the type chain check
+    /// fails and the correction signal needs to go back to the architect.
+    /// Removes Architecture from completed phases so the dependency
     /// graph re-schedules it. Increments LoopbackCount (max 2).
     /// </summary>
     private FsmTransitionResult ApplyRollbackToArchitecture(SessionState state)
@@ -185,7 +185,7 @@ public sealed class FsmReducer
         // Remove architecture from completed phases so it gets re-scheduled
         var newCompleted = state.CompletedPhases
             .Where(p => p.Value != "architecture")
-            .Where(p => p.Value != "dafny-contracts") // dafny-contracts too — it depends on architecture
+            .Where(p => p.Value != "csharp-implementation") // csharp-impl depends on architecture
             .ToArray();
 
         var rollbackState = state with

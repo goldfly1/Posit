@@ -1,7 +1,7 @@
 namespace Posit.Phases;
 
 /// <summary>
-/// A scanned C# method signature — the ACTUAL types from translated Dafny C#.
+/// A scanned C# method signature — the ACTUAL types from the C# interface.
 /// </summary>
 public record CsMethodSignature(
     string Name,
@@ -16,7 +16,7 @@ public record CsMethodSignature(
 /// <summary>
 /// Reads translated C# files and extracts real method signatures by parsing
 /// line by line. Also scans io-shell stub templates. Used by WiringGenerator
-/// to track ACTUAL C# types (not Dafny types) for type-safe wiring.
+/// to track ACTUAL C# types for type-safe wiring.
 /// </summary>
 public static class TranslatedCSharpScanner
 {

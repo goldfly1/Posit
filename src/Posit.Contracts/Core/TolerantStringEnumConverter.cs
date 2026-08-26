@@ -91,7 +91,7 @@ public sealed class TolerantStringEnumConverter : JsonConverterFactory
             if (Enum.TryParse<T>(candidate, ignoreCase: true, out var fuzzy))
                 return fuzzy;
 
-            // Try each enum member name directly with ignore-case (handles "Dafny" for Dafny, etc.)
+            // Try each enum member name directly with ignore-case
             foreach (var name in Enum.GetNames<T>())
             {
                 if (name.Equals(raw, StringComparison.OrdinalIgnoreCase))

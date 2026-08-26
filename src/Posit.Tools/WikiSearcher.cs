@@ -11,14 +11,13 @@ using Posit.Data.Configuration;
 /// Semantic search over the wiki knowledge base (wiki.wiki_chunks table).
 /// Uses Ollama nomic-embed-text for embeddings and pgvector cosine similarity.
 ///
-/// When a phase hits an error (Z3 rejection, C# compile failure, etc.),
-/// search the wiki for relevant Dafny stdlib examples, patterns, and
-/// reference material. Inject the results into the correction prompt so
-/// the model sees how the Dafny standard library solves similar problems.
+/// When a phase hits an error (C# compile failure, etc.), search the wiki
+/// for relevant examples, patterns, and reference material. Inject the
+/// results into the correction prompt so the model sees how similar
+/// problems have been solved.
 ///
 /// This is the "fix finder" — it doesn't store errors, it finds examples.
-/// The wiki knowledge base grows as we index more material (stdlib,
-/// examples, tutorials, runtime source). Every phase benefits.
+/// The wiki knowledge base grows as we index more material. Every phase benefits.
 /// </summary>
 public class WikiSearcher
 {
@@ -59,10 +58,10 @@ public class WikiSearcher
             return "";
 
         var sb = new StringBuilder();
-        sb.AppendLine("═══ REFERENCE EXAMPLES FROM DAFNY STANDARD LIBRARY ═══");
-        sb.AppendLine("The following examples from the Dafny standard library and test suite are");
+        sb.AppendLine("═══ REFERENCE EXAMPLES FROM WIKI ═══");
+        sb.AppendLine("The following examples from the wiki are");
         sb.AppendLine("semantically related to your error. Study how they solve the problem.");
-        sb.AppendLine("Use these patterns — they are proven, verified Dafny code.");
+        sb.AppendLine("Use these patterns — they are proven C# code.");
         sb.AppendLine();
 
         foreach (var (file, title, content) in results)
@@ -133,7 +132,6 @@ public class WikiSearcher
             cmd.CommandText = """
                 SELECT file, title, content
                 FROM wiki.wiki_chunks
-                WHERE file LIKE '%dafny%' OR file LIKE '%Dafny%' OR file LIKE '%stdlib%' OR file LIKE '%examples%'
                 ORDER BY embedding <=> @embedding::vector
                 LIMIT @limit
                 """;

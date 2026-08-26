@@ -6,9 +6,8 @@ using Posit.AI.Models;
 /// <summary>
 /// Dedicated Wire.cs fixer. Like a plumber — doesn't redesign
 /// the building, just fixes the leaking pipe. Gets ONLY the Wire.cs content
-/// and the compile errors, with the ISequence API reference. No architecture
-/// context, no connections, no method signatures. Just "fix these errors in
-/// this file."
+/// and the compile errors. No architecture context, no connections, no method
+/// signatures. Just "fix these errors in this file."
 ///
 /// This is what a human does: read the compiler error, open the file, fix
 /// the specific line, recompile. Iterate until clean.
@@ -31,11 +30,6 @@ public sealed class WireFixer
         PhaseContext context,
         CancellationToken ct = default)
     {
-        // Split: system prompt = role + ISequence API (short, model reads this)
-        //         user prompt  = errors + type definitions + Wire.cs (where attention goes)
-        // The gateway sends SystemPrompt as system message and UserRequest as user message.
-        // Previously everything was in SystemPrompt and the user message was generic boilerplate
-        // — the model ignored the type definitions because they were in the system message.
         var systemPrompt = BuildSystemPrompt();
 
         // Wiki search: find relevant examples for the compile errors
@@ -117,7 +111,7 @@ public sealed class WireFixer
     }
 
     /// <summary>
-    /// System prompt: role + ISequence API reference. Short — the model reads this.
+    /// System prompt: role + C# type reference. Short — the model reads this.
     /// </summary>
     private static string BuildSystemPrompt()
     {
@@ -126,30 +120,17 @@ public sealed class WireFixer
         sb.AppendLine("Fix ONLY the errors listed in the user message. Keep everything else unchanged.");
         sb.AppendLine("Output the complete fixed Wire.cs file — ONLY C# code, no explanations, no markdown fences.");
         sb.AppendLine();
-        sb.AppendLine("CRITICAL: The user message contains the ACTUAL translated C# type definitions.");
-        sb.AppendLine("Dafny-translated types use 'dtor_' prefix on properties (e.g. dtor_isValid, dtor_value).");
+        sb.AppendLine("CRITICAL: The user message contains the ACTUAL C# type definitions from the interface.");
         sb.AppendLine("Use the EXACT property names from the type definitions. Do NOT guess.");
         sb.AppendLine();
-        sb.AppendLine("═══ DAFNY RUNTIME API — ISequence<T> interface ═══");
-        sb.AppendLine("  ISequence<T> is the C# type for Dafny seq<T>. It implements IEnumerable<T>.");
-        sb.AppendLine("  REAL API (from C# interface):");
-        sb.AppendLine("    .Count           — int property for length (NOT .Length, NOT .Count())");
-        sb.AppendLine("    .Select(i)       — element at index i (NOT seq[i] — Select IS the indexer!)");
-        sb.AppendLine("    .CloneAsArray()  — returns T[] copy");
-        sb.AppendLine("    .Contains(g)     — bool membership check");
-        sb.AppendLine("    .Take(n)/.Drop(n) — subsequence operations");
-        sb.AppendLine("  Since ISequence<T> implements IEnumerable<T>, LINQ works too:");
-        sb.AppendLine("    .Select(r => (char)r.Value)  — LINQ projection (note: same name as indexer, different signature)");
-        sb.AppendLine("    .Count()                      — LINQ count (method call, not property)");
-        sb.AppendLine("    .ElementAt(i)                 — LINQ indexer");
-        sb.AppendLine("  For ISequence<ISequence<T>> (2D): unwrap with .Select(row => ...) first.");
-        sb.AppendLine("  Type conversions:");
-        sb.AppendLine("    string → ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)");
-        sb.AppendLine("    ISequence<Rune> → string: new string(seq.Select(r => (char)r.Value).ToArray())");
-        sb.AppendLine("    ISequence<ISequence<Rune>> → string: string.Join(\"\\n\", seq.Select(row => string.Join(\" \", row.Select(r => (char)r.Value))))");
-        sb.AppendLine("    ISequence<ISequence<ISequence<Rune>>> → string: string.Join(\"\\n\", seq.Select(row => string.Join(\" \", row.Select(field => new string(field.Select(r => (char)r.Value).ToArray())))))");
-        sb.AppendLine("    string[] → ISequence<Rune>: Dafny.Sequence<Dafny.Rune>.UnicodeFromString(string.Join(\"\\n\", arr))");
-        sb.AppendLine("    string[] → ISequence<ISequence<Rune>>: Dafny.Sequence<Dafny.ISequence<Dafny.Rune>>.FromArray(arr.Select(s => Dafny.Sequence<Dafny.Rune>.UnicodeFromString(s)).ToArray())");
+        sb.AppendLine("═══ NATIVE C# TYPE CONVERSIONS ═══");
+        sb.AppendLine("  string -> int: int.Parse(s)");
+        sb.AppendLine("  string -> double: double.Parse(s)");
+        sb.AppendLine("  string -> bool: bool.Parse(s)");
+        sb.AppendLine("  string[] -> string: string.Join(\"\\n\", arr)");
+        sb.AppendLine("  string -> string[]: s.Split('\\n')");
+        sb.AppendLine("  List<string> -> string[]: list.ToArray()");
+        sb.AppendLine("  string[] -> List<string>: arr.ToList()");
         return sb.ToString();
     }
 
@@ -167,7 +148,7 @@ public sealed class WireFixer
 
         if (!string.IsNullOrWhiteSpace(translatedCSharpTypes))
         {
-            sb.AppendLine("═══ TRANSLATED C# TYPE DEFINITIONS (use THESE exact property names — note the dtor_ prefix!) ═══");
+            sb.AppendLine("═══ C# TYPE DEFINITIONS (use THESE exact property names) ═══");
             sb.AppendLine(translatedCSharpTypes);
             sb.AppendLine();
         }

@@ -303,7 +303,7 @@ internal static class Program
                 errors.Add(stripped);
         }
         if (errors.Count == 0)
-            return new[] { "Docker build failed. Wire.cs has compile errors. Check the C# syntax and Dafny runtime API usage." };
+            return new[] { "Docker build failed. Wire.cs has compile errors. Check the C# syntax." };
         // Limit to 10 errors to avoid overwhelming the model
         return errors.Take(10).ToArray();
     }
@@ -344,7 +344,7 @@ internal static class Program
     /// <summary>
     /// Extract the translated C# type definitions (non-Wire.cs files) from the
     /// SourceCodeBundle. The WireFixer needs these to see the actual property names
-    /// on Dafny-translated types (e.g. _IConversionResult.isValid vs IsValid).
+    /// on translated types (e.g. _IConversionResult.isValid vs IsValid).
     /// Returns the concatenated C# source of all non-Wire.cs files, truncated to 4000 chars.
     /// </summary>
     private static async Task<string?> ExtractTranslatedCSharpAsync(SessionId sessionId)

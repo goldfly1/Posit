@@ -7,7 +7,8 @@ using System.Text;
 /// sending it to dotnet build. Catches errors instantly and free, saving a
 /// compiler call + a model correction call.
 ///
-/// C#-direct pipeline: only C# rules. Dafny rules removed Aug 24.
+/// C#-direct pipeline: only C# rules. Checks that generated C# doesn't
+/// accidentally use Dafny runtime types (ISequence, BigRational, etc.).
 /// </summary>
 public static class StaticChecker
 {
