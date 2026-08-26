@@ -1,7 +1,7 @@
-# Posit Pipeline Specification — Aug 24, 2026 (C#-Direct)
+# Posit Pipeline Specification — Aug 26, 2026 (C#-Direct)
 
 > **Canonical spec. All code in the pipeline must comply.**
-> Dafny dropped Aug 24. Pipeline is now 3 phases: Architecture → C# Implementation → QA.
+> Dafny dropped Aug 24. Pipeline is 3 phases: Architecture → C# Implementation → QA.
 
 ## Scope
 
@@ -42,34 +42,58 @@ For each logic component, the model:
 2. Writes a class implementing the interface: `class <Name> : I<Name>`
 3. Implements every method with correct logic
 4. Uses only native C# types — no Dafny runtime
+5. **Must declare `namespace <ComponentName>`** — the class and interface must share a namespace
 
-**Correction loop (future):** `dotnet build` compiler errors → feed back to model → retry (max 4).
-For now, single-shot model generation with static checker pre-flight.
+**Build correction loop (4 attempts):**
+1. Model generates C# implementation (temperature 0.2)
+2. StaticChecker pre-flight: no Dafny runtime types, no markdown fences, has namespace, has class/interface
+3. `dotnet build` in temp project (interface + impl + minimal .csproj)
+4. If build fails: extract `error CS` lines → feed back to model → retry (temperature 0.3, max 4 attempts)
 
 **Static checker** scans for:
-- Dafny runtime types (Dafny., ISequence, BigRational, UnicodeFromString)
-- Missing namespace/class declarations
-- Markdown fences in output
+- Dafny runtime types (`Dafny.`, `ISequence<`, `BigRational`, `UnicodeFromString`)
+- Missing namespace declaration
+- Missing class/interface declaration
+- Markdown fences (```) in output
+
+**Wiring (deterministic, no model call):**
+- `WiringGenerator.Generate` reads C# method signatures + connections
+- Emits `using <ComponentName>;` for each referenced component's namespace
+- Logic components (instance classes): emits `var inst_X = new Namespace.Class();` then calls instance methods
+- Io-shell stubs (static classes): calls directly (e.g. `File.ReadAllLines(path)`)
+- Type conversion: native C# only (string→int via `int.Parse`, string[]→string via `string.Join`, etc.)
+- Final step: `Console.WriteLine(result)`
+
+If the deterministic generator returns empty, falls back to `ModelWiringGenerator` (LLM-based).
 
 **Files written:**
-- `staging/<session>/src/<Name>.cs` — C# implementation files
-- `staging/<session>/src/Wire.cs` — auto-generated wiring (deterministic)
+- `<ComponentName>/<ComponentName>.cs` — C# implementation files (model-generated)
+- `<ComponentName>/Wire.cs` — auto-generated wiring (deterministic)
+- `<ComponentName>/<ComponentName>Extern.<stubName>.cs` — io-shell stub files (from templates)
 
 ### Phase 3: QA
 
 **Input:** SourceCodeBundle + ArchitectureContract (test cases)
 **Output:** `QaResult` (test pass/fail per test case)
 
-The QA model generates test input data matching each test case description.
+The QA model generates test input data matching each test case description:
+- LLM generates 3-6 test cases (valid input, edge case, invalid input, empty input)
+- Model may return a bare JSON array `[...]` or a wrapped object `{"testData":[...]}`
+- Deserializer handles both formats — unwraps the array if wrapped
+
 The Docker harness:
-1. Builds the C# project (`dotnet build`)
-2. Runs each test case with generated input
-3. Checks output against expected behavior shape
+1. Creates test data files from QA output (matched by index to test cases)
+2. Builds the C# project (`dotnet build` in Docker)
+3. Runs each test case with generated input
+4. Checks output against expected behavior shape (fuzzy match: JSON shape, error keywords, "prints" keywords)
 
 **Build failures** → WireFixer (fixes C# wiring/type mismatches)
 **Test failures** → WireFixer (fixes type conversion/serialization)
-
 Retry loop: max 6 attempts.
+
+**Fallback:** If AI test data generation fails, the harness uses the architect's test case descriptions
+or its own deterministic `GenerateTestData` heuristic (pattern-matches test case names to generate
+appropriate CSV, JSON, text, empty, invalid, or file-not-found input).
 
 ## What We Keep
 
@@ -80,6 +104,7 @@ Retry loop: max 6 attempts.
 - **Data** (`src/Posit.Data/`) — ArtifactRepository, StateStore, DB persistence
 - **AI** (`src/Posit.AI/`) — OllamaModelGateway
 - **Database** — PostgreSQL 18 + pgvector
+- **Wiki** — C# language reference (`csharp-reference/*` in Postgres wiki chunks), historical Dafny docs as derivation chain
 
 ## What We Dropped (Aug 24)
 
@@ -92,10 +117,24 @@ Retry loop: max 6 attempts.
 ## File Layout
 
 ```
-staging/<session>/
-  interfaces/     # C# interface files (from Architecture phase)
-  src/            # C# implementation + Wire.cs (from C# Implementation phase)
-  tests/          # Test input data (from QA phase)
+<ComponentName>/
+  <ComponentName>.cs              # C# implementation (model-generated, logic components)
+  Wire.cs                         # Auto-generated wiring (deterministic, CLI components only)
+  <ComponentName>Extern.<stub>.cs # Io-shell stub files (from templates)
+```
+
+In the Docker harness build context:
+```
+<temp-dir>/
+  <ComponentName>/
+    <ComponentName>.cs
+    Wire.cs
+    ...
+  PositGenerated.sln
+  Dockerfile.run
+  testdata_tc1.csv               # Test data files from QA phase
+  testdata_tc2.txt
+  ...
 ```
 
 ## Types
@@ -106,14 +145,16 @@ All types are native C#:
 - `double` — floating point
 - `bool` — boolean
 - `string[]` — array of strings (e.g. file lines)
-- `List<T>` — dynamic collection
 
 No Dafny types. No `ISequence<Rune>`. No `BigRational`. No `BigInteger` (use `long`).
 
-## Wiring
+## Model Routing
 
-`WiringGenerator` reads C# method signatures and generates `Wire.cs` deterministically:
-- Linear chaining: output of step N → input of step N+1
-- Type conversion: native C# only (string→int via `int.Parse`, string[]→string via `string.Join`, etc.)
-- Stub calls: ReadLines → `File.ReadAllLines`, ReadFile → `File.ReadAllText`
-- Final step: `Console.WriteLine(result)`
+All 3 phases use `deepseek-v4-flash:cloud`.
+
+## Codebase Metrics (Aug 26)
+
+- **Core pipeline (src/):** 81 files, 4,513 LOC, 763 comment lines (9.9% comment ratio)
+- **Largest file:** Program.cs (275 LOC)
+- **No file exceeds 300 LOC**
+- **9 projects:** Posit.Cli, Posit.Phases, Posit.Contracts, Posit.Core, Posit.Data, Posit.AI, Posit.Tools, Posit.Dt, Posit.Web

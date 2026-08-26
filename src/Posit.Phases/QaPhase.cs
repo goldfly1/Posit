@@ -167,8 +167,8 @@ public sealed class QaPhase : IPhase
             {testCasesText}
 
             Rules:
-            1. Output JSON array of test data files.
-            2. Each file has: "fileName" (string), "content" (string), "description" (string).
+            1. Output a JSON ARRAY directly — NOT wrapped in an object. Start with [ and end with ].
+            2. Each element has: "fileName" (string), "content" (string), "description" (string).
             3. Generate 3-6 test cases covering: valid input, edge case, invalid input, and empty input.
             4. Content must be the ACTUAL input the program would receive.
             5. For stdin programs: content is the line(s) typed at the console.
@@ -198,8 +198,27 @@ public sealed class QaPhase : IPhase
                 return null;
 
             var cleaned = OllamaModelGateway.ExtractJson(gen.Text);
-            var files = JsonSerializer.Deserialize<TestDataFile[]>(cleaned, PositJson.Options);
-            return files?.ToList();
+
+            // Model may wrap array in an object like { "testData": [...] } — unwrap if so
+            List<TestDataFile>? files = null;
+            if (cleaned.TrimStart().StartsWith('['))
+            {
+                files = JsonSerializer.Deserialize<List<TestDataFile>>(cleaned, PositJson.Options);
+            }
+            else if (cleaned.TrimStart().StartsWith('{'))
+            {
+                using var doc = JsonDocument.Parse(cleaned);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        files = JsonSerializer.Deserialize<List<TestDataFile>>(prop.Value.GetRawText(), PositJson.Options);
+                        break;
+                    }
+                }
+            }
+
+            return files;
         }
         catch (Exception ex)
         {
