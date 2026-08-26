@@ -203,6 +203,9 @@ internal static class Program
                 var fixPrompt = $"""
                     You are a Senior C# Developer. Your implementation has a bug — it produces wrong output.
 
+                    ORIGINAL SPEC:
+                    {spec}
+
                     INTERFACE (implement this — match every method signature exactly):
                     {comp.CSharpInterface}
 
@@ -222,6 +225,7 @@ internal static class Program
                     4. Output ONLY the C# class file — no markdown fences, no explanations.
                     5. Include `using` directives at the top.
                     6. Put the class in `namespace {comp.Name}`.
+                    7. Re-read the ORIGINAL SPEC carefully — make sure your input parsing matches the spec's input format exactly.
                     """;
 
                 var fixPromptTemplate = new PromptTemplate
