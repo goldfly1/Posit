@@ -23,6 +23,17 @@ public static class WiringGenerator
         sb.AppendLine($"// {comp.Name}/Wire.cs — auto-generated wiring");
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Linq;");
+
+        // Add using directives for each referenced component's namespace
+        var referencedComponents = new HashSet<string>();
+        foreach (var conn in comp.Connections)
+        {
+            if (conn.ToComponent != comp.Name)
+                referencedComponents.Add(conn.ToComponent);
+        }
+        foreach (var refComp in referencedComponents.OrderBy(c => c))
+            sb.AppendLine($"using {refComp};");
+
         sb.AppendLine();
         sb.AppendLine($"namespace {comp.Name}");
         sb.AppendLine("{");
@@ -311,9 +322,9 @@ public static class WiringGenerator
             var m = methods[0];
             if (!string.IsNullOrEmpty(m.Namespace))
                 return $"{m.Namespace}.{m.ClassName}";
-            return m.ClassName;
+            return $"{targetComp.Name}.{m.ClassName}";
         }
-        return targetComp.Name;
+        return $"{targetComp.Name}.{targetComp.Name}";
     }
 
     private static List<CsMethodSignature>? GetSignatures(
