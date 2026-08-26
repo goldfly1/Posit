@@ -75,8 +75,21 @@ public static class WiringGenerator
             sb.AppendLine("            if (args.Length == 0) { Console.Error.WriteLine(\"Usage: <input>\"); return 1; }");
         }
 
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
         AppendConnectionCalls(sb, comp, contract, impl, stubs, isStdin ? "inputLine" : "args[0]");
-        sb.AppendLine("            return 0;");
+        sb.AppendLine("                return 0;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch (System.IO.FileNotFoundException ex)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Console.Error.WriteLine($\"Error: file not found: {ex.Message}\");");
+        sb.AppendLine("                return 1;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch (Exception ex)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Console.Error.WriteLine($\"Error: {ex.Message}\");");
+        sb.AppendLine("                return 1;");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
     }
 

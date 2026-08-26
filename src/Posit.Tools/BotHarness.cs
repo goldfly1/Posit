@@ -162,8 +162,15 @@ public sealed class BotHarness
             }
             else
             {
-                // File-type program: pass test data file path as CLI arg
-                var testData = GenerateTestData(tc.Id, tc.Name, specHint);
+                // File-type program: pass test data file path as CLI arg.
+                // Use the SAME test data that was used to create the file (above),
+                // so the extension matches the file on disk.
+                var testData = aiTestData.Length > 0
+                    ? aiTestData.Length > testCases.IndexOf(tc)
+                        ? aiTestData[testCases.IndexOf(tc)].Content
+                        : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))?.Content
+                    : null;
+                testData ??= GenerateTestData(tc.Id, tc.Name, specHint);
 
                 // Multi-file: pass multiple file paths
                 if (testData.Contains("==="))
