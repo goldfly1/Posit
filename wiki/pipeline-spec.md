@@ -97,11 +97,20 @@ Fuzzy matcher passes (output starts with `[`). Exact comparison fails.
 
 **Build failures** → WireFixer (fixes C# wiring/type mismatches)
 **Test failures** → WireFixer (fixes type conversion/serialization)
-Retry loop: max 6 attempts.
+**Test failures after WireFixer exhausted** → ImplFixer (regenerates component code with test feedback)
 
-**Note:** WireFixer can only fix wiring, not implementation bugs. If the C# implementation
-produces wrong output (e.g., empty array), the fix belongs in the C# implementation phase,
-not WireFixer.
+Retry loops:
+- WireFixer: max 6 attempts (wiring fixes)
+- ImplFixer: max 3 attempts (logic fixes)
+
+**WireFixer** fixes Wire.cs — type mismatches, missing using directives,
+wrong method calls. It cannot fix implementation bugs (wrong algorithm logic).
+
+**ImplFixer** fires when WireFixer can't fix the failures. It reads the
+architecture contract + source bundle from DB, builds a failure report
+("expected X, got Y"), and regenerates each logic component with the
+test failure feedback. The model sees its current code + the expected vs
+actual output and fixes the logic.
 
 **Fallback:** If AI test data generation fails, the harness uses the architect's test case descriptions
 or its own deterministic `GenerateTestData` heuristic.
