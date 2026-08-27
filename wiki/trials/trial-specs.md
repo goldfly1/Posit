@@ -1,4 +1,4 @@
-# Posit Trial Specs — Revamped Aug 16, 2026
+# Posit Trial Specs — Updated Aug 26, 2026 (C#-direct)
 
 ## What's Wrong With the Old Trials
 
@@ -6,7 +6,7 @@ The old T1-T24 trials have two fundamental problems:
 
 ### Problem 1: They don't make anything real
 
-The Tier 0 trials (T1-T12) are described in one sentence each — "CSV-to-JSON CLI," "document processing," "task scheduler." There's no spec of what the output should look like, no acceptance criteria, no test data. The pipeline generates code that compiles and Z3-verifies, but as the Aug 14 session proved, it's **cotton candy** — the code is proven correct against generic contracts but doesn't do what the spec asked. T5 built and ran in Docker but tests failed because the patterns are generic, not spec-specific.
+The Tier 0 trials (T1-T12) are described in one sentence each — "CSV-to-JSON CLI," "document processing," "task scheduler." There's no spec of what the output should look like, no acceptance criteria, no test data. The pipeline generates code that compiles and passes tests, but without precise specs and test data, the output may not match what the spec actually asked for.
 
 The Tier 1-3 trials (T13-T24) are the opposite — massive prose descriptions ("a modular ERP with procurement, inventory, manufacturing, sales order management, CRM, human resources, payroll...") with no cut-outs to support them. They're north-star fantasies, not testable trials.
 
@@ -22,7 +22,7 @@ A trial needs to spike specific capabilities:
 | Error propagation | Validation failure → user-facing error message | None |
 | Type chain | Output of step N feeds step N+1 with correct type | T1 (broken, now fixed) |
 | Cut-out coverage | Trial needs cut-outs that exist | T1 only (3 cut-outs) |
-| Spec-specific behavior | Output matches the spec, not just the pattern | None (cotton candy) |
+| Spec-specific behavior | Output matches the spec, not just the pattern | None |
 | Edge case survival | Program handles bad input without crashing | None |
 | Multi-component wiring | 3+ components wired together | T8 (9 components) |
 | Orchestrator pattern | Component with connections, no patternName | None (was blocked, now fixed) |
@@ -57,10 +57,10 @@ Carol,35,SF
 Expected output:
 [{"name":"Alice","age":"30","city":"NYC"},{"name":"Bob","age":"25","city":"LA"},{"name":"Carol","age":"35","city":"SF"}]
 ```
-**Cut-outs:** csv-parser (ParseLines), row-validator (ValidateRows), json-serializer (SerializeToJson)
+**Components:** csv-parser (ParseLines), row-validator (ValidateRows), json-serializer (SerializeToJson)
 **Chain:** ReadLines → ParseLines → ValidateRows → SerializeToJson → PrintLine
 **Edge cases:** EmptyString, NullInput, VeryLongString10K, BoundaryAtMin (1 row), DuplicateEntriesInUniqueCollection (duplicate field names)
-**Components:** 3 dafny (parser, validator, serializer) + 2 io-shell (file-reader, console-output) + 1 orchestrator = 6
+**Components:** 3 logic (parser, validator, serializer) + 2 io-shell + 1 orchestrator = 6
 
 ### T2 — JSON to CSV Transformer
 
@@ -76,10 +76,10 @@ name,age
 Alice,30
 Bob,25
 ```
-**Cut-outs needed:** json-parser (NEW — parse JSON into rows), csv-serializer (NEW — serialize rows to CSV)
+**Components needed:** json-parser (NEW — parse JSON into rows), csv-serializer (NEW — serialize rows to CSV)
 **Chain:** ReadFile → ParseJson → SerializeToCsv → PrintLine
 **Edge cases:** EmptyString, MalformedJson, UnicodeEmoji, VeryLongString10K
-**Components:** 2 dafny (parser, serializer) + 2 io-shell + 1 orchestrator = 5
+**Components:** 2 logic (parser, serializer) + 2 io-shell + 1 orchestrator = 5
 
 ### T3 — Filtered CSV Export
 
@@ -101,10 +101,10 @@ Bob,25,extra
 
 Expected: "Error: row 3 has 3 fields, expected 2" on stderr, exit 1
 ```
-**Cut-outs:** csv-parser, row-validator (returns rows + isValid — branching on isValid)
+**Components:** csv-parser, row-validator (returns rows + isValid — branching on isValid)
 **Chain:** ReadLines → ParseLines → ValidateRows → (if isValid: SerializeToJson → PrintLine | else: PrintError → Exit1)
 **Edge cases:** BoundaryAtMin (1 row, trivially valid), BoundaryBelowMin (0 rows), NullInput
-**Components:** 3 dafny + 2 io-shell + 1 orchestrator = 6
+**Components:** 3 logic + 2 io-shell + 1 orchestrator = 6
 
 ### T4 — Word Frequency Counter
 
@@ -122,10 +122,10 @@ Expected output:
 1 on
 1 mat
 ```
-**Cut-outs needed:** word-tokenizer (NEW — split text into words), frequency-aggregator (NEW — count occurrences, sort by count)
+**Components needed:** word-tokenizer (NEW — split text into words), frequency-aggregator (NEW — count occurrences, sort by count)
 **Chain:** ReadFile → Tokenize → Aggregate → Sort → PrintLines
 **Edge cases:** EmptyString, WhitespaceOnly, UnicodeEmoji, VeryLongString10K, NullInput
-**Components:** 2 dafny (tokenizer, aggregator) + 2 io-shell + 1 orchestrator = 5
+**Components:** 2 logic (tokenizer, aggregator) + 2 io-shell + 1 orchestrator = 5
 
 ### T5 — Multi-File CSV Merger
 
@@ -142,10 +142,10 @@ name,age
 Alice,30
 Carol,35
 ```
-**Cut-outs:** csv-parser, row-validator
+**Components:** csv-parser, row-validator
 **Chain:** ReadLines(file1) → ParseLines → ReadLines(file2) → ParseLines → ValidateRows(merged) → SerializeToCsv → PrintLine
 **Edge cases:** EmptyString (one file empty), NullInput (missing file path), BoundaryAtMin (1 file has 1 row)
-**Components:** 2 dafny + 3 io-shell (2 file readers + 1 console) + 1 orchestrator = 6
+**Components:** 2 logic + 3 io-shell (2 file readers + 1 console) + 1 orchestrator = 6
 
 ### T6 — Temperature Converter
 
@@ -158,10 +158,10 @@ Input: "0 C"     → Output: "32 F"
 Input: "100 C"   → Output: "373 K"
 Input: "20 X"    → Output: "Error: unknown unit 'X'" exit 1
 ```
-**Cut-outs needed:** temperature-converter (NEW — pure math, no I/O)
+**Components needed:** temperature-converter (NEW — pure math, no I/O)
 **Chain:** ReadLine → ParseInput → Convert → PrintLine
 **Edge cases:** FloatNaN, FloatInfinity, FloatNegativeZero, FloatPrecisionLoss, NegativeNumber (below absolute zero), BoundaryAtMin
-**Components:** 1 dafny (converter) + 1 io-shell (console) + 1 orchestrator = 3
+**Components:** 1 logic (converter) + 1 io-shell + 1 orchestrator = 3
 
 ### T7 — Task Queue with Priority
 
@@ -182,10 +182,10 @@ fix bug
 check email
 write report
 ```
-**Cut-outs needed:** priority-queue (NEW — enqueue with priority, dequeue highest)
+**Components needed:** priority-queue (NEW — enqueue with priority, dequeue highest)
 **Chain:** ReadLine → ParseCommand → (add: Enqueue | pop: Dequeue → Print | list: ListAll → PrintLines)
 **Edge cases:** NullInput, EmptyString, VeryLargeCollection (100K tasks), DuplicateEntriesInUniqueCollection (same priority)
-**Components:** 1 dafny (priority-queue) + 1 io-shell (console) + 1 orchestrator = 3
+**Components:** 1 logic (priority-queue) + 1 io-shell + 1 orchestrator = 3
 
 ### T8 — Log File Analyzer
 
@@ -205,10 +205,10 @@ Command: analyzer app.log ERROR
 Expected output:
 ERROR: 2
 ```
-**Cut-outs needed:** log-parser (NEW — parse log lines into timestamp/level/message), log-filter (NEW — filter by level), log-aggregator (NEW — count by level)
+**Components needed:** log-parser (NEW — parse log lines into timestamp/level/message), log-filter (NEW — filter by level), log-aggregator (NEW — count by level)
 **Chain:** ReadLines → ParseLogLines → FilterByLevel → CountByLevel → PrintLine
 **Edge cases:** EmptyString (empty file), NullInput, UnicodeRtl (message contains RTL), VeryLongString10K
-**Components:** 3 dafny (parser, filter, aggregator) + 2 io-shell + 1 orchestrator = 6
+**Components:** 3 logic (parser, filter, aggregator) + 2 io-shell + 1 orchestrator = 6
 
 ## Tier 1: Composition Trials (T9-T12)
 
@@ -218,30 +218,30 @@ Each trial combines 2+ spike patterns. 5-10 components. Tests wiring complexity.
 
 **Spike:** Data validation + error report generation (branching + multi-output)
 **Spec:** A CLI tool that reads a CSV file, validates each row for: (1) correct field count, (2) no empty fields, (3) numeric fields contain numbers. Generates a validation report on stdout: valid rows count, invalid rows count, and a list of errors with row numbers. Writes the valid rows as JSON to a second output file (second CLI arg).
-**Cut-outs:** csv-parser, row-validator, json-serializer
+**Components:** csv-parser, row-validator, json-serializer
 **Chain:** ReadLines → ParseLines → ValidateRows → (valid: SerializeToJson → WriteFile | invalid: collect errors) → PrintReport
-**Components:** 3 dafny + 3 io-shell (file reader, file writer, console) + 1 orchestrator = 7
+**Components:** 3 logic + 3 io-shell (file reader, file writer, console) + 1 orchestrator = 7
 
 ### T10 — Data Transformer Pipeline
 
 **Spike:** Multi-step transform chain (3+ transforms in sequence)
 **Spec:** A CLI tool that reads a CSV of products (name,price,category), filters out products under $10, converts prices from USD to EUR (fixed rate 0.92), groups by category, and outputs JSON with categories as keys and product arrays as values.
-**Cut-outs:** csv-parser, json-serializer + NEW: price-converter, category-grouper
-**Components:** 4 dafny + 2 io-shell + 1 orchestrator = 7
+**Components:** csv-parser, json-serializer + NEW: price-converter, category-grouper
+**Components:** 4 logic + 2 io-shell + 1 orchestrator = 7
 
 ### T11 — Markdown Link Extractor
 
 **Spike:** Regex-like pattern matching (non-trivial parsing)
 **Spec:** A CLI tool that reads a Markdown file, extracts all links (format: [text](url)), and outputs them as a JSON array of {text, url} objects. Handles nested brackets and escaped characters.
-**Cut-outs needed:** link-extractor (NEW — parse markdown for [text](url) patterns)
-**Components:** 1 dafny + 2 io-shell + 1 orchestrator = 4
+**Components needed:** link-extractor (NEW — parse markdown for [text](url) patterns)
+**Components:** 1 logic + 2 io-shell + 1 orchestrator = 4
 
 ### T12 — Config File Merger
 
 **Spike:** Multiple input formats, conflict resolution
 **Spec:** A CLI tool that reads two INI-style config files, merges them (file2 overrides file1), detects conflicts (same key, different values), and writes the merged config to stdout. Conflicts are listed on stderr.
-**Cut-outs needed:** ini-parser (NEW), config-merger (NEW)
-**Components:** 2 dafny + 3 io-shell + 1 orchestrator = 6
+**Components needed:** ini-parser (NEW), config-merger (NEW)
+**Components:** 2 logic + 3 io-shell + 1 orchestrator = 6
 
 ## Tier 2: North-Star Trials (T13-T16)
 
@@ -249,27 +249,27 @@ Design-only — no cut-outs yet. These define what cut-outs need to be built.
 
 ### T13 — Simple REST API Server
 CRUD endpoints for a resource. Tests: HTTP stub, JSON parsing, routing, persistence.
-**Cut-outs needed:** http-router, json-serializer, crud-repository
+**Components needed:** http-router, json-serializer, crud-repository
 
 ### T14 — Key-Value Store with TTL
 Get/set/delete with time-based expiry. Tests: time stub, TTL logic, concurrent access.
-**Cut-outs needed:** kv-store, ttl-manager, time-aware-eviction
+**Components needed:** kv-store, ttl-manager, time-aware-eviction
 
 ### T15 — Rate Limiter
 Token bucket or sliding window. Tests: time stub, counter, threshold logic.
-**Cut-outs needed:** token-bucket, sliding-window-counter
+**Components needed:** token-bucket, sliding-window-counter
 
 ### T16 — Event Sourcing System
 Append-only event log + state reconstruction. Tests: event store, state reducer, snapshot.
-**Cut-outs needed:** event-store, state-reconstructor, snapshot-manager
+**Components needed:** event-store, state-reconstructor, snapshot-manager
 
-## Cut-Out Roadmap
+## Component Roadmap
 
-| Cut-out | Trial | Status |
+| Component | Trial | Status |
 |---------|-------|--------|
-| csv-parser | T1, T3, T5, T9, T10 | ✅ Exists (3 VC) |
-| row-validator | T1, T3, T5, T9 | ✅ Exists (1 VC) — returns (rows, isValid) |
-| json-serializer | T1, T9, T10, T13 | ✅ Exists (2 VC) |
+| csv-parser | T1, T3, T5, T9, T10 | ✅ Exists |
+| row-validator | T1, T3, T5, T9 | ✅ Exists — returns (rows, isValid) |
+| json-serializer | T1, T9, T10, T13 | ✅ Exists |
 | json-parser | T2, T13 | ❌ Needed |
 | csv-serializer | T2, T5, T12 | ❌ Needed |
 | word-tokenizer | T4 | ❌ Needed |
@@ -285,7 +285,7 @@ Append-only event log + state reconstruction. Tests: event store, state reducer,
 | ini-parser | T12 | ❌ Needed |
 | config-merger | T12 | ❌ Needed |
 
-**3 cut-outs exist. 14 needed for Tier 0-1 trials.** Each cut-out: write Dafny → Z3 verify → translate to C# → add to registry. ~15 min each.
+**3 components exist (csv-parser, row-validator, json-serializer). 14 more needed for Tier 0-1 trials.** Each component: write C# → dotnet build → add to stubs. ~15 min each.
 
 ## Trial Execution Priority
 

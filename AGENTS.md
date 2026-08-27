@@ -66,9 +66,9 @@ Posit/
     Posit.Tools/           # PatternRegistry, BotHarness, BotHarnessDocker, BotHarnessProjects, WikiSearcher
     Posit.Cli/             # CLI + Orchestrator + PromptBuilder
     Posit.Dt/              # Data tools (trace viewer)
+    Posit.Web/             # Web dashboard (minimal)
   patterns/
     csharp-stubs/          # 16 C# stub templates (console-io, file-io, etc.)
-    cut-outs/              # Pre-written modules
   wiki/                    # Architecture, plans, handoffs, reference docs
 ```
 
