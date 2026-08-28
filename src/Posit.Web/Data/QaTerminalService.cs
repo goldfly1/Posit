@@ -61,8 +61,46 @@ public sealed class QaTerminalService
             PseudodataCombos = pseudodata,
             HasSourceCode = sourceCode != null,
             CliComponentName = cliComponent?.Name ?? "Program",
-            IsStdinEntry = string.Equals(cliComponent?.EntryType, "stdin", StringComparison.OrdinalIgnoreCase)
+            IsStdinEntry = string.Equals(cliComponent?.EntryType, "stdin", StringComparison.OrdinalIgnoreCase),
+            UniversalFields = BuildUniversalFields(),
+            Actions = BuildActions(pages.Length),
+            PageNames = pages.Select(p => p.Name).ToArray()
         };
+    }
+
+    /// <summary>
+    /// Universal fields that appear on every trial — always present, blank when not used.
+    /// The bot Tabs through all of them; fills the ones that matter, leaves the rest empty.
+    /// </summary>
+    private static UniversalField[] BuildUniversalFields()
+    {
+        return
+        [
+            new() { Name = "name", Label = "Name", Type = "string", TabOrder = 0 },
+            new() { Name = "address", Label = "Address", Type = "string", TabOrder = 1 },
+            new() { Name = "age", Label = "Age", Type = "int", TabOrder = 2 },
+            new() { Name = "email", Label = "Email", Type = "string", TabOrder = 3 },
+            new() { Name = "phone", Label = "Phone", Type = "string", TabOrder = 4 },
+            new() { Name = "date", Label = "Date", Type = "date", TabOrder = 5 },
+            new() { Name = "notes", Label = "Notes", Type = "string", TabOrder = 6 },
+        ];
+    }
+
+    /// <summary>
+    /// Action buttons that execute code. These are the operations a user or bot
+    /// can trigger — each has a keyboard shortcut and calls an API endpoint.
+    /// </summary>
+    private static ActionButton[] BuildActions(int pageCount)
+    {
+        var actions = new List<ActionButton>
+        {
+            new() { Name = "search", Label = "🔍 Search", Shortcut = "Ctrl+S", ApiEndpoint = "/api/qa/search", HttpMethod = "POST", TabOrder = 100 },
+            new() { Name = "save", Label = "💾 Save", Shortcut = "Ctrl+S+Shift", ApiEndpoint = "/api/qa/save", HttpMethod = "POST", TabOrder = 101 },
+            new() { Name = "delete", Label = "🗑 Delete", Shortcut = "Ctrl+D", ApiEndpoint = "/api/qa/delete", HttpMethod = "POST", TabOrder = 102 },
+            new() { Name = "run", Label = "▶ Run Test", Shortcut = "Enter", ApiEndpoint = "/api/qa/run", HttpMethod = "POST", TabOrder = 103 },
+            new() { Name = "grind", Label = "🤖 Grind All", Shortcut = "Ctrl+G", ApiEndpoint = "/api/qa/grind", HttpMethod = "POST", TabOrder = 104 },
+        };
+        return actions.ToArray();
     }
 
     /// <summary>
@@ -283,6 +321,37 @@ public sealed class QaSession
     public bool HasSourceCode { get; set; }
     public string CliComponentName { get; set; } = "";
     public bool IsStdinEntry { get; set; }
+    public UniversalField[] UniversalFields { get; set; } = [];
+    public ActionButton[] Actions { get; set; } = [];
+    public string[] PageNames { get; set; } = [];
+}
+
+/// <summary>
+/// Universal fields that appear on every trial — name, address, age, etc.
+/// These are always present; blank when not used. The bot Tabs through them
+/// in order; the ones that matter get filled, the rest stay blank.
+/// </summary>
+public sealed class UniversalField
+{
+    public string Name { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string Type { get; set; } = "";  // string, int, double, date, bool
+    public int TabOrder { get; set; }
+    public bool Required { get; set; }
+}
+
+/// <summary>
+/// Action buttons that execute code: Search, Save, Delete, Run Test, etc.
+/// Each has a keyboard shortcut and an API endpoint.
+/// </summary>
+public sealed class ActionButton
+{
+    public string Name { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string Shortcut { get; set; } = "";  // e.g. "Enter", "Ctrl+Enter", "F2"
+    public string ApiEndpoint { get; set; } = "";
+    public string HttpMethod { get; set; } = "POST";
+    public int TabOrder { get; set; }
 }
 
 public sealed class FormPage

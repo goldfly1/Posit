@@ -3,96 +3,84 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Posit DB Browser</title>
+<title>Posit QA Workstation</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #1a1b26; color: #a9b1d6; font-family: 'Cascadia Code','Fira Code',monospace; font-size: 13px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
   /* Top bar */
-  .topbar { display: flex; align-items: center; gap: 0.8rem; padding: 0.4rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; }
-  .topbar h1 { color: #7aa2f7; font-size: 15px; font-weight: 600; }
+  .topbar { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; }
+  .topbar h1 { color: #7aa2f7; font-size: 14px; font-weight: 600; white-space: nowrap; }
   .topbar .spacer { flex: 1; }
-  .mode-btn { padding: 5px 14px; border: 1px solid #2a2b3d; background: #1f2335; color: #565f89; cursor: pointer; font-family: inherit; font-size: 12px; border-radius: 4px; }
-  .mode-btn.active { color: #7aa2f7; border-color: #7aa2f7; background: #1a1a2b; }
-  .mode-btn:hover { background: #2a2b3d; color: #a9b1d6; }
-  .btn { padding: 5px 14px; border: 1px solid #2a2b3d; background: #1f2335; color: #a9b1d6; cursor: pointer; font-family: inherit; font-size: 12px; border-radius: 4px; }
+  .btn { padding: 5px 12px; border: 1px solid #2a2b3d; background: #1f2335; color: #a9b1d6; cursor: pointer; font-family: inherit; font-size: 12px; border-radius: 4px; white-space: nowrap; }
   .btn:hover { background: #2a2b3d; }
+  .btn:disabled { color: #565f89; border-color: #2a2b3d; cursor: default; }
   .btn-go { background: #4c566a; color: #9ece6a; border-color: #9ece6a; font-weight: 600; }
   .btn-go:hover { background: #9ece6a; color: #1a1b26; }
-  .btn-go:disabled { background: #2a2b3d; color: #565f89; border-color: #2a2b3d; cursor: default; }
-  .btn-stop { background: #1f2335; color: #f7768e; border-color: #f7768e; }
-  .btn-stop:disabled { color: #565f89; border-color: #2a2b3d; cursor: default; }
+  .btn-go:disabled { background: #2a2b3d; color: #565f89; border-color: #2a2b3d; }
+  .btn-stop { color: #f7768e; border-color: #f7768e; }
+  .btn-stop:disabled { color: #565f89; border-color: #2a2b3d; }
+  .btn-del { color: #f7768e; }
+  .btn-save { color: #9ece6a; }
   .status-msg { color: #565f89; font-size: 11px; }
+  select.ddl { background: #1f2335; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 4px 8px; font-family: inherit; font-size: 12px; border-radius: 4px; outline: none; }
+  select.ddl:focus { border-color: #7aa2f7; }
+
+  /* Keybar */
+  .keybar { display: flex; gap: 0.8rem; padding: 0.25rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; font-size: 11px; color: #565f89; flex-wrap: wrap; }
+  .keybar kbd { background: #2a2b3d; padding: 1px 5px; border-radius: 3px; color: #a9b1d6; font-family: inherit; font-size: 11px; }
 
   /* Main layout */
   .main { display: flex; flex: 1; overflow: hidden; }
+  .left-panel { flex: 0 0 300px; border-right: 1px solid #2a2b3d; display: flex; flex-direction: column; overflow: hidden; }
+  .center-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .right-panel { flex: 0 0 340px; border-left: 1px solid #2a2b3d; display: flex; flex-direction: column; overflow: hidden; }
 
-  /* LEFT: Schema tree */
-  .sidebar { flex: 0 0 260px; border-right: 1px solid #2a2b3d; display: flex; flex-direction: column; overflow: hidden; }
-  .sidebar-header { padding: 6px 10px; background: #16161e; border-bottom: 1px solid #2a2b3d; color: #565f89; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .tree { flex: 1; overflow-y: auto; padding: 4px 0; }
-  .schema-node { padding: 4px 8px; color: #bb9af7; font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; }
-  .schema-node:hover { background: #1f2335; }
-  .schema-node .arrow { display: inline-block; width: 12px; color: #565f89; }
-  .table-node { padding: 3px 8px 3px 24px; color: #a9b1d6; font-size: 12px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
-  .table-node:hover { background: #1f2335; }
-  .table-node.active { background: #1f2335; border-left: 2px solid #7aa2f7; padding-left: 22px; }
-  .table-node .icon { color: #565f89; font-size: 10px; }
-  .table-node .count { color: #565f89; font-size: 11px; margin-left: auto; }
-  .column-node { padding: 2px 8px 2px 36px; color: #565f89; font-size: 11px; display: flex; gap: 6px; }
-  .column-node .col-type { color: #bb9af7; }
-  .column-node .col-nullable { color: #f7768e; font-size: 10px; }
+  /* Left: session/trial selector + search results */
+  .panel-header { padding: 6px 10px; background: #16161e; border-bottom: 1px solid #2a2b3d; color: #565f89; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+  .search-box { padding: 6px 8px; background: #16161e; border-bottom: 1px solid #2a2b3d; display: flex; gap: 4px; }
+  .search-box input { flex: 1; background: #1f2335; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 4px 8px; font-family: inherit; font-size: 12px; border-radius: 4px; outline: none; }
+  .search-box input:focus { border-color: #7aa2f7; }
+  .search-box .btn { padding: 3px 8px; font-size: 11px; }
+  .list-area { flex: 1; overflow-y: auto; padding: 4px; }
+  .list-item { padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 2px; display: flex; gap: 6px; align-items: center; }
+  .list-item:hover { background: #1f2335; }
+  .list-item.active { background: #1f2335; border-left: 2px solid #7aa2f7; }
+  .list-item .badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+  .list-item .badge.completed { color: #9ece6a; background: #1a2b1a; }
+  .list-item .badge.failed, .list-item .badge.aborted { color: #f7768e; background: #2b1a1a; }
+  .list-item .badge.planning, .list-item .badge.Active { color: #7aa2f7; background: #1a1a2b; }
+  .list-item .badge.retry { color: #e0af68; background: #2b2a1a; }
+  .list-item .badge.session { color: #bb9af7; background: #1a1a2b; }
+  .list-item .badge.artifact { color: #9ece6a; background: #1a2b1a; }
+  .list-item .id { color: #7aa2f7; }
+  .list-item .meta { color: #565f89; font-size: 11px; margin-left: auto; }
 
-  /* CENTER: Data grid */
-  .center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-  .grid-header { padding: 6px 10px; background: #16161e; border-bottom: 1px solid #2a2b3d; display: flex; align-items: center; gap: 0.5rem; }
-  .grid-header .table-name { color: #7aa2f7; font-size: 13px; font-weight: 600; }
-  .grid-header .row-count { color: #565f89; font-size: 11px; }
-  .grid-filter { background: #1f2335; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 4px 8px; font-family: inherit; font-size: 12px; border-radius: 4px; outline: none; width: 200px; }
-  .grid-filter:focus { border-color: #7aa2f7; }
-  .grid-toolbar { display: flex; gap: 0.3rem; }
-  .grid-toolbar .btn { padding: 3px 10px; font-size: 11px; }
-  .data-grid-wrap { flex: 1; overflow: auto; }
-  table.data-grid { border-collapse: collapse; width: 100%; font-size: 12px; }
-  .data-grid th { background: #16161e; color: #565f89; text-align: left; padding: 6px 10px; border-bottom: 1px solid #2a2b3d; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; position: sticky; top: 0; white-space: nowrap; }
-  .data-grid td { padding: 4px 10px; border-bottom: 1px solid #1f2335; color: #a9b1d6; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .data-grid tr { cursor: pointer; }
-  .data-grid tr:hover { background: #1f2335; }
-  .data-grid tr.active { background: #1f2335; border-left: 2px solid #7aa2f7; }
-  .cell-json { color: #9ece6a; }
-  .cell-null { color: #565f89; font-style: italic; }
-  .cell-id { color: #7aa2f7; }
-  .cell-time { color: #565f89; font-size: 11px; }
+  /* Center: form */
+  .page-bar { display: flex; align-items: center; gap: 0.5rem; padding: 6px 10px; background: #16161e; border-bottom: 1px solid #2a2b3d; }
+  .page-bar .page-name { color: #7aa2f7; font-size: 13px; font-weight: 600; }
+  .page-nav-info { color: #565f89; font-size: 11px; }
+  .form-area { flex: 1; overflow-y: auto; padding: 1rem; }
+  .section-title { color: #565f89; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0.8rem 0 6px; border-bottom: 1px solid #2a2b3d; padding-bottom: 3px; }
+  .section-title:first-child { margin-top: 0; }
 
-  /* RIGHT: Row detail */
-  .detail-panel { flex: 0 0 360px; border-left: 1px solid #2a2b3d; display: flex; flex-direction: column; overflow: hidden; }
-  .detail-header { padding: 6px 10px; background: #16161e; border-bottom: 1px solid #2a2b3d; color: #565f89; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
-  .detail-content { flex: 1; overflow-y: auto; padding: 8px; }
-  .detail-field { margin-bottom: 0.8rem; }
-  .detail-field .field-name { color: #565f89; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
-  .detail-field .field-value { background: #131320; color: #a9b1d6; padding: 6px 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-all; border: 1px solid #2a2b3d; max-height: 200px; overflow-y: auto; }
-  .detail-field .field-value.json { color: #9ece6a; }
-  .detail-field .field-value.null { color: #565f89; font-style: italic; }
+  /* Fields */
+  .field-row { margin-bottom: 0.6rem; }
+  .field-label { display: block; color: #565f89; font-size: 11px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .field-label .type { color: #bb9af7; }
+  .field-label .primary { color: #9ece6a; font-size: 10px; margin-left: 4px; }
+  .field-label .univ { color: #e0af68; font-size: 10px; margin-left: 4px; }
+  .field-input { width: 100%; background: #16161e; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 6px 8px; font-family: inherit; font-size: 13px; border-radius: 4px; outline: none; }
+  .field-input:focus { border-color: #7aa2f7; box-shadow: 0 0 0 1px #7aa2f7; }
+  .field-input.filled { border-color: #9ece6a; }
+  textarea.field-input { min-height: 60px; resize: vertical; }
 
-  /* QA Mode overlay (bot driver) */
-  .qa-mode { display: none; }
-  .qa-mode.show { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
-  .qa-info { padding: 6px 10px; background: #16161e; border-bottom: 1px solid #2a2b3d; color: #565f89; font-size: 12px; }
-  .qa-info select { background: #1f2335; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 3px 6px; font-family: inherit; font-size: 12px; border-radius: 4px; min-width: 300px; }
-  .qa-fields { padding: 1rem; overflow-y: auto; flex: 1; }
-  .qa-field-group { margin-bottom: 0.8rem; }
-  .qa-field-label { display: block; color: #565f89; font-size: 11px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .qa-field-label .type { color: #bb9af7; }
-  .qa-field-label .primary { color: #9ece6a; font-size: 10px; margin-left: 4px; }
-  .qa-field-input { width: 100%; background: #16161e; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 6px 8px; font-family: inherit; font-size: 13px; border-radius: 4px; outline: none; }
-  .qa-field-input:focus { border-color: #7aa2f7; box-shadow: 0 0 0 1px #7aa2f7; }
-  textarea.qa-field-input { min-height: 60px; resize: vertical; }
-  .qa-combos { margin-top: 1rem; }
-  .combo-item { padding: 4px 8px; border: 1px solid #2a2b3d; border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
-  .combo-item:hover { background: #1f2335; }
-  .combo-item.active { background: #1f2335; border-color: #7aa2f7; }
-  .combo-item .idx { color: #565f89; }
-  .combo-item .expected { color: #9ece6a; font-size: 11px; }
+  /* Action bar */
+  .action-bar { display: flex; gap: 0.4rem; padding: 8px 1rem; background: #16161e; border-top: 1px solid #2a2b3d; flex-wrap: wrap; }
+  .action-bar .btn { display: flex; align-items: center; gap: 4px; }
+  .action-bar .btn kbd { background: #2a2b3d; padding: 1px 4px; border-radius: 3px; font-size: 10px; color: #565f89; }
+
+  /* Right: results */
   .result-card { background: #16161e; border: 1px solid #2a2b3d; border-radius: 4px; margin-bottom: 4px; overflow: hidden; }
   .result-card.pass { border-left: 3px solid #9ece6a; }
   .result-card.fail { border-left: 3px solid #f7768e; }
@@ -103,6 +91,7 @@
   .result-verdict.fail { color: #f7768e; }
   .result-verdict.review { color: #e0af68; }
   .result-meta { color: #565f89; font-size: 11px; }
+  .result-reason { color: #565f89; font-size: 11px; padding: 0 8px 3px; }
   .result-output { background: #131320; padding: 4px 8px; font-size: 11px; white-space: pre-wrap; max-height: 80px; overflow-y: auto; border-top: 1px solid #2a2b3d; }
   .tally { display: flex; gap: 0.8rem; padding: 4px 8px; background: #16161e; border: 1px solid #2a2b3d; border-radius: 4px; margin-bottom: 4px; font-size: 12px; justify-content: center; }
   .tally .pass { color: #9ece6a; font-weight: 600; }
@@ -112,530 +101,493 @@
   .bot-bar { padding: 4px 8px; background: #1f2335; border: 1px solid #9ece6a; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #9ece6a; }
   .bot-progress { height: 3px; background: #2a2b3d; border-radius: 2px; margin-top: 3px; overflow: hidden; }
   .bot-progress-fill { height: 100%; background: #9ece6a; transition: width 0.3s; }
-  .keybar { display: flex; gap: 1rem; padding: 0.25rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; font-size: 11px; color: #565f89; }
-  .keybar kbd { background: #2a2b3d; padding: 1px 5px; border-radius: 3px; color: #a9b1d6; font-size: 11px; }
-  .empty { color: #565f89; text-align: center; padding: 2rem; font-size: 12px; }
-  .section-title { color: #565f89; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0.8rem 0 4px; border-bottom: 1px solid #2a2b3d; padding-bottom: 3px; }
+  .empty { color: #565f89; text-align: center; padding: 1.5rem; font-size: 12px; }
+
+  /* Dropdown menu */
+  .dropdown { position: relative; display: inline-block; }
+  .dropdown-content { display: none; position: absolute; background: #16161e; border: 1px solid #2a2b3d; border-radius: 4px; min-width: 160px; z-index: 100; top: 100%; left: 0; }
+  .dropdown-content.show { display: block; }
+  .dropdown-item { padding: 5px 10px; cursor: pointer; font-size: 12px; color: #a9b1d6; }
+  .dropdown-item:hover { background: #1f2335; }
+  .dropdown-item kbd { background: #2a2b3d; padding: 1px 4px; border-radius: 3px; font-size: 10px; color: #565f89; margin-left: 8px; }
 </style>
 </head>
 <body>
 
-<!-- Top bar with mode switcher -->
+<!-- Top bar -->
 <div class="topbar">
-  <h1>⚡ Posit DB Browser</h1>
-  <button class="mode-btn active" id="mode-browse" onclick="switchMode('browse')">📊 Browse</button>
-  <button class="mode-btn" id="mode-qa" onclick="switchMode('qa')">🤖 QA Grind</button>
+  <h1>⚡ Posit QA Workstation</h1>
+  <!-- Trial selector dropdown -->
+  <select class="ddl" id="trial-select" onchange="loadTrial()">
+    <option value="">— Select Trial —</option>
+  </select>
+  <!-- Action dropdown menu -->
+  <div class="dropdown">
+    <button class="btn" onclick="toggleMenu()">☰ Actions ▾</button>
+    <div class="dropdown-content" id="action-menu">
+      <div class="dropdown-item" onclick="doSearch()">🔍 Search <kbd>Ctrl+S</kbd></div>
+      <div class="dropdown-item" onclick="doSave()">💾 Save <kbd>Ctrl+Shift+S</kbd></div>
+      <div class="dropdown-item" onclick="doDelete()">🗑 Delete <kbd>Ctrl+D</kbd></div>
+      <div class="dropdown-item" onclick="doRun()">▶ Run Test <kbd>Enter</kbd></div>
+      <div class="dropdown-item" onclick="doGrind()">🤖 Grind All <kbd>Ctrl+G</kbd></div>
+    </div>
+  </div>
   <div class="spacer"></div>
   <span class="status-msg" id="status">Ready</span>
 </div>
 
-<!-- Main: Browse mode -->
-<div class="main" id="browse-mode">
-  <!-- LEFT: Schema tree -->
-  <div class="sidebar">
-    <div class="sidebar-header">Database Schema</div>
-    <div class="tree" id="schema-tree"></div>
-  </div>
-
-  <!-- CENTER: Data grid -->
-  <div class="center">
-    <div class="grid-header">
-      <span class="table-name" id="grid-table-name">— Select a table —</span>
-      <span class="row-count" id="grid-row-count"></span>
-      <div class="spacer" style="flex:1"></div>
-      <input type="text" class="grid-filter" id="grid-filter" placeholder="Filter..." oninput="debounceFilter()" style="display:none">
-      <div class="grid-toolbar">
-        <button class="btn" id="btn-prev" onclick="prevPage()" style="display:none">← Prev</button>
-        <span id="page-info" style="color:#565f89;font-size:11px;display:none"></span>
-        <button class="btn" id="btn-next" onclick="nextPage()" style="display:none">Next →</button>
-      </div>
-    </div>
-    <div class="data-grid-wrap" id="grid-wrap">
-      <div class="empty">Click a table in the schema tree to browse its rows.</div>
-    </div>
-  </div>
-
-  <!-- RIGHT: Row detail -->
-  <div class="detail-panel">
-    <div class="detail-header">
-      <span>Row Detail</span>
-      <span id="detail-table" style="text-transform:none;letter-spacing:0;color:#565f89"></span>
-    </div>
-    <div class="detail-content" id="detail-content">
-      <div class="empty">Click a row to inspect its full data.</div>
-    </div>
-  </div>
+<!-- Key mapping bar -->
+<div class="keybar" id="keybar" style="display:none">
+  <span><kbd>Ctrl+F1</kbd> Focus first field</span>
+  <span><kbd>Ctrl+Shift+F1</kbd> Next page layout</span>
+  <span><kbd>Tab</kbd> Next field</span>
+  <span><kbd>Shift+Tab</kbd> Prev field</span>
+  <span><kbd>Enter</kbd> Run Test</span>
+  <span><kbd>Ctrl+S</kbd> Search</span>
+  <span><kbd>Ctrl+G</kbd> Grind All</span>
+  <span style="color:#9ece6a">Bot: Ctrl+F1 → type → Tab → type → ... → Enter</span>
 </div>
 
-<!-- QA Mode -->
-<div class="qa-mode" id="qa-mode">
-  <div class="keybar">
-    <span><kbd>Ctrl+F1</kbd> Focus first field</span>
-    <span><kbd>Tab</kbd> Next field</span>
-    <span><kbd>Enter</kbd> Submit</span>
-    <span style="color:#9ece6a">Bot: Ctrl+F1 → type → Tab → Enter</span>
-  </div>
-  <div class="qa-info">
-    <select id="qa-session-select" onchange="qaLoadSession()">
-      <option value="">— Choose a session —</option>
-    </select>
-    <button class="btn btn-go" id="qa-btn-grind" disabled onclick="qaStartBot()">▶ Grind</button>
-    <button class="btn btn-stop" id="qa-btn-stop" disabled onclick="qaStopBot()">■ Stop</button>
-    <button class="btn" onclick="qaRunManual()">▶ Run Once</button>
-  </div>
-  <div style="display:flex;flex:1;overflow:hidden;">
-    <!-- Left: form + combos -->
-    <div style="flex:1;overflow-y:auto;padding:1rem;border-right:1px solid #2a2b3d;">
-      <div class="empty" id="qa-form-empty">Select a session to load QA form.</div>
-      <div id="qa-form-content" style="display:none">
-        <div class="section-title" id="qa-system-context"></div>
-        <div id="qa-fields"></div>
-        <div class="section-title">Pseudodata Combos <span id="qa-combo-count" style="text-transform:none"></span></div>
-        <div id="qa-combo-list"></div>
-      </div>
+<!-- Main layout -->
+<div class="main">
+  <!-- LEFT: Trial list + search results -->
+  <div class="left-panel">
+    <div class="panel-header">
+      <span>Trials</span>
+      <span id="trial-count" style="text-transform:none;letter-spacing:0;color:#565f89">—</span>
     </div>
-    <!-- Right: results -->
-    <div style="flex:0 0 320px;overflow-y:auto;padding:8px;">
-      <div class="empty" id="qa-results-empty">Results appear here.</div>
-      <div id="qa-bot-progress" style="display:none">
+    <div class="search-box">
+      <input type="text" id="search-input" placeholder="Search DB..." onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="btn" onclick="doSearch()">🔍</button>
+    </div>
+    <div class="list-area" id="trial-list-area">
+      <div class="empty">Loading trials...</div>
+    </div>
+  </div>
+
+  <!-- CENTER: Form -->
+  <div class="center-panel">
+    <div class="page-bar">
+      <span class="page-name" id="page-name">—</span>
+      <span class="page-nav-info" id="page-info"></span>
+    </div>
+    <div class="form-area" id="form-area">
+      <div class="empty">Select a trial from the left.</div>
+    </div>
+    <div class="action-bar" id="action-bar" style="display:none">
+      <button class="btn btn-go" id="btn-run" onclick="doRun()">▶ Run Test <kbd style="background:#2a2b3d;padding:1px 4px;border-radius:3px;font-size:10px;color:#9ece6a;margin-left:4px">Enter</kbd></button>
+      <button class="btn btn-go" id="btn-grind" onclick="doGrind()" disabled>🤖 Grind <kbd style="background:#2a2b3d;padding:1px 4px;border-radius:3px;font-size:10px;color:#9ece6a;margin-left:4px">Ctrl+G</kbd></button>
+      <button class="btn btn-stop" id="btn-stop" onclick="stopBot()" disabled>■ Stop</button>
+      <button class="btn btn-save" onclick="doSave()">💾 Save</button>
+      <button class="btn btn-del" onclick="doDelete()">🗑 Delete</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results + search results -->
+  <div class="right-panel">
+    <div class="panel-header">Results</div>
+    <div style="flex:1; overflow-y:auto; padding:8px;">
+      <div id="search-results" style="display:none; margin-bottom:8px;">
+        <div class="section-title" style="margin-top:0">Search Results</div>
+        <div id="search-results-list"></div>
+      </div>
+      <div id="bot-progress-container" style="display:none">
         <div class="bot-bar">
-          <span id="qa-bot-status">▶ Bot: test 0/0</span>
-          <div class="bot-progress"><div class="bot-progress-fill" id="qa-bot-fill" style="width:0%"></div></div>
+          <span id="bot-status">▶ Bot: test 0/0</span>
+          <div class="bot-progress"><div class="bot-progress-fill" id="bot-fill" style="width:0%"></div></div>
         </div>
       </div>
-      <div id="qa-tally" class="tally" style="display:none">
-        <span class="pass" id="qa-tally-pass">0 passed</span><span class="sep">·</span>
-        <span class="fail" id="qa-tally-fail">0 failed</span><span class="sep">·</span>
-        <span class="review" id="qa-tally-review">0 review</span>
+      <div id="tally" class="tally" style="display:none">
+        <span class="pass" id="tally-pass">0 passed</span><span class="sep">·</span>
+        <span class="fail" id="tally-fail">0 failed</span><span class="sep">·</span>
+        <span class="review" id="tally-review">0 review</span>
       </div>
-      <div id="qa-results-list"></div>
+      <div id="results-list">
+        <div class="empty">Results appear here.</div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
 // === State ===
-let schemas = [];
-let currentTable = null;
-let currentRows = [];
-let currentRow = null;
-let currentPage = 1;
-let pageSize = 50;
-let totalRows = 0;
-let filterTimer = null;
-let qaSessions = [];
+let trials = [];
 let qaSession = null;
-let qaCombos = [];
-let qaResults = [];
-let qaBotRunning = false;
-let qaBotCts = null;
+let currentPageIdx = 0;
+let combos = [];
+let results = [];
+let botRunning = false;
+let botCts = null;
+let searchResults = [];
 
 // === Init ===
 async function init() {
-  await loadSchema();
-  await loadQaSessions();
+  try {
+    const res = await fetch('/api/qa/sessions');
+    trials = await res.json();
+    document.getElementById('trial-count').textContent = trials.length;
+    // Populate trial dropdown
+    const sel = document.getElementById('trial-select');
+    trials.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.sessionId;
+      const date = new Date(t.savedAt).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit'});
+      opt.textContent = `${t.sessionId.slice(0,8)} · ${t.status} · ${date}`;
+      sel.appendChild(opt);
+    });
+    renderTrialList();
+  } catch(e) { setStatus('Failed: ' + e.message); }
+
+  // Keyboard shortcuts
   document.addEventListener('keydown', e => {
-    if (e.ctrlKey && e.key === 'F1') { e.preventDefault(); qaFocusFirst(); }
+    if (e.ctrlKey && e.key === 'F1') { e.preventDefault(); focusFirstField(); }
+    if (e.ctrlKey && e.shiftKey && e.key === 'F1') { e.preventDefault(); cyclePage(); }
+    if (e.ctrlKey && !e.shiftKey && e.key === 's') { e.preventDefault(); doSearch(); }
+    if (e.ctrlKey && e.shiftKey && e.key === 'S') { e.preventDefault(); doSave(); }
+    if (e.ctrlKey && !e.shiftKey && e.key === 'd') { e.preventDefault(); doDelete(); }
+    if (e.ctrlKey && !e.shiftKey && e.key === 'g') { e.preventDefault(); doGrind(); }
+    if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey && e.target.tagName === 'INPUT') {
+      e.preventDefault(); doRun();
+    }
   });
 }
 init();
 
 function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// === Schema tree ===
-async function loadSchema() {
-  try {
-    const res = await fetch('/api/db/schema');
-    schemas = await res.json();
-    renderTree();
-  } catch(e) { setStatus('Schema load failed: ' + e.message); }
-}
-
-function renderTree() {
-  const tree = document.getElementById('schema-tree');
-  tree.innerHTML = '';
-  schemas.forEach(schema => {
-    const sn = document.createElement('div');
-    sn.className = 'schema-node';
-    sn.innerHTML = `<span class="arrow">▸</span> ${schema.name}`;
-    sn.onclick = () => toggleSchema(sn, schema);
-    tree.appendChild(sn);
-
-    const tableContainer = document.createElement('div');
-    tableContainer.style.display = 'none';
-    schema.tables.forEach(table => {
-      const tn = document.createElement('div');
-      tn.className = 'table-node';
-      tn.dataset.schema = schema.name;
-      tn.dataset.table = table.name;
-      tn.innerHTML = `<span class="icon">▦</span> ${table.name}`;
-      tn.onclick = () => selectTable(schema.name, table.name, tn);
-      tableContainer.appendChild(tn);
-
-      // Columns (hidden by default)
-      table.columns.forEach(col => {
-        const cn = document.createElement('div');
-        cn.className = 'column-node';
-        cn.innerHTML = `${col.name} <span class="col-type">${col.dataType}</span>${col.nullable ? '<span class="col-nullable">NULL</span>' : ''}`;
-        cn.style.display = 'none';
-        tableContainer.appendChild(cn);
-      });
-    });
-    tree.appendChild(tableContainer);
-  });
-}
-
-function toggleSchema(node, schema) {
-  const next = node.nextElementSibling;
-  if (next.style.display === 'none') {
-    next.style.display = 'block';
-    node.querySelector('.arrow').textContent = '▾';
-  } else {
-    next.style.display = 'none';
-    node.querySelector('.arrow').textContent = '▸';
-  }
-}
-
-// === Table data ===
-async function selectTable(schema, table, el) {
-  document.querySelectorAll('.table-node').forEach(n => n.classList.remove('active'));
-  el.classList.add('active');
-  currentTable = { schema, table };
-  currentPage = 1;
-  document.getElementById('grid-table-name').textContent = `${schema}.${table}`;
-  document.getElementById('grid-filter').style.display = 'block';
-  document.getElementById('grid-filter').value = '';
-  await loadTableData();
-}
-
-async function loadTableData() {
-  if (!currentTable) return;
-  const { schema, table } = currentTable;
-  const filter = document.getElementById('grid-filter').value || '';
-  setStatus(`Loading ${schema}.${table}...`);
-  try {
-    const params = new URLSearchParams({ page: currentPage, pageSize });
-    if (filter) params.set('filter', filter);
-    const res = await fetch(`/api/db/tables/${schema}/${table}?${params}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    totalRows = data.totalRows;
-    currentRows = data.rows;
-    renderGrid(data);
-    setStatus(`${schema}.${table}: ${totalRows} rows total, showing ${currentRows.length}`);
-  } catch(e) { setStatus('Load failed: ' + e.message); }
-}
-
-function renderGrid(data) {
-  const wrap = document.getElementById('grid-wrap');
-  wrap.innerHTML = '';
-  if (data.rows.length === 0) {
-    wrap.innerHTML = '<div class="empty">No rows found.</div>';
-    document.getElementById('grid-row-count').textContent = '';
-    document.getElementById('btn-prev').style.display = 'none';
-    document.getElementById('btn-next').style.display = 'none';
-    document.getElementById('page-info').style.display = 'none';
-    return;
-  }
-
-  const cols = Object.keys(data.rows[0]);
-  const table = document.createElement('table');
-  table.className = 'data-grid';
-  const thead = document.createElement('thead');
-  const tr = document.createElement('tr');
-  cols.forEach(c => {
-    const th = document.createElement('th');
-    th.textContent = c;
-    tr.appendChild(th);
-  });
-  thead.appendChild(tr);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  data.rows.forEach((row, i) => {
-    const r = document.createElement('tr');
-    r.onclick = () => selectRow(row, r);
-    cols.forEach(c => {
-      const td = document.createElement('td');
-      const val = row[c];
-      if (val === null || val === undefined) {
-        td.className = 'cell-null';
-        td.textContent = 'NULL';
-      } else if (c === 'payload_json' || c === 'state_json' || c === 'context_json') {
-        td.className = 'cell-json';
-        td.textContent = String(val).slice(0, 100) + (String(val).length > 100 ? '...' : '');
-      } else if (c.includes('id')) {
-        td.className = 'cell-id';
-        td.textContent = String(val).slice(0, 20);
-      } else if (c.includes('_at') || c.includes('time')) {
-        td.className = 'cell-time';
-        td.textContent = String(val).replace('T', ' ').slice(0, 19);
-      } else {
-        td.textContent = String(val).slice(0, 100);
-      }
-      td.title = String(val ?? 'NULL');
-      r.appendChild(td);
-    });
-    tbody.appendChild(r);
-  });
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-
-  // Pagination
-  const totalPages = Math.ceil(totalRows / pageSize);
-  document.getElementById('grid-row-count').textContent = `${totalRows} rows`;
-  document.getElementById('btn-prev').style.display = currentPage > 1 ? 'inline-block' : 'none';
-  document.getElementById('btn-next').style.display = currentPage < totalPages ? 'inline-block' : 'none';
-  document.getElementById('page-info').style.display = 'inline';
-  document.getElementById('page-info').textContent = `Page ${currentPage}/${totalPages}`;
-}
-
-function selectRow(row, el) {
-  document.querySelectorAll('.data-grid tr').forEach(r => r.classList.remove('active'));
-  el.classList.add('active');
-  currentRow = row;
-  renderDetail(row);
-}
-
-function renderDetail(row) {
-  const container = document.getElementById('detail-content');
-  const tableLabel = document.getElementById('detail-table');
-  tableLabel.textContent = currentTable ? `${currentTable.schema}.${currentTable.table}` : '';
-  container.innerHTML = '';
-  for (const [key, val] of Object.entries(row)) {
-    const field = document.createElement('div');
-    field.className = 'detail-field';
-    const name = document.createElement('div');
-    name.className = 'field-name';
-    name.textContent = key;
-    field.appendChild(name);
-    const value = document.createElement('div');
-    if (val === null || val === undefined) {
-      value.className = 'field-value null';
-      value.textContent = 'NULL';
-    } else if (key.includes('json') || key.includes('payload') || key.includes('state')) {
-      value.className = 'field-value json';
-      let pretty = String(val);
-      try { pretty = JSON.stringify(JSON.parse(String(val)), null, 2); } catch(e) {}
-      value.textContent = pretty;
-    } else {
-      value.className = 'field-value';
-      value.textContent = String(val);
-    }
-    field.appendChild(value);
-    container.appendChild(field);
-  }
-}
-
-function debounceFilter() {
-  clearTimeout(filterTimer);
-  filterTimer = setTimeout(() => { currentPage = 1; loadTableData(); }, 300);
-}
-
-function prevPage() { if (currentPage > 1) { currentPage--; loadTableData(); } }
-function nextPage() { if (currentPage * pageSize < totalRows) { currentPage++; loadTableData(); } }
-
-// === Mode switching ===
-function switchMode(mode) {
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('mode-' + mode).classList.add('active');
-  document.getElementById('browse-mode').style.display = mode === 'browse' ? 'flex' : 'none';
-  document.getElementById('qa-mode').classList.toggle('show', mode === 'qa');
-}
-
-// === QA Mode ===
-async function loadQaSessions() {
-  try {
-    const res = await fetch('/api/qa/sessions');
-    qaSessions = await res.json();
-    const sel = document.getElementById('qa-session-select');
-    qaSessions.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s.sessionId;
-      const date = new Date(s.savedAt).toLocaleString('en-US', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-      opt.textContent = `${s.sessionId.slice(0,8)} · ${s.status} · ${date}`;
-      sel.appendChild(opt);
-    });
-  } catch(e) { setStatus('QA sessions load failed: ' + e.message); }
-}
-
-async function qaLoadSession() {
-  const sid = document.getElementById('qa-session-select').value;
-  if (!sid) return;
-  setStatus('Loading QA session...');
-  try {
-    const res = await fetch(`/api/qa/load/${sid}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    qaSession = await res.json();
-    qaCombos = qaSession.pseudodataCombos || [];
-    qaResults = [];
-    qaRenderForm();
-    qaRenderCombos();
-    qaRenderResults();
-    document.getElementById('qa-form-empty').style.display = 'none';
-    document.getElementById('qa-form-content').style.display = 'block';
-    document.getElementById('qa-btn-grind').disabled = qaCombos.length === 0;
-    document.getElementById('qa-combo-count').textContent = `(${qaCombos.length})`;
-    document.getElementById('qa-system-context').textContent = qaSession.systemContext || '';
-    setStatus('QA session loaded');
-  } catch(e) { setStatus('QA load failed: ' + e.message); }
-}
-
-function qaRenderForm() {
-  const container = document.getElementById('qa-fields');
-  container.innerHTML = '';
-  (qaSession.pages || []).forEach(page => {
-    page.fields.forEach(field => {
-      const group = document.createElement('div');
-      group.className = 'qa-field-group';
-      const label = document.createElement('label');
-      label.className = 'qa-field-label';
-      label.innerHTML = `${field.label} <span class="type">${field.type}</span>${field.isPrimary ? '<span class="primary">[primary]</span>' : ''}`;
-      group.appendChild(label);
-      const input = field.type.includes('[]') ? document.createElement('textarea') : document.createElement('input');
-      input.className = 'qa-field-input';
-      input.placeholder = `Enter ${field.type}...`;
-      group.appendChild(input);
-      container.appendChild(group);
-    });
-  });
-}
-
-function qaRenderCombos() {
-  const container = document.getElementById('qa-combo-list');
-  container.innerHTML = '';
-  qaCombos.forEach((combo, i) => {
+// === Trial list ===
+function renderTrialList(filter) {
+  const area = document.getElementById('trial-list-area');
+  area.innerHTML = '';
+  const filtered = filter ? trials.filter(t =>
+    t.sessionId.toLowerCase().includes(filter.toLowerCase()) ||
+    (t.status||'').toLowerCase().includes(filter.toLowerCase())
+  ) : trials;
+  filtered.forEach(t => {
     const item = document.createElement('div');
-    item.className = 'combo-item';
-    item.innerHTML = `<span class="idx">[${i+1}]</span> ${combo.label} ${combo.expectedOutput ? `<span class="expected">→ ${escHtml(combo.expectedOutput)}</span>` : ''}`;
-    item.onclick = () => qaFillForm(combo, item);
-    container.appendChild(item);
+    item.className = 'list-item';
+    const date = new Date(t.savedAt).toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const sc = (t.status||'unknown').toLowerCase();
+    item.innerHTML = `<span class="id">${t.sessionId.slice(0,8)}</span><span class="badge ${sc}">${t.status||'?'}</span><span class="meta">${date}</span>`;
+    item.onclick = () => { document.getElementById('trial-select').value = t.sessionId; loadTrial(t.sessionId); };
+    area.appendChild(item);
   });
 }
 
-function qaFillForm(combo, el) {
-  const first = document.querySelector('.qa-field-input');
-  if (first) first.value = combo.input;
-  document.querySelectorAll('.combo-item').forEach(e => e.classList.remove('active'));
-  el.classList.add('active');
+// === Load trial ===
+async function loadTrial(forceSid) {
+  const sid = forceSid || document.getElementById('trial-select').value;
+  if (!sid) return;
+  setStatus('Loading trial ' + sid.slice(0,8) + '...');
+  try {
+    const res = await fetch('/api/qa/load/' + sid);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    qaSession = await res.json();
+    combos = qaSession.pseudodataCombos || [];
+    results = [];
+    currentPageIdx = 0;
+    renderForm();
+    renderResults();
+    document.getElementById('keybar').style.display = 'flex';
+    document.getElementById('action-bar').style.display = 'flex';
+    document.getElementById('btn-grind').disabled = combos.length === 0;
+    setStatus('Loaded: ' + (qaSession.systemContext||'').slice(0,60));
+    // Highlight in list
+    document.querySelectorAll('.list-item').forEach(i => i.classList.remove('active'));
+  } catch(e) { setStatus('Load failed: ' + e.message); qaSession = null; }
 }
 
-function qaFocusFirst() {
-  const first = document.querySelector('.qa-field-input');
+// === Form rendering with universal fields + method fields ===
+function renderForm() {
+  if (!qaSession) return;
+  const area = document.getElementById('form-area');
+  area.innerHTML = '';
+  const pages = qaSession.pages || [];
+  const page = pages[currentPageIdx] || pages[0];
+  if (!page) return;
+
+  // Page name + navigation
+  document.getElementById('page-name').textContent = page.name || 'Input';
+  document.getElementById('page-info').textContent = pages.length > 1 ? `Page ${currentPageIdx+1}/${pages.length} (Ctrl+Shift+F1 to cycle)` : '';
+
+  // === Universal fields section ===
+  const univTitle = document.createElement('div');
+  univTitle.className = 'section-title';
+  univTitle.textContent = 'Universal Fields';
+  area.appendChild(univTitle);
+
+  const univFields = qaSession.universalFields || [];
+  univFields.forEach(f => {
+    const row = createField(f.label, f.type, f.name, false, true);
+    area.appendChild(row);
+  });
+
+  // === Method-specific fields section ===
+  if (page.fields && page.fields.length > 0) {
+    const methodTitle = document.createElement('div');
+    methodTitle.className = 'section-title';
+    methodTitle.textContent = `Method: ${page.name}`;
+    area.appendChild(methodTitle);
+
+    page.fields.forEach(f => {
+      const row = createField(f.label, f.type, f.name, f.isPrimary, false);
+      area.appendChild(row);
+    });
+  }
+
+  // === Pseudodata combos ===
+  if (combos.length > 0) {
+    const comboTitle = document.createElement('div');
+    comboTitle.className = 'section-title';
+    comboTitle.textContent = `Pseudodata (${combos.length})`;
+    area.appendChild(comboTitle);
+
+    combos.forEach((c, i) => {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.style.cssText = 'padding:4px 8px;border:1px solid #2a2b3d;border-radius:4px;margin-bottom:3px;';
+      item.innerHTML = `<span class="badge" style="color:#9ece6a;background:#1a2b1a;">${i+1}</span> ${escHtml(c.label)} ${c.expectedOutput ? '<span style="color:#9ece6a;font-size:11px;margin-left:auto">→ ' + escHtml(c.expectedOutput) + '</span>' : ''}`;
+      item.onclick = () => fillFromCombo(c, item);
+      area.appendChild(item);
+    });
+  }
+}
+
+function createField(label, type, name, isPrimary, isUniversal) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  const lbl = document.createElement('label');
+  lbl.className = 'field-label';
+  let html = label;
+  if (type) html += ` <span class="type">${type}</span>`;
+  if (isPrimary) html += '<span class="primary">[primary]</span>';
+  if (isUniversal) html += '<span class="univ">[universal]</span>';
+  lbl.innerHTML = html;
+  row.appendChild(lbl);
+  let input;
+  if (type && (type.includes('[]') || type.includes('seq') || type === 'string[]')) {
+    input = document.createElement('textarea');
+  } else if (type === 'bool') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">—</option><option value="true">true</option><option value="false">false</option>';
+  } else if (type === 'date') {
+    input = document.createElement('input');
+    input.type = 'date';
+  } else {
+    input = document.createElement('input');
+    input.type = (type === 'int' || type === 'double' || type === 'float') ? 'number' : 'text';
+  }
+  input.className = 'field-input';
+  input.dataset.fieldName = name;
+  input.dataset.fieldType = type || 'string';
+  input.dataset.isUniversal = isUniversal ? 'true' : 'false';
+  input.dataset.isPrimary = isPrimary ? 'true' : 'false';
+  input.placeholder = `Enter ${type || 'text'}...`;
+  input.addEventListener('input', () => { if (input.value) input.classList.add('filled'); else input.classList.remove('filled'); });
+  row.appendChild(input);
+  return row;
+}
+
+function focusFirstField() {
+  const first = document.querySelector('.field-input');
   if (first) first.focus();
 }
 
-function qaGetInput() {
-  const inputs = document.querySelectorAll('.qa-field-input');
-  if (inputs.length <= 1) return inputs[0]?.value || '';
-  return Array.from(inputs).map(i => i.value).join('\n');
+function cyclePage() {
+  if (!qaSession || !qaSession.pages || qaSession.pages.length <= 1) return;
+  currentPageIdx = (currentPageIdx + 1) % qaSession.pages.length;
+  renderForm();
+  setStatus('Page ' + (currentPageIdx+1) + '/' + qaSession.pages.length + ': ' + qaSession.pages[currentPageIdx].name);
 }
 
-async function qaRunOne(combo, silent) {
-  const input = combo ? combo.input : qaGetInput();
-  const expectedOutput = combo ? combo.expectedOutput : '';
-  const expectedExitCode = combo ? combo.expectedExitCode : 0;
-  const expectedBehavior = combo ? combo.description : '';
-  const isStdin = qaSession.isStdinEntry;
-  const systemContext = qaSession.systemContext || '';
-  const sid = qaSession.sessionId;
+function getAllFieldValues() {
+  const inputs = document.querySelectorAll('.field-input');
+  const values = {};
+  inputs.forEach(inp => {
+    values[inp.dataset.fieldName] = inp.value;
+  });
+  return values;
+}
+
+function getPrimaryInput() {
+  // Primary field first, then first universal, then first method field
+  const primary = document.querySelector('.field-input[data-is-primary="true"]');
+  if (primary && primary.value) return primary.value;
+  const first = document.querySelector('.field-input');
+  return first ? first.value : '';
+}
+
+function fillFromCombo(combo, el) {
+  // Fill the primary field with combo input
+  const primary = document.querySelector('.field-input[data-is-primary="true"]') || document.querySelector('.field-input');
+  if (primary) { primary.value = combo.input; primary.classList.add('filled'); }
+  document.querySelectorAll('.list-item').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+// === Actions ===
+function toggleMenu() {
+  document.getElementById('action-menu').classList.toggle('show');
+}
+
+async function doSearch() {
+  const q = document.getElementById('search-input').value;
+  if (!q) return;
+  setStatus('Searching for "' + q + '"...');
+  try {
+    const res = await fetch('/api/qa/search', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ query: q })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    searchResults = data.results || [];
+    renderSearchResults();
+    setStatus(`Found ${searchResults.length} results for "${q}"`);
+  } catch(e) { setStatus('Search failed: ' + e.message); }
+}
+
+function renderSearchResults() {
+  const container = document.getElementById('search-results');
+  const list = document.getElementById('search-results-list');
+  if (searchResults.length === 0) { container.style.display = 'none'; return; }
+  container.style.display = 'block';
+  list.innerHTML = '';
+  searchResults.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `<span class="id">${escHtml(r.id.slice(0,12))}</span><span class="badge ${r.kind==='session'?'session':'artifact'}">${escHtml(r.kind)}</span>`;
+    item.onclick = () => populateFromSearch(r);
+    list.appendChild(item);
+  });
+}
+
+function populateFromSearch(result) {
+  // Populate the name field with the search result ID
+  const nameField = document.querySelector('.field-input[data-field-name="name"]');
+  if (nameField) { nameField.value = result.id; nameField.classList.add('filled'); }
+  const notesField = document.querySelector('.field-input[data-field-name="notes"]');
+  if (notesField) { notesField.value = result.preview; notesField.classList.add('filled'); }
+  setStatus('Populated from ' + result.kind + ': ' + result.id.slice(0,12));
+}
+
+function doSave() {
+  const vals = getAllFieldValues();
+  setStatus('Save: ' + JSON.stringify(vals).slice(0,80) + '...');
+  // In a real app this would POST to /api/qa/save
+}
+
+function doDelete() {
+  const vals = getAllFieldValues();
+  setStatus('Delete: ' + JSON.stringify(vals).slice(0,80) + '...');
+  // In a real app this would POST to /api/qa/delete
+}
+
+async function doRun() {
+  if (!qaSession) return;
+  const input = getPrimaryInput();
+  if (!input) { setStatus('No input to run'); return; }
+  setStatus('Running test...');
   try {
     const res = await fetch('/api/qa/run', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ sessionId: sid, input, expectedOutput, expectedExitCode, expectedBehavior, systemContext, isStdin })
+      body: JSON.stringify({
+        sessionId: qaSession.sessionId, input,
+        expectedOutput: '', expectedExitCode: 0, expectedBehavior: '',
+        systemContext: qaSession.systemContext || '', isStdin: qaSession.isStdinEntry
+      })
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const result = await res.json();
-    qaResults.push(result);
-    qaRenderResults();
-    return result;
-  } catch(e) {
-    const err = { verdict:'Fail', judgeLayer:'Error', reason:e.message, stdout:'', exitCode:-1 };
-    qaResults.push(err); qaRenderResults(); return err;
-  }
+    results.push(result);
+    renderResults();
+    setStatus('Test complete: ' + result.verdict);
+  } catch(e) { setStatus('Run failed: ' + e.message); }
 }
 
-async function qaRunManual() {
-  if (!qaSession) return;
-  await qaRunOne(null, false);
-  setStatus('Test run complete');
-}
+async function doGrind() {
+  if (!qaSession || combos.length === 0) return;
+  botRunning = true;
+  botCts = { cancelled: false };
+  results = [];
+  renderResults();
+  document.getElementById('btn-grind').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('bot-progress-container').style.display = 'block';
 
-async function qaStartBot() {
-  if (!qaSession || qaCombos.length === 0) return;
-  qaBotRunning = true;
-  qaBotCts = { cancelled: false };
-  qaResults = [];
-  qaRenderResults();
-  document.getElementById('qa-btn-grind').disabled = true;
-  document.getElementById('qa-btn-stop').disabled = false;
-  document.getElementById('qa-bot-progress').style.display = 'block';
-  for (let i = 0; i < qaCombos.length; i++) {
-    if (qaBotCts.cancelled) break;
-    document.getElementById('qa-bot-status').textContent = `▶ Bot: test ${i+1}/${qaCombos.length}`;
-    document.getElementById('qa-bot-fill').style.width = `${((i+1)/qaCombos.length)*100}%`;
-    qaFocusFirst();
+  for (let i = 0; i < combos.length; i++) {
+    if (botCts.cancelled) break;
+    document.getElementById('bot-status').textContent = `▶ Bot: test ${i+1}/${combos.length}`;
+    document.getElementById('bot-fill').style.width = `${((i+1)/combos.length)*100}%`;
+    // Bot key sequence: Ctrl+F1 → type → Tab → ... → Enter
+    focusFirstField();
     await sleep(50);
-    const first = document.querySelector('.qa-field-input');
-    if (first) first.value = qaCombos[i].input;
+    const primary = document.querySelector('.field-input[data-is-primary="true"]') || document.querySelector('.field-input');
+    if (primary) { primary.value = combos[i].input; primary.classList.add('filled'); }
     await sleep(50);
-    await qaRunOne(qaCombos[i], true);
+    // Run test
+    try {
+      const res = await fetch('/api/qa/run', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          sessionId: qaSession.sessionId, input: combos[i].input,
+          expectedOutput: combos[i].expectedOutput, expectedExitCode: combos[i].expectedExitCode,
+          expectedBehavior: combos[i].description, systemContext: qaSession.systemContext||'',
+          isStdin: qaSession.isStdinEntry
+        })
+      });
+      if (res.ok) { results.push(await res.json()); renderResults(); }
+    } catch(e) { results.push({verdict:'Fail',judgeLayer:'Error',reason:e.message,exitCode:-1,stdout:''}); renderResults(); }
     await sleep(100);
   }
-  qaBotRunning = false;
-  document.getElementById('qa-btn-grind').disabled = false;
-  document.getElementById('qa-btn-stop').disabled = true;
-  const p = qaResults.filter(r => r.verdict === 'Pass').length;
-  const f = qaResults.filter(r => r.verdict === 'Fail').length;
+  botRunning = false;
+  document.getElementById('btn-grind').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+  const p = results.filter(r => r.verdict==='Pass').length;
+  const f = results.filter(r => r.verdict==='Fail').length;
   setStatus(`Bot done: ${p} passed, ${f} failed`);
 }
 
-function qaStopBot() {
-  if (qaBotCts) qaBotCts.cancelled = true;
-  qaBotRunning = false;
-  document.getElementById('qa-btn-grind').disabled = false;
-  document.getElementById('qa-btn-stop').disabled = true;
+function stopBot() {
+  if (botCts) botCts.cancelled = true;
+  botRunning = false;
+  document.getElementById('btn-grind').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
   setStatus('Bot stopped');
 }
 
-function qaRenderResults() {
-  const list = document.getElementById('qa-results-list');
+// === Results rendering ===
+function renderResults() {
+  const list = document.getElementById('results-list');
   list.innerHTML = '';
-  if (qaResults.length === 0) {
-    document.getElementById('qa-results-empty').style.display = 'block';
-    document.getElementById('qa-tally').style.display = 'none';
+  if (results.length === 0) {
+    list.innerHTML = '<div class="empty">Results appear here.</div>';
+    document.getElementById('tally').style.display = 'none';
     return;
   }
-  document.getElementById('qa-results-empty').style.display = 'none';
-  const p = qaResults.filter(r => r.verdict === 'Pass').length;
-  const f = qaResults.filter(r => r.verdict === 'Fail').length;
-  const r2 = qaResults.filter(r => r.verdict === 'HumanReview').length;
-  document.getElementById('qa-tally').style.display = 'flex';
-  document.getElementById('qa-tally-pass').textContent = `${p} passed`;
-  document.getElementById('qa-tally-fail').textContent = `${f} failed`;
-  document.getElementById('qa-tally-review').textContent = `${r2} review`;
-  qaResults.forEach((r, i) => {
+  const p = results.filter(r => r.verdict==='Pass').length;
+  const f = results.filter(r => r.verdict==='Fail').length;
+  const r2 = results.filter(r => r.verdict==='HumanReview').length;
+  document.getElementById('tally').style.display = 'flex';
+  document.getElementById('tally-pass').textContent = `${p} passed`;
+  document.getElementById('tally-fail').textContent = `${f} failed`;
+  document.getElementById('tally-review').textContent = `${r2} review`;
+  results.forEach((r, i) => {
     const card = document.createElement('div');
-    card.className = 'result-card ' + r.verdict.toLowerCase();
-    card.innerHTML = `<div class="result-header"><span class="result-verdict ${r.verdict.toLowerCase()}">${r.verdict}</span><span class="result-meta">${r.judgeLayer} · exit ${r.exitCode} · #${i+1}</span></div>`;
-    if (r.reason) {
-      const reason = document.createElement('div');
-      reason.style.cssText = 'color:#565f89;font-size:11px;padding:0 8px 3px;';
-      reason.textContent = r.reason;
-      card.appendChild(reason);
-    }
-    if (r.stdout) {
-      const out = document.createElement('div');
-      out.className = 'result-output';
-      out.textContent = r.stdout;
-      card.appendChild(out);
-    }
+    card.className = 'result-card ' + (r.verdict||'fail').toLowerCase();
+    card.innerHTML = `<div class="result-header"><span class="result-verdict ${(r.verdict||'').toLowerCase()}">${r.verdict||'?'}</span><span class="result-meta">${r.judgeLayer||''} · exit ${r.exitCode} · #${i+1}</span></div>`;
+    if (r.reason) { const d = document.createElement('div'); d.className='result-reason'; d.textContent=r.reason; card.appendChild(d); }
+    if (r.stdout) { const o = document.createElement('div'); o.className='result-output'; o.textContent=r.stdout; card.appendChild(o); }
     list.appendChild(card);
   });
 }
 
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// Close dropdown on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.dropdown')) document.getElementById('action-menu').classList.remove('show');
+});
 </script>
 </body>
 </html>

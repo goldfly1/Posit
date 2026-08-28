@@ -66,6 +66,46 @@ app.MapPost("/api/qa/run", async (QaRunRequest req, QaTerminalService svc, Cance
     return Results.Ok(result);
 });
 
+// Search: type a value in a field → query the DB → matching records populate the form
+app.MapPost("/api/qa/search", async (SearchRequest req, DbBrowserService db, CancellationToken ct) =>
+{
+    // Search across sessions and artifacts for matching records
+    var results = new List<SearchResult>();
+    try
+    {
+        var sessions = await db.GetTableRowsAsync("posit_state", "sessions", 1, 50, req.Query);
+        foreach (var row in sessions.Rows)
+        {
+            var sid = row.GetValueOrDefault("session_id")?.ToString() ?? "";
+            var stateJson = row.GetValueOrDefault("state_json")?.ToString() ?? "";
+            if (sid.Contains(req.Query, StringComparison.OrdinalIgnoreCase) ||
+                stateJson.Contains(req.Query, StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(new SearchResult(sid, "session", (stateJson.Take(200).ToString() ?? "")));
+            }
+        }
+    } catch { }
+
+    try
+    {
+        var artifacts = await db.GetTableRowsAsync("posit_artifacts", "artifacts", 1, 50, req.Query);
+        foreach (var row in artifacts.Rows)
+        {
+            var id = row.GetValueOrDefault("id")?.ToString() ?? "";
+            var kind = row.GetValueOrDefault("kind")?.ToString() ?? "";
+            var payload = row.GetValueOrDefault("payload_json")?.ToString() ?? "";
+            if (id.Contains(req.Query, StringComparison.OrdinalIgnoreCase) ||
+                kind.Contains(req.Query, StringComparison.OrdinalIgnoreCase) ||
+                payload.Contains(req.Query, StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(new SearchResult(id, kind, (payload.Take(200).ToString() ?? "")));
+            }
+        }
+    } catch { }
+
+    return Results.Ok(new { results, count = results.Count });
+});
+
 app.MapFallbackToPage("/_Host");
 
 app.Run();
@@ -80,3 +120,10 @@ public sealed class QaRunRequest
     public string SystemContext { get; set; } = "";
     public bool IsStdin { get; set; }
 }
+
+public sealed class SearchRequest
+{
+    public string Query { get; set; } = "";
+}
+
+public sealed record SearchResult(string Id, string Kind, string Preview);
