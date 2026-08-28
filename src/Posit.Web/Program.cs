@@ -14,6 +14,11 @@ app.UseStaticFiles();
 app.MapBlazorHub();
 
 // API endpoints for the QA terminal
+app.MapGet("/api/qa/sessions", async (QaDashboardRepository repo) =>
+{
+    return Results.Ok(await repo.GetSessionsAsync());
+});
+
 app.MapGet("/api/qa/load/{sessionId}", async (string sessionId, QaTerminalService svc) =>
 {
     var session = await svc.LoadSessionAsync(sessionId);

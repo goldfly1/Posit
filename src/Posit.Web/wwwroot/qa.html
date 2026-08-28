@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Posit QA Terminal</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1b26; color: #a9b1d6; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 14px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  /* Top bar */
+  .topbar { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; }
+  .topbar h1 { color: #7aa2f7; font-size: 16px; font-weight: 600; }
+  .topbar .spacer { flex: 1; }
+  .btn { padding: 6px 16px; border: 1px solid #2a2b3d; background: #1f2335; color: #a9b1d6; cursor: pointer; font-family: inherit; font-size: 13px; border-radius: 4px; }
+  .btn:hover { background: #2a2b3d; }
+  .btn-go { background: #4c566a; color: #9ece6a; border-color: #9ece6a; font-weight: 600; }
+  .btn-go:hover { background: #9ece6a; color: #1a1b26; }
+  .btn-go:disabled { background: #2a2b3d; color: #565f89; border-color: #2a2b3d; cursor: default; }
+  .btn-stop { background: #1f2335; color: #f7768e; border-color: #f7768e; }
+  .btn-stop:disabled { color: #565f89; border-color: #2a2b3d; cursor: default; }
+
+  /* Session bar */
+  .sessionbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; }
+  .sessionbar select { background: #1f2335; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 4px 8px; font-family: inherit; font-size: 13px; border-radius: 4px; min-width: 400px; }
+
+  /* Main layout: form | results */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .form-panel { flex: 0 0 45%; border-right: 1px solid #2a2b3d; overflow-y: auto; padding: 1rem; }
+  .results-panel { flex: 1; overflow-y: auto; padding: 1rem; }
+
+  /* Form fields */
+  .field-group { margin-bottom: 1rem; }
+  .field-label { display: block; color: #565f89; font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field-label .type { color: #bb9af7; }
+  .field-label .primary { color: #9ece6a; font-size: 10px; margin-left: 4px; }
+  .field-input { width: 100%; background: #16161e; color: #a9b1d6; border: 1px solid #2a2b3d; padding: 8px 10px; font-family: inherit; font-size: 13px; border-radius: 4px; outline: none; }
+  .field-input:focus { border-color: #7aa2f7; box-shadow: 0 0 0 1px #7aa2f7; }
+  textarea.field-input { min-height: 80px; resize: vertical; }
+
+  /* Key-mapping bar */
+  .keybar { display: flex; gap: 1rem; padding: 0.3rem 1rem; background: #16161e; border-bottom: 1px solid #2a2b3d; font-size: 11px; color: #565f89; }
+  .keybar kbd { background: #2a2b3d; padding: 2px 6px; border-radius: 3px; color: #a9b1d6; font-family: inherit; font-size: 11px; }
+
+  /* Pseudodata list */
+  .combo-list { margin-bottom: 1rem; }
+  .combo-item { padding: 6px 10px; border: 1px solid #2a2b3d; border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .combo-item:hover { background: #1f2335; }
+  .combo-item.active { background: #1f2335; border-color: #7aa2f7; }
+  .combo-item .idx { color: #565f89; }
+  .combo-item .label { color: #a9b1d6; }
+  .combo-item .expected { color: #9ece6a; font-size: 11px; }
+
+  /* Results */
+  .result-card { background: #16161e; border: 1px solid #2a2b3d; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
+  .result-card.pass { border-left: 3px solid #9ece6a; }
+  .result-card.fail { border-left: 3px solid #f7768e; }
+  .result-card.review { border-left: 3px solid #e0af68; }
+  .result-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; }
+  .result-verdict { font-weight: 600; font-size: 13px; }
+  .result-verdict.pass { color: #9ece6a; }
+  .result-verdict.fail { color: #f7768e; }
+  .result-verdict.review { color: #e0af68; }
+  .result-meta { color: #565f89; font-size: 11px; }
+  .result-reason { color: #565f89; font-size: 12px; padding: 0 10px 4px; }
+  .result-output { background: #131320; color: #a9b1d6; padding: 6px 10px; font-size: 12px; white-space: pre-wrap; max-height: 120px; overflow-y: auto; border-top: 1px solid #2a2b3d; }
+
+  /* Tally bar */
+  .tally { display: flex; gap: 1rem; padding: 6px 10px; background: #16161e; border: 1px solid #2a2b3d; border-radius: 4px; margin-bottom: 8px; font-size: 13px; justify-content: center; }
+  .tally .pass { color: #9ece6a; font-weight: 600; }
+  .tally .fail { color: #f7768e; font-weight: 600; }
+  .tally .review { color: #e0af68; font-weight: 600; }
+  .tally .sep { color: #2a2b3d; }
+
+  /* Bot progress */
+  .bot-bar { padding: 4px 10px; background: #1f2335; border: 1px solid #9ece6a; border-radius: 4px; margin-bottom: 8px; font-size: 12px; color: #9ece6a; }
+  .bot-progress { height: 3px; background: #2a2b3d; border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .bot-progress-fill { height: 100%; background: #9ece6a; transition: width 0.3s; }
+
+  /* Empty state */
+  .empty { color: #565f89; text-align: center; padding: 2rem; font-size: 13px; }
+  .status-msg { color: #565f89; font-size: 12px; padding: 0.5rem 1rem; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <h1>⚡ Posit QA Terminal</h1>
+  <button class="btn btn-go" id="btn-grind" disabled>▶ Grind</button>
+  <button class="btn btn-stop" id="btn-stop" disabled>■ Stop</button>
+  <button class="btn" id="btn-load">Load Session</button>
+  <div class="spacer"></div>
+  <span class="status-msg" id="status">No session loaded</span>
+</div>
+
+<!-- Session selector -->
+<div class="sessionbar">
+  <select id="session-select"><option value="">— Choose a session —</option></select>
+</div>
+
+<!-- Key-mapping reference -->
+<div class="keybar" id="keybar" style="display:none">
+  <span><kbd>Ctrl+F1</kbd> Focus first field</span>
+  <span><kbd>Tab</kbd> Next field</span>
+  <span><kbd>Enter</kbd> Submit</span>
+  <span><kbd>Esc</kbd> Cancel</span>
+  <span style="color:#9ece6a">Bot: Ctrl+F1 → type → Tab → type → Enter</span>
+</div>
+
+<!-- Main layout -->
+<div class="main">
+  <!-- Left: Form + Pseudodata -->
+  <div class="form-panel" id="form-panel">
+    <div class="empty" id="form-empty">Select a session and click Load to begin.</div>
+    <div id="form-content" style="display:none">
+      <!-- Form fields rendered here -->
+      <div id="fields"></div>
+      <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+        <button class="btn btn-go" id="btn-run">▶ Run (Enter)</button>
+      </div>
+      <div style="margin-top:0.5rem; color:#565f89; font-size:12px;" id="system-context"></div>
+
+      <!-- Pseudodata combos -->
+      <div style="margin-top:1.5rem; color:#565f89; font-size:12px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Pseudodata Combos</div>
+      <div class="combo-list" id="combo-list"></div>
+    </div>
+  </div>
+
+  <!-- Right: Results -->
+  <div class="results-panel" id="results-panel">
+    <div class="empty" id="results-empty">Results will appear here after running tests.</div>
+    <div id="bot-progress-container" style="display:none">
+      <div class="bot-bar" id="bot-bar">
+        <span id="bot-status">▶ Bot grinding: test 0/0</span>
+        <div class="bot-progress"><div class="bot-progress-fill" id="bot-progress-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div id="tally" class="tally" style="display:none">
+      <span class="pass" id="tally-pass">0 passed</span>
+      <span class="sep">·</span>
+      <span class="fail" id="tally-fail">0 failed</span>
+      <span class="sep">·</span>
+      <span class="review" id="tally-review">0 need review</span>
+    </div>
+    <div id="results-list"></div>
+  </div>
+</div>
+
+<script>
+// === State ===
+let sessions = [];
+let qaSession = null;
+let combos = [];
+let results = [];
+let botRunning = false;
+let botCts = null;
+
+// === Init ===
+async function init() {
+  try {
+    const res = await fetch('/api/qa/sessions');
+    sessions = await res.json();
+    const sel = document.getElementById('session-select');
+    sessions.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.sessionId;
+      const date = new Date(s.savedAt).toLocaleString('en-US', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      opt.textContent = `${s.sessionId.slice(0,8)} · ${s.status} · ${date}`;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    setStatus('Failed to load sessions: ' + e.message);
+  }
+  // Event listeners
+  document.getElementById('btn-load').onclick = loadSession;
+  document.getElementById('btn-run').onclick = runManual;
+  document.getElementById('btn-grind').onclick = startBot;
+  document.getElementById('btn-stop').onclick = stopBot;
+  // Keyboard: Ctrl+F1 focuses first field
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'F1') { e.preventDefault(); focusFirstField(); }
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
+      e.preventDefault(); runManual();
+    }
+  });
+}
+init();
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// === Load session ===
+async function loadSession() {
+  const sid = document.getElementById('session-select').value;
+  if (!sid) return;
+  setStatus('Loading session...');
+  try {
+    const res = await fetch(`/api/qa/load/${sid}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    qaSession = await res.json();
+    combos = qaSession.pseudodataCombos || [];
+    results = [];
+    renderForm();
+    renderCombos();
+    renderResults();
+    document.getElementById('form-empty').style.display = 'none';
+    document.getElementById('form-content').style.display = 'block';
+    document.getElementById('keybar').style.display = 'flex';
+    document.getElementById('btn-grind').disabled = combos.length === 0;
+    setStatus(`Loaded: ${qaSession.systemContext?.slice(0,60) || sid}`);
+    // Auto-focus first field
+    setTimeout(focusFirstField, 100);
+  } catch(e) {
+    setStatus('Failed to load: ' + e.message);
+  }
+}
+
+// === Render form fields from carapace method signatures ===
+function renderForm() {
+  const container = document.getElementById('fields');
+  container.innerHTML = '';
+  const pages = qaSession.pages || [];
+  pages.forEach((page, pi) => {
+    if (pages.length > 1) {
+      const heading = document.createElement('div');
+      heading.style.cssText = 'color:#7aa2f7; font-size:13px; font-weight:600; margin:8px 0 6px; border-bottom:1px solid #2a2b3d; padding-bottom:4px;';
+      heading.textContent = `Page: ${page.name}`;
+      container.appendChild(heading);
+    }
+    page.fields.forEach((field, fi) => {
+      const group = document.createElement('div');
+      group.className = 'field-group';
+      const label = document.createElement('label');
+      label.className = 'field-label';
+      label.innerHTML = `${field.label} <span class="type">${field.type}</span>${field.isPrimary ? '<span class="primary">[primary]</span>' : ''}`;
+      group.appendChild(label);
+      let input;
+      if (field.type.includes('[]') || field.type === 'string[]') {
+        input = document.createElement('textarea');
+      } else {
+        input = document.createElement('input');
+        input.type = field.type === 'double' || field.type === 'int' || field.type === 'float' ? 'text' : 'text';
+      }
+      input.className = 'field-input';
+      input.dataset.fieldIndex = fi;
+      input.dataset.pageIndex = pi;
+      input.placeholder = `Enter ${field.type}...`;
+      // Tab order is DOM order — natural Tab navigation works
+      input.tabIndex = fi + 1;
+      group.appendChild(input);
+      container.appendChild(group);
+    });
+  });
+  document.getElementById('system-context').textContent = qaSession.systemContext || '';
+}
+
+function focusFirstField() {
+  const first = document.querySelector('.field-input');
+  if (first) first.focus();
+}
+
+// === Render pseudodata combos ===
+function renderCombos() {
+  const container = document.getElementById('combo-list');
+  container.innerHTML = '';
+  combos.forEach((combo, i) => {
+    const item = document.createElement('div');
+    item.className = 'combo-item';
+    item.innerHTML = `<span class="idx">[${i+1}]</span> <span class="label">${combo.label}</span> ${combo.expectedOutput ? `<span class="expected">→ ${combo.expectedOutput}</span>` : ''}`;
+    item.onclick = () => fillForm(combo);
+    container.appendChild(item);
+  });
+}
+
+function fillForm(combo) {
+  // Fill the primary field (first field) with the combo input
+  const first = document.querySelector('.field-input');
+  if (first) {
+    first.value = combo.input;
+    first.focus();
+  }
+  // Remove active from all, add to clicked
+  document.querySelectorAll('.combo-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+// === Run one test case ===
+async function runOne(combo, silent=false) {
+  const input = combo ? combo.input : getFormInput();
+  const expectedOutput = combo ? combo.expectedOutput : '';
+  const expectedExitCode = combo ? combo.expectedExitCode : 0;
+  const expectedBehavior = combo ? combo.description : '';
+  const isStdin = qaSession.isStdinEntry;
+  const systemContext = qaSession.systemContext || '';
+  const sid = qaSession.sessionId;
+
+  if (!silent) setStatus('Running test...');
+
+  try {
+    const res = await fetch('/api/qa/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        sessionId: sid, input, expectedOutput, expectedExitCode,
+        expectedBehavior, systemContext, isStdin
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await res.json();
+    results.push(result);
+    renderResults();
+    return result;
+  } catch(e) {
+    const errResult = {success:false, stdout:'', stderr:e.message, exitCode:-1, verdict:'Fail', judgeLayer:'Error', reason:e.message};
+    results.push(errResult);
+    renderResults();
+    return errResult;
+  }
+}
+
+function getFormInput() {
+  const inputs = document.querySelectorAll('.field-input');
+  if (inputs.length === 0) return '';
+  if (inputs.length === 1) return inputs[0].value;
+  // Multiple fields: join with newline (matching the contract's input format)
+  return Array.from(inputs).map(i => i.value).join('\n');
+}
+
+// === Manual run ===
+async function runManual() {
+  if (!qaSession) return;
+  setStatus('Running...');
+  await runOne(null);
+  setStatus('Done — see results panel');
+}
+
+// === Bot grind mode ===
+async function startBot() {
+  if (!qaSession || combos.length === 0) return;
+  botRunning = true;
+  botCts = { cancelled: false };
+  results = [];
+  renderResults();
+  document.getElementById('btn-grind').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('bot-progress-container').style.display = 'block';
+
+  for (let i = 0; i < combos.length; i++) {
+    if (botCts.cancelled) break;
+    // Update bot progress
+    document.getElementById('bot-status').textContent = `▶ Bot grinding: test ${i+1}/${combos.length}`;
+    document.getElementById('bot-progress-fill').style.width = `${((i+1)/combos.length)*100}%`;
+
+    // Bot key-mapping sequence:
+    // 1. Ctrl+F1 — focus first field (reset to page 1, first field)
+    focusFirstField();
+    await sleep(50);
+
+    // 2. Type pseudodata into the primary field
+    const first = document.querySelector('.field-input');
+    if (first) { first.value = combos[i].input; }
+    await sleep(50);
+
+    // 3. Tab through remaining fields (if any) — leave empty for bot mode
+    // (pseudodata goes into primary field only; secondary fields use defaults)
+
+    // 4. Enter — submit
+    await runOne(combos[i], true);
+    // Small delay between tests
+    await sleep(100);
+  }
+
+  botRunning = false;
+  document.getElementById('btn-grind').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+  const passN = results.filter(r => r.verdict === 'Pass').length;
+  const failN = results.filter(r => r.verdict === 'Fail').length;
+  setStatus(`Bot finished: ${passN} passed, ${failN} failed`);
+}
+
+function stopBot() {
+  if (botCts) botCts.cancelled = true;
+  botRunning = false;
+  document.getElementById('btn-grind').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+  setStatus('Bot stopped');
+}
+
+// === Render results ===
+function renderResults() {
+  const list = document.getElementById('results-list');
+  list.innerHTML = '';
+
+  if (results.length === 0) {
+    document.getElementById('results-empty').style.display = 'block';
+    document.getElementById('tally').style.display = 'none';
+    return;
+  }
+  document.getElementById('results-empty').style.display = 'none';
+
+  // Tally
+  const passN = results.filter(r => r.verdict === 'Pass').length;
+  const failN = results.filter(r => r.verdict === 'Fail').length;
+  const reviewN = results.filter(r => r.verdict === 'HumanReview').length;
+  document.getElementById('tally').style.display = 'flex';
+  document.getElementById('tally-pass').textContent = `${passN} passed`;
+  document.getElementById('tally-fail').textContent = `${failN} failed`;
+  document.getElementById('tally-review').textContent = `${reviewN} need review`;
+
+  // Result cards
+  results.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'result-card ' + r.verdict.toLowerCase();
+    const header = document.createElement('div');
+    header.className = 'result-header';
+    header.innerHTML = `<span class="result-verdict ${r.verdict.toLowerCase()}">${r.verdict}</span><span class="result-meta">${r.judgeLayer} · exit ${r.exitCode} · test ${i+1}</span>`;
+    card.appendChild(header);
+    const reason = document.createElement('div');
+    reason.className = 'result-reason';
+    reason.textContent = r.reason;
+    card.appendChild(reason);
+    if (r.stdout) {
+      const out = document.createElement('div');
+      out.className = 'result-output';
+      out.textContent = r.stdout;
+      card.appendChild(out);
+    }
+    list.appendChild(card);
+  });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
