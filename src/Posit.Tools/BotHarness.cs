@@ -10,17 +10,20 @@ namespace Posit.Tools;
 
 /// <summary>
 /// The bot harness: loads artifacts from DB, materializes source files,
-/// generates .csproj/.sln, builds in Docker, runs CLI test cases, compares output.
+/// generates .csproj/.sln, builds in Docker, runs CLI test cases through the
+/// three-layer judge (exact match → structural check → heuristic).
 /// </summary>
 public sealed class BotHarness
 {
     private readonly ArtifactRepository _repo;
     private readonly string _dockerPath;
+    private readonly QaJudge _judge;
 
-    public BotHarness(ArtifactRepository repo, string? dockerPath = null)
+    public BotHarness(ArtifactRepository repo, string? dockerPath = null, QaJudge? judge = null)
     {
         _repo = repo;
         _dockerPath = dockerPath ?? "docker";
+        _judge = judge ?? new QaJudge();
     }
 
     public async Task<BotHarnessResult> RunAsync(SessionId sessionId, CancellationToken ct = default)
@@ -189,25 +192,29 @@ public sealed class BotHarness
             var runResult = await BotHarnessDocker.RunContainerAsync(
                 _dockerPath, sessionId.Value, cliComponent.Name, cliArg, ct, stdinInput);
 
-            // Exact comparison when expected output is available, fuzzy fallback otherwise
-            bool matches;
-            if (!string.IsNullOrEmpty(tc.ExpectedOutput))
-            {
-                // Exact match: trim whitespace and compare
-                matches = runResult.Output.Trim().Equals(tc.ExpectedOutput.Trim(), StringComparison.Ordinal)
-                         && runResult.ExitCode == tc.ExpectedExitCode;
-            }
-            else
-            {
-                // No expected output — pass if the program ran and produced non-error output
-                matches = runResult.Success && !string.IsNullOrWhiteSpace(runResult.Output);
-            }
+            // Three-layer judge: exact match → structural check → heuristic
+            var run = new TestCaseRun(runResult.Output, "", runResult.ExitCode);
+            var verdict = await _judge.JudgeAsync(
+                run, tc.ExpectedOutput, tc.ExpectedExitCode, tc.ExpectedBehavior,
+                contract.SystemContext, ct);
 
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
-                tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior, matches));
+                tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior,
+                verdict.Result == JudgeResult.Pass));
         }
 
-        return new BotHarnessResult(results.All(r => r.Matches), [.. results], tempDir, null);
+        var report = QaReport.Build(
+            results.Select((r, i) =>
+            {
+                var tc = testCases[i];
+                var run = new TestCaseRun(r.Output, "", r.Matches ? 0 : 1);
+                return new JudgeVerdict(
+                    r.Matches ? JudgeResult.Pass : JudgeResult.Fail,
+                    JudgeLayer.ExactMatch,
+                    r.Matches ? "Pass" : "Fail");
+            }).ToArray());
+
+        return new BotHarnessResult(results.All(r => r.Matches), [.. results], tempDir, null, report);
     }
 
     internal static bool TryGetArtifact(ArtifactBundle[] artifacts, ArtifactKind kind, out string? error)
@@ -256,6 +263,6 @@ public sealed class BotHarness
     private static BotHarnessResult Fail(string error) => new(false, [], null, error);
 }
 
-public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error);
+public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error, QaReport? Report = null);
 public sealed record TestCaseResult(string Id, string Name, bool Ran, string Output, string Expected, bool Matches);
 internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string ExpectedOutput = "", int ExpectedExitCode = 0);
