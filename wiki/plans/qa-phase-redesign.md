@@ -15,16 +15,19 @@ got wrong). This redesign makes QA a deterministic gate with a clean pass/fail.
 
 ```
 Build phase:
-  Architecture → C#Impl (4 build retries) → PASS or hash (restart)
+  C#Impl → 4 build retries → PASS or fail
+  If build fails → WireFixer (2 retries) → PASS or hash (restart)
 
 QA phase (Docker clean room):
-  Pseudodata Bot → Test Runner Prefab → Judge → Report
-  FAIL (exact/invariant) → hash (restart)
+  Pseudodata → Test runner → Judge (exact/invariant/heuristic) → Report
+  FAIL (exact/invariant) → ImplFixer (2 retries) → PASS or hash (restart)
   FAIL (heuristic) → human review
 ```
 
-WireFixer and ImplFixer are removed. Build handles its own compile errors.
-QA is the gate. If QA fails, restart — no cross-phase correction loops.
+WireFixer and ImplFixer stay but are capped at 2 retries each. A cheap fix
+is a cheap fix — don't throw it away. The problem was unbounded retries
+(6 + 3 = 9), not the concept. Total correction budget: 4 (build) + 2 (wire)
++ 2 (impl) = 8 model calls max before hash. Down from 13.
 
 ### QA Phase Components
 
@@ -102,19 +105,20 @@ Heuristic:    PASS → ship
 
 ### Failure Handling
 
-- **Build fails after 4 retries** → hash (restart with fresh run)
-- **QA exact match fails** → hash (restart)
-- **QA invariant check fails** → hash (restart)
+- **Build fails after 4 retries** → WireFixer (2 retries) → hash (restart)
+- **QA exact/invariant fails** → ImplFixer (2 retries) → hash (restart)
 - **QA heuristic fails** → human review (not restart — subjective call)
-- **No WireFixer, no ImplFixer, no cross-phase correction loops**
+- **WireFixer capped at 2 retries** (was 6)
+- **ImplFixer capped at 2 retries** (was 3)
+- **Total correction budget: 8 model calls max** (was 13)
 
 The pipeline is non-deterministic. The architect produces a different
 decomposition each run. Restart is the exception handler, not human debugging.
 
 ### What's Removed
 
-- WireFixer (6 retries) — removed
-- ImplFixer (3 retries) — removed
+- WireFixer 6 retries → capped to 2 (cheap fix stays, unbounded retries go)
+- ImplFixer 3 retries → capped to 2
 - LLM test data generation in QaPhase — replaced by deterministic bot
 - LLM failure analysis in BotHarness — removed (diagnostic only, never used)
 - QaModuleResult vestigial records — removed
@@ -150,4 +154,5 @@ decomposition each run. Restart is the exception handler, not human debugging.
    computable transforms. For complex specs, bot generates input + invariants
    check properties. Heuristic covers the rest.)
 3. Should the build correction loop also be 4 retries then hash? (Answer: yes,
-   decided. 4 retries during build, then restart. Consistent with QA principle.)
+   decided. 4 retries during build, then WireFixer 2 retries, then restart.
+   Consistent with QA principle — bounded correction, not unbounded.)
