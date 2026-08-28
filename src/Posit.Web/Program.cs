@@ -25,6 +25,11 @@ app.MapGet("/api/qa/load/{sessionId}", async (string sessionId, QaTerminalServic
     return session == null ? Results.NotFound() : Results.Ok(session);
 });
 
+app.MapGet("/api/qa/artifacts/{sessionId}", async (string sessionId, QaDashboardRepository repo) =>
+{
+    return Results.Ok(await repo.GetArtifactsAsync(sessionId));
+});
+
 app.MapPost("/api/qa/run", async (QaRunRequest req, QaTerminalService svc, CancellationToken ct) =>
 {
     var result = await svc.RunTestCaseAsync(
