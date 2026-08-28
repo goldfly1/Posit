@@ -136,12 +136,14 @@ public sealed class BotHarness
         {
             string cliArg;
             string? stdinInput = null;
+            string fedInput = "";
 
             if (tc.Name.Contains("FileNotFound", StringComparison.OrdinalIgnoreCase)
                 || tc.Name.Contains("not found", StringComparison.OrdinalIgnoreCase)
                 || tc.Name.Contains("missing", StringComparison.OrdinalIgnoreCase))
             {
                 cliArg = "nonexistent_file.csv";
+                fedInput = "(nonexistent file path — error-path test)";
             }
             else if (isStdinEntry)
             {
@@ -155,6 +157,7 @@ public sealed class BotHarness
                     : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
                 stdinInput = stdinAiFile?.Content ?? tc.Input;
                 if (stdinInput == "__NONEXISTENT_FILE__") stdinInput = "";
+                fedInput = stdinInput ?? "";
             }
             else
             {
@@ -167,6 +170,7 @@ public sealed class BotHarness
                         : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))?.Content
                     : null;
                 testData ??= tc.Input;
+                fedInput = testData;
 
                 // Multi-file: pass multiple file paths
                 if (testData.Contains("==="))
@@ -200,7 +204,7 @@ public sealed class BotHarness
 
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior,
-                verdict.Result == JudgeResult.Pass, verdict));
+                verdict.Result == JudgeResult.Pass, verdict) { FedInput = fedInput });
         }
 
         // Report carries the REAL per-test verdicts (layer + reason) — no rebuild.
@@ -246,7 +250,10 @@ public sealed class BotHarness
                 var key = $"tc{i + 1}";
                 var expectedOutput = testSuite?.ExpectedOutputs?.TryGetValue(key, out var eo) == true ? eo : "";
                 var expectedExit = testSuite?.ExpectedExitCodes?.TryGetValue(key, out var ee) == true ? ee : 0;
-                return new TestCaseInfo(tc.Id, tc.Name, tc.Description, tc.ExpectedBehavior, expectedOutput, expectedExit);
+                // Input = the architect's CONCRETE input (Phase A contract field),
+                // not the prose Description. The old mapping put Description here,
+                // which fed prose into the program when no pseudodata file existed.
+                return new TestCaseInfo(tc.Id, tc.Name, tc.Input, tc.ExpectedBehavior, expectedOutput, expectedExit);
             }).ToArray();
             return cases;
         }
@@ -263,5 +270,13 @@ public sealed class BotHarness
 }
 
 public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error, QaReport? Report = null);
-public sealed record TestCaseResult(string Id, string Name, bool Ran, string Output, string Expected, bool Matches, JudgeVerdict? Verdict = null);
+public sealed record TestCaseResult(string Id, string Name, bool Ran, string Output, string Expected, bool Matches, JudgeVerdict? Verdict = null)
+{
+    /// <summary>
+    /// The input ACTUALLY fed to the program this run (pseudodata file content,
+    /// stdin payload, or architect input). The failure report must show this —
+    /// not the contract's intent — so the model debugs against reality.
+    /// </summary>
+    public string FedInput { get; init; } = "";
+}
 internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string ExpectedOutput = "", int ExpectedExitCode = 0);

@@ -73,9 +73,10 @@ internal static class Program
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
 
         // Retry loop: build failures → WireFixer (C# wiring).
-        // Test failures → WireFixer (type conversion / serialization).
-        // Capped at 2 retries — a cheap fix is worth taking, but if it's still
-        // broken after 2, the architecture is wrong, not the wiring. Restart.
+        // Test failures → ImplFixer directly (WireFixer only knows Wire.cs; a
+        // logic bug it cannot fix just burns the retry budget — observed in T8:
+        // 2 WireFixer calls on 'ERROR: 0' before ImplFixer ever saw the failure).
+        // Capped at 2 retries each. Restart after that.
         const int maxRetries = 2;
         for (var retry = 0; retry < maxRetries && !result.Success; retry++)
         {
@@ -84,24 +85,16 @@ internal static class Program
 
             if (!isBuildFailure && !isTestFailure) break;
 
-            List<string> fixInstructions;
+            if (isTestFailure)
+            {
+                // Logic bug — skip WireFixer entirely, break to ImplFixer loop.
+                Console.Error.WriteLine("[harness] Test failures (build OK) — routing to ImplFixer (WireFixer can't fix logic)");
+                break;
+            }
 
-            if (isBuildFailure)
-            {
-                fixInstructions = new List<string> { "Wire.cs compile errors:" };
-                fixInstructions.AddRange(ExtractCompileErrors(result.Error ?? "Docker build failed"));
-                Console.Error.WriteLine($"[harness] Docker build failed — calling WireFixer ({retry + 1}/{maxRetries})...");
-            }
-            else
-            {
-                // Test failure: build succeeded but program produces wrong output.
-                fixInstructions = new List<string> { "Wire.cs test failures (program compiles but produces wrong output):" };
-                foreach (var tc in result.Results.Where(r => !r.Matches))
-                {
-                    fixInstructions.Add($"  Test '{tc.Id}': expected '{tc.Expected}', got '{tc.Output}'");
-                }
-                Console.Error.WriteLine($"[harness] Test failures — calling WireFixer ({retry + 1}/{maxRetries})...");
-            }
+            var fixInstructions = new List<string> { "Wire.cs compile errors:" };
+            fixInstructions.AddRange(ExtractCompileErrors(result.Error ?? "Docker build failed"));
+            Console.Error.WriteLine($"[harness] Docker build failed — calling WireFixer ({retry + 1}/{maxRetries})...");
 
             foreach (var fi in fixInstructions)
                 Console.Error.WriteLine($"  {fi}");
@@ -207,14 +200,20 @@ internal static class Program
             foreach (var tc in testFailures)
             {
                 failureReport.Add($"Test '{tc.Id}' ({tc.Name}):");
-                if (contractTcById.TryGetValue(tc.Id, out var ct))
+                // FedInput = what the harness ACTUALLY fed the program this run
+                // (pseudodata content / stdin payload). The contract's tc.Input is
+                // intent — if it differs from FedInput, the bot's data won.
+                if (contractTcById.TryGetValue(tc.Id, out var ct) && !string.IsNullOrWhiteSpace(ct.Input))
                 {
-                    failureReport.Add($"  Input given to program: '{ct.Input}'");
+                    failureReport.Add($"  Input actually fed to program: '{tc.FedInput}'");
+                    if (tc.FedInput != ct.Input)
+                        failureReport.Add($"  (NOTE: architect's intended input was '{ct.Input}' — pseudodata differed. Debug against the input actually fed.)");
                     failureReport.Add($"  Expected stdout: '{(ct.ExpectedOutput.Length > 0 ? ct.ExpectedOutput : tc.Expected)}'");
                     failureReport.Add($"  Expected exit code: {ct.ExpectedExitCode}");
                 }
                 else
                 {
+                    failureReport.Add($"  Input actually fed to program: '{tc.FedInput}'");
                     failureReport.Add($"  Expected stdout: '{tc.Expected}'");
                 }
                 failureReport.Add($"  Actual stdout: '{tc.Output}'");
