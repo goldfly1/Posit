@@ -86,6 +86,10 @@ public sealed class BotHarness
         // Test data comes from the QA artifact (architect's test cases).
         var testCases = ExtractTestCases(cliComponent, testSuite);
         var aiTestData = testSuite?.TestFiles ?? [];
+        if (testCases.Length == 0)
+            Console.Error.WriteLine("[harness] WARNING: contract carries ZERO test cases — QA has no coverage");
+        else if (aiTestData.Length > 0 && aiTestData.Length < testCases.Length)
+            Console.Error.WriteLine($"[harness] WARNING: {testCases.Length} contract test cases but only {aiTestData.Length} QA data files — some cases will fall back to contract input");
         foreach (var tc in testCases)
         {
             // Match by index: test files are stdin_0.txt, stdin_1.txt, etc.
@@ -121,6 +125,23 @@ public sealed class BotHarness
                 var testFile = Path.Combine(tempDir, $"testdata_{tc.Id}{ext}");
                 File.WriteAllText(testFile, testData);
             }
+        }
+
+        // Pre-flight local compile (C3): build the solution with the host dotnet
+        // BEFORE touching Docker. Compile errors surface in seconds instead of a
+        // Docker-cache-miss round trip, and WireFixer sees real error text.
+        var preflight = await PreflightBuildAsync(tempDir, ct);
+        if (!preflight.Success)
+            return new BotHarnessResult(false, [], tempDir, $"Local pre-flight build failed: {preflight.Output}");
+
+        // Scrub host-build residue (bin/, obj/) — obj carries host-generated
+        // AssemblyAttributes.cs that duplicates inside the Docker build (CS0579).
+        foreach (var dir in Directory.EnumerateDirectories(tempDir, "*", SearchOption.AllDirectories)
+                     .Where(d => d.EndsWith("bin", StringComparison.OrdinalIgnoreCase)
+                              || d.EndsWith("obj", StringComparison.OrdinalIgnoreCase))
+                     .OrderByDescending(d => d.Length)) // delete deepest first
+        {
+            try { Directory.Delete(dir, true); } catch { /* best effort */ }
         }
 
         var buildResult = await BotHarnessDocker.BuildAsync(_dockerPath, tempDir, sessionId.Value, ct);
@@ -224,6 +245,31 @@ public sealed class BotHarness
     {
         error = artifacts.Any(a => a.Kind == kind) ? null : $"No {kind} artifact found for session";
         return error == null;
+    }
+
+    /// <summary>
+    /// Local `dotnet build` of the generated solution (C3 pre-flight gate).
+    /// Mirrors what Docker does (same .sln), ~10x faster feedback, and the error
+    /// output is directly usable by WireFixer.
+    /// </summary>
+    private static async Task<(bool Success, string Output)> PreflightBuildAsync(string tempDir, CancellationToken ct)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"build \"{Path.Combine(tempDir, "PositGenerated.sln")}\" --nologo -v q",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        var outputTask = p.StandardOutput.ReadToEndAsync(ct);
+        var errTask = p.StandardError.ReadToEndAsync(ct);
+        await p.WaitForExitAsync(ct);
+        var output = (await outputTask) + (await errTask);
+        Console.Error.WriteLine($"[harness] pre-flight build: {(p.ExitCode == 0 ? "OK" : "FAILED")}");
+        return (p.ExitCode == 0, output);
     }
 
     public static Component? FindCliComponent(ArchitectureContract contract)

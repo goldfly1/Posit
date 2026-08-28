@@ -85,6 +85,13 @@ public static class PromptBuilder
         sb.AppendLine("    - expectedBehavior stays as a short human-readable summary of the expected shape.");
         sb.AppendLine("    These concrete values are the answer key the QA judge compares against.");
         sb.AppendLine("    A test case without input and expectedOutput cannot be exactly verified — write it anyway with your best concrete values.");
+        sb.AppendLine("    COVERAGE RULE: write ONE contract test case for EVERY scenario the spec lists.");
+        sb.AppendLine("    If the spec describes 3 test cases (success, alternate, error path), the contract");
+        sb.AppendLine("    MUST carry 3 test cases — collapsing them into 1 starves the QA phase of coverage");
+        sb.AppendLine("    MULTI-FILE INPUT RULE: if the program takes multiple file paths (e.g. merge two files),");
+        sb.AppendLine("    the input field holds the file CONTENTS separated by '===' (NOT file names):");
+        sb.AppendLine("      \"input\": \"host=localhost\\nport=8080 === port=9090\\ndebug=true\"");
+        sb.AppendLine("    The harness writes each part to its own file and passes the paths.");
         sb.AppendLine();
         sb.AppendLine("    Example testCases for a temperature converter (stdin '32 F' → prints '0 C'):");
         sb.AppendLine("      {\"id\":\"tc1\", \"name\":\"F to C\", \"targetType\":\"cli\", \"description\":\"Freezing point\",");

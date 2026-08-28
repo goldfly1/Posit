@@ -24,6 +24,7 @@ public static class WiringGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using System.IO;");
         sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Collections.Generic;");
 
         // Add using directives for each referenced component's namespace
         var referencedComponents = new HashSet<string>();
@@ -151,6 +152,28 @@ public static class WiringGenerator
                     prevType = "string";
                 }
             }
+            else if (ci == 0 &&
+                     targetSig.ParamTypes.Length > 1 &&
+                     targetSig.ParamTypes
+                         .All(p => NormalizeType(p) == "string"))
+            {
+                // Architect connected Run → logic directly but the logic takes
+                // MULTIPLE string file CONTENTS (e.g. Merge(content1, content2))
+                // and the CLI is file-type (args are file paths). Read each arg's
+                // file into a content var (deterministic — no stub hop needed).
+                var argCount = targetSig.ParamTypes.Length;
+                var argExprs = new List<string>();
+                for (var ai = 0; ai < argCount; ai++)
+                {
+                    var fv = $"fileContent{ai}";
+                    sb.AppendLine($"            var {fv} = args.Length > {ai} ? System.IO.File.ReadAllText(args[{ai}]) : \"\";");
+                    argExprs.Add(fv);
+                }
+                sb.AppendLine($"            var ret{retVarCounter} = {targetClass}.{targetSig.Name}({string.Join(", ", argExprs)});");
+                EmitPrint(sb, targetSig.ReturnType, $"ret{retVarCounter}", isLast: ci == comp.Connections.Length - 1);
+                retVarCounter++;
+                continue;
+            }
 
             // Build args: first param = chained previous return, rest from mappings/defaults
             var args = BuildChainedArgs(conn, prevRet, prevType, targetSig);
@@ -188,9 +211,9 @@ public static class WiringGenerator
                 }
                 else
                 {
-                    // Print result if this is the last connection (final output)
+                    // Print result if this is the last connection (final output).
                     if (ci == comp.Connections.Length - 1)
-                        sb.AppendLine($"            Console.WriteLine({retVarName});");
+                        EmitPrint(sb, retType, retVarName, isLast: true);
                 }
 
                 prevRet = retVarName;
@@ -207,7 +230,11 @@ public static class WiringGenerator
             if (i == 0)
             {
                 var converted = ConvertType(prevType, targetSig.ParamTypes[i], prevRet);
-                parts.Add(converted ?? DefaultForType(targetSig.ParamTypes[i]));
+                // Never silently default the FIRST chained param: if conversion
+                // fails the chain is broken — emit the raw var and let the
+                // compiler complain (fixable) instead of wrong behavior. Raw var
+                // works whenever the types actually match (normalized compare).
+                parts.Add(converted ?? prevRet);
             }
             else
             {
@@ -281,52 +308,111 @@ public static class WiringGenerator
     /// <summary>Convert between native C# types. Returns null if incompatible.</summary>
     public static string? ConvertType(string fromType, string toType, string varName)
     {
-        if (fromType == toType) return varName;
+        // Normalize whitespace so "Dictionary<string, string>" (interface) matches
+        // "Dictionary<string,string>" (scanner) — whitespace-blind type compare.
+        var from = NormalizeType(fromType);
+        var to = NormalizeType(toType);
+        if (from == to) return varName;
 
         // string → int
-        if (fromType == "string" && toType == "int")
+        if (from == "string" && to == "int")
             return $"int.Parse({varName})";
 
         // string → long
-        if (fromType == "string" && toType == "long")
+        if (from == "string" && to == "long")
             return $"long.Parse({varName})";
 
         // string → double
-        if (fromType == "string" && toType == "double")
+        if (from == "string" && to == "double")
             return $"double.Parse({varName})";
 
         // string → bool
-        if (fromType == "string" && toType == "bool")
+        if (from == "string" && to == "bool")
             return $"bool.Parse({varName})";
 
         // string[] → string (join with newlines)
-        if (fromType == "string[]" && toType == "string")
+        if (from == "string[]" && to == "string")
             return $"string.Join(\"\\n\", {varName})";
 
         // string → string[] (split by newlines)
-        if (fromType == "string" && toType == "string[]")
+        if (from == "string" && to == "string[]")
             return $"{varName}.Split('\\n')";
 
         // int → string
-        if (fromType == "int" && toType == "string")
+        if (from == "int" && to == "string")
             return $"{varName}.ToString()";
 
         // long → string
-        if (fromType == "long" && toType == "string")
+        if (from == "long" && to == "string")
             return $"{varName}.ToString()";
 
         // double → string
-        if (fromType == "double" && toType == "string")
+        if (from == "double" && to == "string")
             return $"{varName}.ToString()";
 
         // bool → string
-        if (fromType == "bool" && toType == "string")
+        if (from == "bool" && to == "string")
             return $"{varName}.ToString().ToLower()";
 
         return null; // incompatible
     }
 
+    /// <summary>
+    /// Normalize a C# type string for comparison: strip all whitespace and
+    /// normalize "Dictionary&lt;K,V&gt;"/"List&lt;T&gt;" casing. The scanner keeps
+    /// interface whitespace ("Dictionary&lt;string, string&gt;") while param types
+    /// may arrive normalized — the chain must match regardless.
+    /// </summary>
+    public static string NormalizeType(string type)
+    {
+        if (string.IsNullOrEmpty(type)) return type;
+        var t = type.Replace(" ", "").Replace("\t", "");
+        // Common aliases the scanner produces
+        if (t == "System.Collections.Generic.Dictionary<K,V>") t = t[(t.LastIndexOf('.') + 1)..];
+        if (t.StartsWith("System.Collections.Generic.")) t = t["System.Collections.Generic.".Length..];
+        return t;
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Emit the final-output print statement for a return value, typed:
+    /// scalars print directly; string[]/List&lt;string&gt; join with newlines;
+    /// Dictionary&lt;string,string&gt; prints key=value lines; anything else
+    /// (custom classes) is JSON-serialized. Raw WriteLine on ANY non-scalar
+    /// prints its TYPE NAME — the T12 'ConfigMerger.MergeResult' failure.
+    /// </summary>
+    private static void EmitPrint(StringBuilder sb, string retType, string varName, bool isLast)
+    {
+        if (!isLast) return;
+        var t = NormalizeType(retType);
+        if (t is "string" or "int" or "long" or "double" or "bool")
+            sb.AppendLine($"            Console.WriteLine({varName});");
+        else if (t is "string[]" or "List<string>")
+            sb.AppendLine($"            Console.WriteLine(string.Join(\"\\n\", {varName}));");
+        else if (t == "Dictionary<string,string>")
+            sb.AppendLine($"            Console.WriteLine(string.Join(\"\\n\", {varName}.Select(kv => kv.Key + \"=\" + kv.Value)));");
+        else
+            sb.AppendLine($"            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize({varName}));");
+    }
+
+    /// <summary>
+    /// True for types Console.WriteLine prints usefully: primitives, enums of
+    /// primitives, string[], List&lt;string&gt;, Dictionary whose VALUES are
+    /// primitives. Custom classes (MergeResult, Foo) → false → serialize JSON.
+    /// </summary>
+    private static bool IsSimpleCollection(string type)
+    {
+        var t = NormalizeType(type);
+        if (t == "string[]" || t == "List<string>") return true;
+        if (t.StartsWith("Dictionary<string,string>")) return true;
+        if (t.StartsWith("List<") && t.EndsWith(">"))
+        {
+            var el = t[5..^1];
+            return el is "string" or "int" or "long" or "double" or "bool";
+        }
+        return false;
+    }
 
     public static string SafeName(string name) => name == "args" ? "inputArgs" : name;
 
@@ -339,19 +425,21 @@ public static class WiringGenerator
             stubs.TryGetValue(targetComp.Name, out var stubMethods) && stubMethods.Count > 0)
         {
             var m = stubMethods[0];
-            if (!string.IsNullOrEmpty(m.Namespace))
-                return $"{m.Namespace}.{m.ClassName}";
-            return $"{targetComp.Name}.{m.ClassName}";
+            var ns = string.IsNullOrEmpty(m.Namespace) ? targetComp.Name : m.Namespace;
+            // global:: qualifier: survives the namespace==classname collision
+            // (namespace LogAnalyzer { class LogAnalyzer {} }) where a plain
+            // "LogAnalyzer.LogAnalyzer" fails CS0234 because the name binds to
+            // the class first (T8 corpus failure).
+            return $"global::{ns}.{m.ClassName}";
         }
         // logic: use impl signatures
         if (impl.TryGetValue(targetComp.Name, out var methods) && methods.Count > 0)
         {
             var m = methods[0];
-            if (!string.IsNullOrEmpty(m.Namespace))
-                return $"{m.Namespace}.{m.ClassName}";
-            return $"{targetComp.Name}.{m.ClassName}";
+            var ns = string.IsNullOrEmpty(m.Namespace) ? targetComp.Name : m.Namespace;
+            return $"global::{ns}.{m.ClassName}";
         }
-        return $"{targetComp.Name}.{targetComp.Name}";
+        return $"global::{targetComp.Name}.{targetComp.Name}";
     }
 
     private static List<CsMethodSignature>? GetSignatures(
