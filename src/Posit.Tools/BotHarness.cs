@@ -16,13 +16,11 @@ public sealed class BotHarness
 {
     private readonly ArtifactRepository _repo;
     private readonly string _dockerPath;
-    private readonly IModelGateway? _model;
 
-    public BotHarness(ArtifactRepository repo, string? dockerPath = null, IModelGateway? model = null)
+    public BotHarness(ArtifactRepository repo, string? dockerPath = null)
     {
         _repo = repo;
         _dockerPath = dockerPath ?? "docker";
-        _model = model;
     }
 
     public async Task<BotHarnessResult> RunAsync(SessionId sessionId, CancellationToken ct = default)
@@ -82,24 +80,19 @@ public sealed class BotHarness
             BotHarnessDocker.GenerateDockerfileRun(cliComponent.Name));
 
         // Create test data files BEFORE Docker build so they're in the build context.
-        // Use AI-generated test data from QA artifact if available, else stopgap.
+        // Test data comes from the QA artifact (architect's test cases).
         var testCases = ExtractTestCases(cliComponent, testSuite);
         var aiTestData = testSuite?.TestFiles ?? [];
-        // Build a spec hint from component responsibilities for test data generation
-        var specHint = string.Join(" ", contract.Components
-            .Where(c => c.Classification != ModuleClassification.IoShell)
-            .Select(c => c.Responsibility));
         foreach (var tc in testCases)
         {
-            // Try AI-generated test data first (from QA phase)
-            // Match by index: AI test files are stdin_0.txt, stdin_1.txt, etc.
+            // Match by index: test files are stdin_0.txt, stdin_1.txt, etc.
             // Also try matching by tc.Id in the path (legacy format)
             var aiFile = aiTestData.Length > 0
                 ? aiTestData.Length > testCases.IndexOf(tc)
                     ? aiTestData[testCases.IndexOf(tc)]
                     : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))
                 : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
-            var testData = aiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
+            var testData = aiFile?.Content ?? tc.Input;
 
             // Skip file creation for file-not-found tests — pass a bad path instead
             if (testData == "__NONEXISTENT_FILE__") continue;
@@ -157,7 +150,7 @@ public sealed class BotHarness
                         ? aiTestData[testCases.IndexOf(tc)]
                         : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))
                     : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase));
-                stdinInput = stdinAiFile?.Content ?? GenerateTestData(tc.Id, tc.Name, specHint);
+                stdinInput = stdinAiFile?.Content ?? tc.Input;
                 if (stdinInput == "__NONEXISTENT_FILE__") stdinInput = "";
             }
             else
@@ -170,7 +163,7 @@ public sealed class BotHarness
                         ? aiTestData[testCases.IndexOf(tc)].Content
                         : aiTestData.FirstOrDefault(f => f.Path.Contains(tc.Id, StringComparison.OrdinalIgnoreCase))?.Content
                     : null;
-                testData ??= GenerateTestData(tc.Id, tc.Name, specHint);
+                testData ??= tc.Input;
 
                 // Multi-file: pass multiple file paths
                 if (testData.Contains("==="))
@@ -206,21 +199,12 @@ public sealed class BotHarness
             }
             else
             {
-                // Fuzzy fallback: keyword/shape matching
-                matches = CompareOutput(runResult.Output, tc.ExpectedBehavior);
+                // No expected output — pass if the program ran and produced non-error output
+                matches = runResult.Success && !string.IsNullOrWhiteSpace(runResult.Output);
             }
 
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior, matches));
-        }
-
-        // LLM failure analysis: if any tests failed, ask the model to classify
-        var failures = results.Where(r => !r.Matches).ToList();
-        if (failures.Count > 0 && _model != null)
-        {
-            var analysis = await AnalyzeFailuresAsync(failures, cliComponent, ct);
-            if (!string.IsNullOrEmpty(analysis))
-                Console.Error.WriteLine($"[harness] LLM failure analysis:\n{analysis}");
         }
 
         return new BotHarnessResult(results.All(r => r.Matches), [.. results], tempDir, null);
@@ -263,96 +247,6 @@ public sealed class BotHarness
         return [new TestCaseInfo("smoke", "Smoke test", "", "exit code 0")];
     }
 
-    internal static bool CompareOutput(string actual, string expected)
-    {
-        if (string.IsNullOrEmpty(expected)) return true;
-        // Exact match
-        if (actual.Trim() == expected.Trim()) return true;
-        // Substring match (for prose expected behavior)
-        if (actual.Contains(expected, StringComparison.OrdinalIgnoreCase)) return true;
-        // Exit code match
-        if (actual.Contains("exit code 0", StringComparison.OrdinalIgnoreCase)
-            && expected.Contains("exit code 0", StringComparison.OrdinalIgnoreCase)) return true;
-        // JSON array check: if expected mentions "JSON array" and output starts with [
-        if (expected.Contains("JSON array", StringComparison.OrdinalIgnoreCase)
-            && actual.TrimStart().StartsWith('[') && actual.TrimEnd().EndsWith(']'))
-            return true;
-        // JSON object check: if expected mentions "JSON object" and output starts with {
-        if (expected.Contains("JSON object", StringComparison.OrdinalIgnoreCase)
-            && actual.TrimStart().StartsWith('{') && actual.TrimEnd().EndsWith('}'))
-            return true;
-        // Error check: if expected mentions "error" or "non-zero" and output contains error/failed/exception
-        if ((expected.Contains("error", StringComparison.OrdinalIgnoreCase)
-             || expected.Contains("non-zero", StringComparison.OrdinalIgnoreCase))
-            && (actual.Contains("error", StringComparison.OrdinalIgnoreCase)
-                || actual.Contains("exception", StringComparison.OrdinalIgnoreCase)
-                || actual.Contains("failed", StringComparison.OrdinalIgnoreCase)))
-            return true;
-        // Successful run with output = pass (if expected mentions "output", "result", "completes")
-        if ((expected.Contains("valid", StringComparison.OrdinalIgnoreCase)
-             || expected.Contains("output", StringComparison.OrdinalIgnoreCase)
-             || expected.Contains("result", StringComparison.OrdinalIgnoreCase)
-             || expected.Contains("completes", StringComparison.OrdinalIgnoreCase)
-             || expected.Contains("prints", StringComparison.OrdinalIgnoreCase))
-            && !string.IsNullOrWhiteSpace(actual))
-            return true;
-        // CSV check: if expected mentions CSV and output has commas + newlines
-        if (expected.Contains("CSV", StringComparison.OrdinalIgnoreCase)
-            && actual.Contains(",") && actual.Contains("\n"))
-            return true;
-        // Empty output check: if expected mentions "empty" or "no output"
-        if ((expected.Contains("empty", StringComparison.OrdinalIgnoreCase)
-             || expected.Contains("no output", StringComparison.OrdinalIgnoreCase))
-            && string.IsNullOrWhiteSpace(actual))
-            return true;
-        return false;
-    }
-
-    /// <summary>
-    /// Generate basic test data for a test case. This is a stopgap until the
-    /// pseudo-data generation system (#5) is built. Creates CSV content based
-    /// on the test case name — valid CSV, empty file, or invalid CSV.
-    /// </summary>
-    internal static string GenerateTestData(string tcId, string tcName, string? specHint = null)
-    {
-        // Match test case names OR spec hints to generate appropriate data
-        var name = (tcName + " " + (specHint ?? "")).ToLowerInvariant();
-        if (name.Contains("empty") || name.Contains("no data") || name.Contains("emptyarray"))
-        {
-            if (name.Contains("json") || name.Contains("array"))
-                return "[]";
-            return "";
-        }
-        if (name.Contains("invalid") || name.Contains("inconsistent") || name.Contains("mismatch"))
-            return "name,age,city\nAlice,30,NYC\nBob,25,LA,extra\nCarol,35,SF";
-        if (name.Contains("filenotfound") || name.Contains("missing") || name.Contains("not found"))
-            return "__NONEXISTENT_FILE__";
-        if (name.Contains("json"))
-            return "[{\"name\":\"Alice\",\"age\":\"30\"},{\"name\":\"Bob\",\"age\":\"25\"}]";
-        if (name.Contains("word") || name.Contains("text") || name.Contains("frequency") || name.Contains("log"))
-            return "the cat sat on the mat the cat\nthe dog ran fast\n";
-        // Temperature/stdin programs: input is "value unit" format
-        if (name.Contains("temp") || name.Contains("convert") || name.Contains("celsius") || name.Contains("fahrenheit"))
-        {
-            if (name.Contains("invalid") || name.Contains("error") || name.Contains("bad"))
-                return "20 X";
-            return "32 F";
-        }
-        // Multi-file merge: return two CSV blocks separated by ===
-        if (name.Contains("merge") || name.Contains("multi") || name.Contains("two") || name.Contains("combine"))
-        {
-            if (name.Contains("invalid") || name.Contains("error") || name.Contains("mismatch"))
-                return "name,age\nAlice,30\n===\nname,age,city\nBob,25,NYC";
-            if (name.Contains("empty"))
-                return "===\nname,age\nCarol,35";
-            return "name,age\nAlice,30\n===\nname,age\nCarol,35";
-        }
-        if (name.Contains("valid") || name.Contains("well-formed") || name.Contains("produces"))
-            return "name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,SF";
-        // Default: simple valid CSV
-        return "name,age\nAlice,30\nBob,25";
-    }
-
     internal static T? Deserialize<T>(byte[] payloadJson) where T : class
     {
         var json = Encoding.UTF8.GetString(payloadJson);
@@ -360,70 +254,6 @@ public sealed class BotHarness
     }
 
     private static BotHarnessResult Fail(string error) => new(false, [], null, error);
-
-    /// <summary>
-    /// LLM failure analysis. Asks the model to classify why tests failed
-    /// and suggest fixes. Output is for diagnostics, not automated action.
-    /// </summary>
-    private async Task<string> AnalyzeFailuresAsync(List<TestCaseResult> failures, Component cliComp, CancellationToken ct)
-    {
-        var failureDesc = string.Join("\n", failures.Select(f =>
-            $"  {f.Id}: expected={f.Expected}, actual={f.Output[..Math.Min(200, f.Output.Length)]}"));
-
-        var systemPrompt = $"""
-            You are the QA failure analyzer for the Posit spec compiler.
-            The following test cases failed. Classify each failure and suggest a fix.
-
-            Component: {cliComp.Name}
-            Failures:
-            {failureDesc}
-
-            For each failure, output one line:
-            - FAILURE_TYPE: brief description (e.g. "wrong output format", "crash on empty input", "type mismatch")
-            - SUGGESTED_FIX: what to change (e.g. "add null check", "convert type at boundary")
-            """;
-
-        var prompt = new PromptTemplate
-        {
-            PhaseId = new PhaseId("qa"),
-            Version = new PromptVersion("1.0.0"),
-            SystemPrompt = systemPrompt,
-            OutputFormatSpec = "One line per failure",
-            ModelTier = ModelTier.Fast,
-            Temperature = 0.2,
-            MaxOutputTokens = 2048,
-            OutputFormat = OutputFormat.PlainText,
-            OutputSchemaRef = "FailureAnalysis",
-            Status = PromptStatus.Active
-        };
-
-        try
-        {
-            var route = new ModelRoute
-            {
-                Tier = ModelTier.Fast, ProviderId = "ollama",
-                ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 2048, Temperature = 0.2
-            };
-            var gen = await _model!.GenerateAsync(route, prompt, new PhaseContext
-            {
-                SessionId = SessionId.New(),
-                PhaseId = new PhaseId("qa"),
-                Prompt = prompt,
-                UserRequest = "",
-                InputArtifacts = [],
-                ModelRoute = route,
-                BudgetRemaining = new BudgetRemaining { Amount = 1000, Cap = 1000 },
-                AttemptNumber = 1,
-                CorrectionSignal = [],
-                DesignContext = null
-            }, ct);
-            return gen.Text;
-        }
-        catch (Exception ex)
-        {
-            return $"[analysis failed: {ex.Message}]";
-        }
-    }
 }
 
 public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error);

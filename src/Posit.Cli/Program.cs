@@ -63,7 +63,7 @@ internal static class Program
         // wiring model and re-run csharp-implementation, up to 3 times.
         Console.Error.WriteLine($"[posit] auto-launching Docker harness for {sessionId}...");
         var gateway = new OllamaModelGateway(new HttpClient());
-        var harness = new BotHarness(new ArtifactRepository(), model: gateway);
+        var harness = new BotHarness(new ArtifactRepository());
         var result = await harness.RunAsync(sessionId);
         Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
@@ -72,7 +72,9 @@ internal static class Program
 
         // Retry loop: build failures → WireFixer (C# wiring).
         // Test failures → WireFixer (type conversion / serialization).
-        const int maxRetries = 6;
+        // Capped at 2 retries — a cheap fix is worth taking, but if it's still
+        // broken after 2, the architecture is wrong, not the wiring. Restart.
+        const int maxRetries = 2;
         for (var retry = 0; retry < maxRetries && !result.Success; retry++)
         {
             var isBuildFailure = IsDockerBuildFailure(result);
@@ -156,7 +158,9 @@ internal static class Program
         // If WireFixer couldn't fix the test failures, the bug is in the component
         // implementation, not the wiring. Feed the test failures back to the model
         // to regenerate the failing component code.
-        const int maxImplRetries = 3;
+        // Capped at 2 retries — cheaper than a full restart, but if the logic is
+        // still wrong after 2, restart with fresh architecture.
+        const int maxImplRetries = 2;
         for (var implRetry = 0; implRetry < maxImplRetries && !result.Success; implRetry++)
         {
             // Only engage if there are test failures (not build failures)
@@ -296,7 +300,7 @@ internal static class Program
         { Console.Error.WriteLine("Error: sessionId is required for 'harness'"); return 1; }
 
         var gateway = new OllamaModelGateway(new HttpClient());
-        var harness = new BotHarness(new ArtifactRepository(), model: gateway);
+        var harness = new BotHarness(new ArtifactRepository());
         var result = await harness.RunAsync(new SessionId(id));
         Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
@@ -360,7 +364,7 @@ internal static class Program
         var controller = new PhaseController();
         controller.Register(new ArchitecturePhase(gateway, registry));
         controller.Register(new CSharpImplementationPhase(gateway, adapter));
-        controller.Register(new QaPhase(gateway, adapter));
+        controller.Register(new QaPhase());
 
         return (new PositOrchestrator(controller, fsm, graph, artifactRepo, stateStore, registry), stateStore);
     }
