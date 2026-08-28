@@ -1,11 +1,11 @@
 using Posit.Contracts.Artifacts;
+using Posit.Tools;
 
 namespace Posit.Phases;
 
 /// <summary>
-/// Phase 3: QA. Produces test data files from the architect's test cases.
-/// The deterministic pseudodata bot will replace this (planned). For now,
-/// test data is derived from the architect's test case descriptions — no LLM call.
+/// Phase 3: QA. The pseudodata bot generates test data from carapace interfaces
+/// and architect test case categories. Deterministic — no LLM call.
 /// </summary>
 public sealed class QaPhase : IPhase
 {
@@ -31,29 +31,22 @@ public sealed class QaPhase : IPhase
             var cliComp = contract.Components.FirstOrDefault(c => c.Connections.Length > 0);
             if (cliComp != null)
             {
-                var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
-                foreach (var tc in cliComp.TestCases)
-                {
-                    var inputMatch = System.Text.RegularExpressions.Regex.Match(
-                        tc.Description, @"'([^']+)'");
-                    var inputContent = inputMatch.Success ? inputMatch.Groups[1].Value : tc.Description;
+                // Find the logic component the CLI calls
+                var logicCompName = cliComp.Connections.FirstOrDefault()?.ToComponent;
+                var logicComp = logicCompName != null
+                    ? contract.Components.FirstOrDefault(c => c.Name == logicCompName)
+                    : null;
 
-                    testDataFiles.Add(new TestDataFile
-                    {
-                        FileName = isStdin ? $"stdin_{testDataFiles.Count}.txt" : $"testdata_{testDataFiles.Count}.txt",
-                        Content = inputContent,
-                        Description = tc.ExpectedBehavior ?? tc.Description
-                    });
+                if (logicComp != null)
+                {
+                    // Use the pseudodata bot to generate typed test data
+                    var bot = new PseudodataBot();
+                    testDataFiles = bot.Generate(cliComp, logicComp, contract.SystemContext);
                 }
-
-                if (testDataFiles.Count == 0)
+                else
                 {
-                    testDataFiles.Add(new TestDataFile
-                    {
-                        FileName = isStdin ? "stdin_default.txt" : "testdata_default.txt",
-                        Content = "test input",
-                        Description = "Default test data (no test cases available)"
-                    });
+                    // No logic component found — fall back to raw test case descriptions
+                    testDataFiles = GenerateFallback(cliComp);
                 }
             }
         }
@@ -96,6 +89,42 @@ public sealed class QaPhase : IPhase
         });
     }
 
+    /// <summary>
+    /// Fallback: extract test data from architect test case descriptions
+    /// when no logic component is available for the pseudodata bot.
+    /// </summary>
+    private static List<TestDataFile> GenerateFallback(Component cliComp)
+    {
+        var isStdin = (cliComp.EntryType ?? "file").Equals("stdin", StringComparison.OrdinalIgnoreCase);
+        var files = new List<TestDataFile>();
+
+        foreach (var tc in cliComp.TestCases)
+        {
+            var inputMatch = System.Text.RegularExpressions.Regex.Match(
+                tc.Description, @"'([^']+)'");
+            var inputContent = inputMatch.Success ? inputMatch.Groups[1].Value : tc.Description;
+
+            files.Add(new TestDataFile
+            {
+                FileName = isStdin ? $"stdin_{files.Count}.txt" : $"testdata_{files.Count}.txt",
+                Content = inputContent,
+                Description = tc.ExpectedBehavior ?? tc.Description
+            });
+        }
+
+        if (files.Count == 0)
+        {
+            files.Add(new TestDataFile
+            {
+                FileName = isStdin ? "stdin_default.txt" : "testdata_default.txt",
+                Content = "test input",
+                Description = "Default test data (no test cases available)"
+            });
+        }
+
+        return files;
+    }
+
     public ValidationResult ValidateOutput(PhaseResult result)
     {
         if (result.Status != PhaseStatus.Success)
@@ -111,20 +140,4 @@ public sealed class QaPhase : IPhase
                 catch { }
         return null;
     }
-}
-
-public record TestDataFile
-{
-    public string FileName { get; init; } = "";
-    public string Content { get; init; } = "";
-    public string Description { get; init; } = "";
-    /// <summary>
-    /// The exact stdout output expected when the program processes this test input.
-    /// Empty string = no exact match (use fuzzy comparison).
-    /// </summary>
-    public string ExpectedOutput { get; init; } = "";
-    /// <summary>
-    /// Expected exit code. 0 = success, 1 = error. Default 0.
-    /// </summary>
-    public int ExpectedExitCode { get; init; } = 0;
 }
