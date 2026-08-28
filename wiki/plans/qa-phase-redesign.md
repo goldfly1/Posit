@@ -1,6 +1,6 @@
 # QA Phase Redesign — Aug 27, 2026
 
-## Status: STEPS 1-2 COMPLETE (dead code + fixer caps, pseudodata bot) — steps 3-5 pending
+## Status: STEPS 1-3 COMPLETE (dead code + fixer caps, pseudodata bot, three-layer judge) — steps 4-5 pending
 
 ## Context
 

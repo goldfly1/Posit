@@ -67,6 +67,8 @@ internal static class Program
         var result = await harness.RunAsync(sessionId);
         Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
+        if (result.Report is not null)
+            Console.Error.WriteLine($"[qa] {result.Report.Summary}");
         foreach (var tc in result.Results)
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
 
@@ -142,6 +144,8 @@ internal static class Program
             // Re-run harness with the fix applied (from DB)
             result = await harness.RunAsync(sessionId);
             Console.Error.WriteLine($"[harness] retry {retry + 1}: success={result.Success} tests={result.Results.Length}");
+            if (result.Report is not null)
+                Console.Error.WriteLine($"[qa] {result.Report.Summary}");
             if (result.Error is not null && IsDockerBuildFailure(result))
             {
                 var newErrors = ExtractCompileErrors(result.Error);
@@ -286,6 +290,8 @@ internal static class Program
             // Re-run harness
             result = await harness.RunAsync(sessionId);
             Console.Error.WriteLine($"[impl-fixer] retry {implRetry + 1}: success={result.Success} tests={result.Results.Length}");
+            if (result.Report is not null)
+                Console.Error.WriteLine($"[qa] {result.Report.Summary}");
             foreach (var tc in result.Results)
                 Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
         }
@@ -304,6 +310,8 @@ internal static class Program
         var result = await harness.RunAsync(new SessionId(id));
         Console.Error.WriteLine($"[harness] success={result.Success} tests={result.Results.Length}");
         if (result.Error is not null) Console.Error.WriteLine($"[harness] error: {result.Error}");
+        if (result.Report is not null)
+            Console.Error.WriteLine($"[qa] {result.Report.Summary}");
         foreach (var tc in result.Results)
             Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
         return result.Success ? 0 : 1;
