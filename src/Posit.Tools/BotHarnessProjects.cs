@@ -5,14 +5,14 @@ namespace Posit.Tools;
 /// <summary>
 /// Generates .csproj, .sln, and Program.cs files for the bot harness build.
 /// </summary>
-internal static class BotHarnessProjects
+public static class BotHarnessProjects
 {
     /// <summary>
     /// Generate a .csproj file for a component.
     /// isExe is true only for the CLI component.
     /// projectReferences lists other component projects this one depends on.
     /// </summary>
-    internal static string GenerateCsproj(string projectName, bool isExe, List<string>? projectReferences = null)
+    public static string GenerateCsproj(string projectName, bool isExe, List<string>? projectReferences = null)
     {
         var outputType = isExe ? "Exe" : "Library";
         var sb = new StringBuilder();
@@ -50,7 +50,7 @@ internal static class BotHarnessProjects
     /// <summary>
     /// Generate a .sln file linking all project .csproj files.
     /// </summary>
-    internal static string GenerateSln(string solutionName, List<string> projectNames)
+    public static string GenerateSln(string solutionName, List<string> projectNames)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");

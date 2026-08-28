@@ -1,0 +1,335 @@
+@page "/qa"
+@inject Posit.Web.Data.QaTerminalService Svc
+@inject Posit.Web.Data.QaDashboardRepository Repo
+@using Posit.Web.Data
+@using System.Text.Json
+
+<PageTitle>QA Terminal — Posit</PageTitle>
+
+<div style="background:#1e1e2e; color:#cdd6f4; min-height:100vh; padding:1.5rem; font-family:system-ui,sans-serif;">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+        <h1 style="color:#89b4fa; margin:0;">⚡ QA Terminal</h1>
+        <div style="display:flex; gap:0.5rem;">
+            <button @onclick="StartBot" disabled="@botRunning"
+                    style="background:#a6e3a1; color:#1e1e2e; border:none; border-radius:6px; padding:0.5rem 1rem; cursor:pointer; font-weight:600;">
+                ▶ Grind (@pseudodataCombos.Count combos)
+            </button>
+            <button @onclick="StopBot" disabled="@(!botRunning)"
+                    style="background:#f38ba8; color:#1e1e2e; border:none; border-radius:6px; padding:0.5rem 1rem; cursor:pointer; font-weight:600;">
+                ■ Stop
+            </button>
+        </div>
+    </div>
+
+    <!-- Session selector -->
+    <div style="margin-bottom:1rem;">
+        <select @bind="selectedSessionId" @bind:after="OnSessionSelected"
+                style="background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:6px; padding:0.5rem 1rem; min-width:500px;">
+            <option value="">— Choose a session —</option>
+            @foreach (var s in sessions)
+            {
+                <option value="@s.SessionId">@s.ShortId · @s.Status · @s.SavedAt.ToString("MM-dd HH:mm")</option>
+            }
+        </select>
+    </div>
+
+    @if (loading)
+    {
+        <p style="color:#9399b2;">Loading session…</p>
+    }
+
+    @if (qaSession != null)
+    {
+        <!-- Key-mapping reference (always visible — this is the bot's control sheet) -->
+        <div style="background:#181825; border-radius:8px; padding:0.8rem; margin-bottom:1rem; border:1px solid #313244;">
+            <div style="color:#9399b2; font-size:0.8rem; margin-bottom:0.3rem;">Key-Mapping Convention (deterministic bot controls):</div>
+            <div style="display:flex; gap:1.5rem; flex-wrap:wrap; font-size:0.85rem;">
+                <span><kbd style="background:#313244; padding:2px 6px; border-radius:3px;">Ctrl+F1</kbd> Focus first field</span>
+                <span><kbd style="background:#313244; padding:2px 6px; border-radius:3px;">Tab</kbd> Next field</span>
+                <span><kbd style="background:#313244; padding:2px 6px; border-radius:3px;">Enter</kbd> Submit</span>
+                <span><kbd style="background:#313244; padding:2px 6px; border-radius:3px;">Esc</kbd> Cancel</span>
+                <span style="color:#a6e3a1;">Bot sequence: Ctrl+F1 → type → Tab → type → Enter</span>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem;">
+
+            <!-- LEFT: Interactive Form -->
+            <div style="background:#181825; border-radius:8px; padding:1.5rem; border:1px solid #313244;">
+                <h2 style="color:#89b4fa; margin:0 0 0.5rem 0; font-size:1.1rem;">Form: @(currentPage?.Name ?? "—")</h2>
+                <p style="color:#9399b2; font-size:0.8rem; margin:0 0 1rem 0;">System: @qaSession.SystemContext</p>
+
+                @if (currentPage != null)
+                {
+                    <div style="display:grid; gap:0.8rem;">
+                        @for (var i = 0; i < currentPage.Fields.Length; i++)
+                        {
+                            var field = currentPage.Fields[i];
+                            var fieldIdx = i;
+                            <div>
+                                <label style="display:block; color:#9399b2; font-size:0.8rem; margin-bottom:0.2rem;">
+                                    @field.Label <span style="color:#585b70;">(@field.Type)</span>
+                                    @if (field.IsPrimary)
+                                    {
+                                        <span style="color:#a6e3a1; font-size:0.7rem;"> [primary]</span>
+                                    }
+                                </label>
+                                @if (field.Type == "string[]" || field.Type.Contains("[]"))
+                                {
+                                    <textarea @bind="fieldValues[fieldIdx]"
+                                              @bind:after="OnFieldChange"
+                                              autofocus="@(i == 0)"
+                                              placeholder="Enter @(field.Type) (one item per line)…"
+                                              style="width:100%; background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; border-radius:4px; padding:0.5rem; font-family:monospace; font-size:0.85rem; min-height:80px; resize:vertical;" />
+                                }
+                                else
+                                {
+                                    <input @bind="fieldValues[fieldIdx]"
+                                           @bind:after="OnFieldChange"
+                                           autofocus="@(i == 0)"
+                                           placeholder="Enter @field.Type…"
+                                           style="width:100%; background:#1e1e2e; color:#cdd6f4; border:1px solid #45475a; border-radius:4px; padding:0.5rem; font-family:monospace; font-size:0.85rem;" />
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+                        <button @onclick="SubmitForm"
+                                disabled="@running"
+                                style="background:#89b4fa; color:#1e1e2e; border:none; border-radius:6px; padding:0.5rem 1.5rem; cursor:pointer; font-weight:600;">
+                            @if (running) { <text>Running…</text> } else { <text>▶ Run (Enter)</text> }
+                        </button>
+                        @if (currentPageIdx < qaSession.Pages.Length - 1)
+                        {
+                            <button @onclick="NextPage"
+                                    style="background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:6px; padding:0.5rem 1rem; cursor:pointer;">
+                                Next Page →
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- RIGHT: Pseudodata Combos + Results -->
+            <div style="background:#181825; border-radius:8px; padding:1.5rem; border:1px solid #313244;">
+                <h2 style="color:#89b4fa; margin:0 0 0.5rem 0; font-size:1.1rem;">Pseudodata (@pseudodataCombos.Count combos)</h2>
+
+                @if (botRunning)
+                {
+                    <div style="background:#1e1e2e; border-radius:6px; padding:0.5rem; margin-bottom:0.8rem; border:1px solid #a6e3a1;">
+                        <span style="color:#a6e3a1; font-size:0.85rem;">▶ Bot grinding: test @(botIndex + 1)/@pseudodataCombos.Count</span>
+                        <div style="background:#313244; border-radius:3px; height:4px; margin-top:0.3rem; overflow:hidden;">
+                            <div style="background:#a6e3a1; height:100%; width:@(botProgress)%; transition:width 0.3s;" />
+                        </div>
+                    </div>
+                }
+
+                <div style="display:grid; gap:0.5rem; max-height:500px; overflow:auto;">
+                    @for (var i = 0; i < runResults.Count; i++)
+                    {
+                        var result = runResults[i];
+                        var color = result.Verdict == "Pass" ? "#a6e3a1" : result.Verdict == "Fail" ? "#f38ba8" : "#f9e2af";
+                        <div style="background:#1e1e2e; border-radius:6px; padding:0.6rem; border-left:3px solid @color;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="color:@color; font-weight:600; font-size:0.85rem;">@result.Verdict</span>
+                                <span style="color:#585b70; font-size:0.75rem;">@result.JudgeLayer · exit @result.ExitCode</span>
+                            </div>
+                            <div style="color:#9399b2; font-size:0.75rem; margin-top:0.2rem;">@result.Reason</div>
+                            @if (!string.IsNullOrEmpty(result.Stdout))
+                            {
+                                <pre style="background:#11111b; color:#cdd6f4; padding:0.3rem; border-radius:3px; font-size:0.7rem; white-space:pre-wrap; max-height:100px; overflow:auto; margin:0.3rem 0 0 0;">@result.Stdout</pre>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (runResults.Count > 0)
+                {
+                    <div style="margin-top:0.8rem; padding:0.5rem; background:#1e1e2e; border-radius:6px; text-align:center;">
+                        <span style="color:#a6e3a1; font-weight:600;">@runResults.Count(r => r.Verdict == "Pass") passed</span>
+                        <span style="color:#585b70;"> · </span>
+                        <span style="color:#f38ba8; font-weight:600;">@runResults.Count(r => r.Verdict == "Fail") failed</span>
+                        <span style="color:#585b70;"> · </span>
+                        <span style="color:#f9e2af; font-weight:600;">@runResults.Count(r => r.Verdict == "HumanReview") review</span>
+                    </div>
+                }
+            </div>
+
+        </div>
+    }
+    else if (!loading && !string.IsNullOrEmpty(selectedSessionId))
+    {
+        <p style="color:#f38ba8;">Could not load session. Make sure it has an ArchitectureContract artifact.</p>
+    }
+
+</div>
+
+@code {
+    private List<Posit.Web.Data.SessionSummary> sessions = new();
+    private string selectedSessionId = "";
+    private bool loading;
+    private QaSession? qaSession;
+    private FormPage? currentPage;
+    private int currentPageIdx;
+    private string[] fieldValues = [];
+    private bool running;
+    private List<QaRunResult> runResults = new();
+    private List<PseudodataCombo> pseudodataCombos = new();
+
+    // Bot state
+    private bool botRunning;
+    private int botIndex;
+    private int botProgress;
+    private CancellationTokenSource? botCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { sessions = await Repo.GetSessionsAsync(); }
+        catch (Exception ex) { Console.Error.WriteLine($"Failed to load sessions: {ex}"); }
+    }
+
+    private async Task OnSessionSelected()
+    {
+        if (string.IsNullOrEmpty(selectedSessionId))
+        {
+            qaSession = null;
+            return;
+        }
+
+        loading = true;
+        runResults.Clear();
+
+        try
+        {
+            qaSession = await Svc.LoadSessionAsync(selectedSessionId);
+            if (qaSession != null)
+            {
+                pseudodataCombos = qaSession.PseudodataCombos.ToList();
+                currentPageIdx = 0;
+                currentPage = qaSession.Pages.Length > 0 ? qaSession.Pages[0] : null;
+                fieldValues = currentPage != null
+                    ? new string[currentPage.Fields.Length]
+                    : [];
+                Array.Fill(fieldValues, "");
+            }
+        }
+        catch (Exception ex) { Console.Error.WriteLine($"Failed to load QA session: {ex}"); }
+        finally { loading = false; }
+    }
+
+    private void OnFieldChange() { }
+
+    private void NextPage()
+    {
+        if (qaSession == null || currentPageIdx >= qaSession.Pages.Length - 1) return;
+        currentPageIdx++;
+        currentPage = qaSession.Pages[currentPageIdx];
+        fieldValues = new string[currentPage.Fields.Length];
+        Array.Fill(fieldValues, "");
+    }
+
+    private async Task SubmitForm()
+    {
+        if (qaSession == null || currentPage == null) return;
+
+        // Combine field values into the input string
+        var input = string.Join("\n", fieldValues);
+
+        // Find matching pseudodata combo for expected output
+        var combo = pseudodataCombos.FirstOrDefault();
+        var expectedOutput = combo?.ExpectedOutput ?? "";
+        var expectedExit = combo?.ExpectedExitCode ?? 0;
+        var expectedBehavior = combo?.Description ?? "";
+
+        running = true;
+        try
+        {
+            var result = await Svc.RunTestCaseAsync(
+                qaSession.SessionId, input, expectedOutput, expectedExit,
+                expectedBehavior, qaSession.SystemContext, qaSession.IsStdinEntry);
+            runResults.Add(result);
+        }
+        catch (Exception ex)
+        {
+            runResults.Add(new QaRunResult(false, "", ex.Message, -1, "Fail", "Error", ex.Message));
+        }
+        finally { running = false; }
+    }
+
+    // === DETERMINISTIC BOT DRIVER ===
+    // The bot follows the key-mapping convention:
+    //   Ctrl+F1 (focus first field) → type value → Tab → type value → ... → Enter
+    // It cycles through all pseudodata combos, feeding each into the form,
+    // submitting, and collecting the judge verdict.
+
+    private async Task StartBot()
+    {
+        if (qaSession == null || pseudodataCombos.Count == 0) return;
+
+        botRunning = true;
+        botIndex = 0;
+        botCts = new CancellationTokenSource();
+        runResults.Clear();
+
+        foreach (var combo in pseudodataCombos)
+        {
+            if (botCts.Token.IsCancellationRequested) break;
+
+            // Bot sequence (deterministic key-mapping):
+            // 1. Ctrl+F1 — focus first field (reset to page 1)
+            // 2. Type the pseudodata input into the primary field
+            // 3. Enter — submit
+
+            botProgress = (botIndex + 1) * 100 / pseudodataCombos.Count;
+            StateHasChanged();
+
+            // Simulate: Ctrl+F1 → type → Enter
+            currentPageIdx = 0;
+            currentPage = qaSession.Pages.Length > 0 ? qaSession.Pages[0] : null;
+            if (currentPage != null && currentPage.Fields.Length > 0)
+            {
+                fieldValues = new string[currentPage.Fields.Length];
+                Array.Fill(fieldValues, "");
+                // Type pseudodata into the primary field
+                fieldValues[0] = combo.Input;
+                StateHasChanged();
+
+                // Enter — submit
+                running = true;
+                StateHasChanged();
+
+                try
+                {
+                    var result = await Svc.RunTestCaseAsync(
+                        qaSession.SessionId, combo.Input,
+                        combo.ExpectedOutput, combo.ExpectedExitCode,
+                        combo.Description, qaSession.SystemContext,
+                        qaSession.IsStdinEntry, botCts.Token);
+                    runResults.Add(result);
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    runResults.Add(new QaRunResult(false, "", ex.Message, -1, "Fail", "Error", ex.Message));
+                }
+                finally { running = false; }
+
+                StateHasChanged();
+            }
+
+            botIndex++;
+        }
+
+        botRunning = false;
+        botProgress = 100;
+        StateHasChanged();
+    }
+
+    private void StopBot()
+    {
+        botCts?.Cancel();
+        botRunning = false;
+    }
+}
