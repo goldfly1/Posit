@@ -223,7 +223,7 @@ public sealed class BotHarness
         return error == null;
     }
 
-    internal static Component? FindCliComponent(ArchitectureContract contract)
+    public static Component? FindCliComponent(ArchitectureContract contract)
     {
         var withConnections = contract.Components.Where(c => c.Connections.Length > 0).ToArray();
         if (withConnections.Length > 0) return withConnections[0];
@@ -231,7 +231,7 @@ public sealed class BotHarness
             ?? contract.Components.FirstOrDefault();
     }
 
-    internal static SourceCodeFile[] DeduplicateFiles(SourceCodeFile[] files)
+    public static SourceCodeFile[] DeduplicateFiles(SourceCodeFile[] files)
     {
         var dict = new Dictionary<string, SourceCodeFile>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in files) dict[f.Path] = f; // keep last occurrence (dedup by path)

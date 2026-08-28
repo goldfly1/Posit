@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Posit QA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1b26;color:#a9b1d6;font:13px/1.4 'Cascadia Code',monospace;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.top{display:flex;align-items:center;gap:.5rem;padding:.35rem .75rem;background:#16161e;border-bottom:1px solid #2a2b3d}
+.top h1{color:#7aa2f7;font-size:14px;font-weight:600}
+.top .sp{flex:1}
+.btn{padding:4px 10px;border:1px solid #2a2b3d;background:#1f2335;color:#a9b1d6;cursor:pointer;font:inherit;font-size:12px;border-radius:3px}
+.btn:hover{background:#2a2b3d}
+.btn:disabled{color:#565f89;cursor:default}
+.btn-go{color:#9ece6a;border-color:#9ece6a;font-weight:600}
+.btn-go:hover{background:#9ece6a;color:#1a1b26}
+.btn-go:disabled{color:#565f89;border-color:#2a2b3d;background:#1f2335}
+.btn-stop{color:#f7768e;border-color:#f7768e}
+.btn-stop:disabled{color:#565f89;border-color:#2a2b3d}
+.sel{background:#1f2335;color:#a9b1d6;border:1px solid #2a2b3d;padding:3px 6px;font:inherit;font-size:12px;border-radius:3px;max-width:220px}
+.keys{display:flex;gap:.7rem;padding:.2rem .75rem;background:#16161e;border-bottom:1px solid #2a2b3d;font-size:10px;color:#565f89;flex-wrap:wrap}
+.keys kbd{background:#2a2b3d;padding:1px 4px;border-radius:2px;color:#a9b1d6;font:inherit}
+.main{display:flex;flex:1;overflow:hidden}
+.left{flex:0 0 280px;border-right:1px solid #2a2b3d;display:flex;flex-direction:column;overflow:hidden}
+.center{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.right{flex:0 0 320px;border-left:1px solid #2a2b3d;display:flex;flex-direction:column;overflow:hidden}
+.hdr{padding:4px 8px;background:#16161e;border-bottom:1px solid #2a2b3d;color:#565f89;font-size:10px;text-transform:uppercase;letter-spacing:.4px;display:flex;justify-content:space-between}
+.sbar{padding:4px 6px;background:#16161e;border-bottom:1px solid #2a2b3d}
+.sbar input{width:100%;background:#1f2335;color:#a9b1d6;border:1px solid #2a2b3d;padding:3px 6px;font:inherit;font-size:12px;border-radius:3px;outline:0}
+.sbar input:focus{border-color:#7aa2f7}
+.list{flex:1;overflow-y:auto;padding:3px}
+.itm{padding:4px 6px;border-radius:3px;cursor:pointer;font-size:11px;margin-bottom:1px;display:flex;gap:4px;align-items:center}
+.itm:hover{background:#1f2335}
+.itm.act{background:#1f2335;border-left:2px solid #7aa2f7;padding-left:4px}
+.itm .id{color:#7aa2f7;min-width:55px}
+.itm .st{font-size:9px;padding:0 4px;border-radius:2px}
+.st.completed{color:#9ece6a;background:#1a2b1a}.st.failed,.st.aborted{color:#f7768e;background:#2b1a1a}
+.st.planning,.st.Active{color:#7aa2f7;background:#1a1a2b}.st.retry{color:#e0af68;background:#2b2a1a}
+.itm .dt{color:#565f89;margin-left:auto;font-size:10px}
+.ftab{display:flex;background:#16161e;border-bottom:1px solid #2a2b3d}
+.ftab button{padding:4px 12px;border:0;background:transparent;color:#565f89;cursor:pointer;font:inherit;font-size:11px;border-bottom:2px solid transparent}
+.ftab button.act{color:#7aa2f7;border-bottom-color:#7aa2f7}
+.ftab button:hover{color:#a9b1d6}
+.fbody{flex:1;overflow-y:auto;padding:.75rem}
+.sec{color:#565f89;font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin:.6rem 0 4px;border-bottom:1px solid #2a2b3d;padding-bottom:2px}
+.sec:first-child{margin-top:0}
+.fr{margin-bottom:.5rem}
+.fr label{display:block;color:#565f89;font-size:10px;margin-bottom:1px;text-transform:uppercase}
+.fr label .t{color:#bb9af7}.fr label .p{color:#9ece6a;font-size:9px;margin-left:3px}.fr label .u{color:#e0af68;font-size:9px;margin-left:3px}
+.fr input,.fr textarea,.fr select{width:100%;background:#16161e;color:#a9b1d6;border:1px solid #2a2b3d;padding:5px 7px;font:inherit;font-size:12px;border-radius:3px;outline:0}
+.fr input:focus,.fr textarea:focus,.fr select:focus{border-color:#7aa2f7;box-shadow:0 0 0 1px #7aa2f7}
+.fr textarea{min-height:50px;resize:vertical}
+.abar{display:flex;gap:.3rem;padding:6px .75rem;background:#16161e;border-top:1px solid #2a2b3d;flex-wrap:wrap}
+.abar .btn{display:flex;align-items:center;gap:3px}
+.abar .btn kbd{background:#2a2b3d;padding:0 3px;border-radius:2px;font-size:9px;color:#565f89}
+.rc{background:#16161e;border:1px solid #2a2b3d;border-radius:3px;margin-bottom:3px;overflow:hidden}
+.rc.pass{border-left:2px solid #9ece6a}.rc.fail{border-left:2px solid #f7768e}.rc.review{border-left:2px solid #e0af68}
+.rh{display:flex;justify-content:space-between;padding:3px 6px}
+.rv{font-weight:600;font-size:11px}.rv.pass{color:#9ece6a}.rv.fail{color:#f7768e}.rv.review{color:#e0af68}
+.rm{color:#565f89;font-size:10px}.rr{color:#565f89;font-size:10px;padding:0 6px 2px}
+.ro{background:#131320;padding:3px 6px;font-size:10px;white-space:pre-wrap;max-height:70px;overflow-y:auto;border-top:1px solid #2a2b3d}
+.tally{display:flex;gap:.5rem;padding:3px 6px;background:#16161e;border:1px solid #2a2b3d;border-radius:3px;margin-bottom:3px;font-size:11px;justify-content:center}
+.tally .pass{color:#9ece6a;font-weight:600}.tally .fail{color:#f7768e;font-weight:600}.tally .rev{color:#e0af68;font-weight:600}.tally .sep{color:#2a2b3d}
+.bot{padding:3px 6px;background:#1f2335;border:1px solid #9ece6a;border-radius:3px;margin-bottom:3px;font-size:10px;color:#9ece6a}
+.bar{height:2px;background:#2a2b3d;border-radius:1px;margin-top:2px;overflow:hidden}
+.barf{height:100%;background:#9ece6a;transition:width .3s}
+.empty{color:#565f89;text-align:center;padding:1.5rem;font-size:11px}
+.ctx{color:#565f89;font-size:11px;margin-bottom:.5rem;padding:4px 6px;background:#16161e;border-radius:3px;border:1px solid #2a2b3d}
+.pagebar{display:flex;align-items:center;gap:.5rem;padding:4px 8px;background:#16161e;border-bottom:1px solid #2a2b3d}
+.pagebar .pn{color:#7aa2f7;font-size:12px;font-weight:600}
+.pagebar .pi{color:#565f89;font-size:10px}
+.tc{padding:3px 6px;border:1px solid #2a2b3d;border-radius:3px;margin-bottom:2px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between}
+.tc:hover{background:#1f2335}.tc.act{background:#1f2335;border-color:#7aa2f7}
+.tc .ex{color:#9ece6a;font-size:10px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>⚡ Posit QA</h1>
+  <select class="sel" id="trialSel" onchange="loadTrial()"><option value="">— Trial —</option></select>
+  <button class="btn btn-go" id="btnRun" onclick="runOne()" disabled>▶ Run</button>
+  <button class="btn btn-go" id="btnGrind" onclick="grind()" disabled>🤖 Grind</button>
+  <button class="btn btn-stop" id="btnStop" onclick="stopBot()" disabled>■ Stop</button>
+  <div class="sp"></div>
+  <input class="sel" id="searchBox" placeholder="Search DB..." onkeydown="if(event.key==='Enter')doSearch()">
+  <button class="btn" onclick="doSearch()">🔍</button>
+  <span id="status" style="color:#565f89;font-size:10px;margin-left:.5rem">Ready</span>
+</div>
+
+<div class="keys" id="keys" style="display:none">
+  <span><kbd>F1</kbd> Focus first field</span>
+  <span><kbd>Shift+F1</kbd> Next page</span>
+  <span><kbd>Tab</kbd> Next field</span>
+  <span><kbd>Enter</kbd> Run test</span>
+  <span><kbd>F2</kbd> Search</span>
+  <span><kbd>F4</kbd> Grind all</span>
+  <span style="color:#9ece6a">Bot: F1 → type → Tab → ... → Enter</span>
+</div>
+
+<div class="main">
+  <!-- LEFT: trial list + search results -->
+  <div class="left">
+    <div class="hdr"><span>Trials</span><span id="trialCount" style="text-transform:none;letter-spacing:0">—</span></div>
+    <div class="sbar"><input id="trialFilter" placeholder="Filter..." oninput="filterTrials()"></div>
+    <div class="list" id="trialList"></div>
+  </div>
+
+  <!-- CENTER: form -->
+  <div class="center">
+    <div class="pagebar">
+      <span class="pn" id="pageName">—</span>
+      <span class="pi" id="pageInfo"></span>
+    </div>
+    <div class="ftab">
+      <button class="act" id="tabForm" onclick="switchTab('form')">Form</button>
+      <button id="tabSource" onclick="switchTab('source')">Source</button>
+      <button id="tabData" onclick="switchTab('data')">Data</button>
+    </div>
+    <div class="fbody" id="formBody">
+      <div class="empty">Select a trial from the left.</div>
+    </div>
+    <div class="fbody" id="sourceBody" style="display:none">
+      <div class="empty">Source code will appear here.</div>
+    </div>
+    <div class="fbody" id="dataBody" style="display:none">
+      <div class="empty">DB table data will appear here.</div>
+    </div>
+    <div class="abar" id="actionBar" style="display:none">
+      <button class="btn btn-go" onclick="runOne()">▶ Run <kbd>Enter</kbd></button>
+      <button class="btn btn-go" id="btnGrind2" onclick="grind()" disabled>🤖 Grind <kbd>F4</kbd></button>
+      <button class="btn btn-stop" id="btnStop2" onclick="stopBot()" disabled>■ Stop</button>
+      <button class="btn" onclick="doSearch()">🔍 Search <kbd>F2</kbd></button>
+    </div>
+  </div>
+
+  <!-- RIGHT: results -->
+  <div class="right">
+    <div class="hdr">Results</div>
+    <div style="flex:1;overflow-y:auto;padding:6px">
+      <div id="searchResults" style="display:none;margin-bottom:6px">
+        <div class="sec" style="margin-top:0">Search</div>
+        <div id="searchList"></div>
+      </div>
+      <div id="botProgress" style="display:none">
+        <div class="bot"><span id="botStatus">▶ 0/0</span><div class="bar"><div class="barf" id="botBar" style="width:0"></div></div></div>
+      </div>
+      <div id="tally" class="tally" style="display:none">
+        <span class="pass" id="tPass">0 pass</span><span class="sep">·</span>
+        <span class="fail" id="tFail">0 fail</span><span class="sep">·</span>
+        <span class="rev" id="tRev">0 review</span>
+      </div>
+      <div id="resultsList"><div class="empty">Results appear here.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let trials=[],filtered=[],detail=null,pageIdx=0,combos=[],results=[],botRun=false,botCts=null,srchHits=[];
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ── Init ──────────────────────────────────────────────────
+async function init(){
+  try{
+    const r=await fetch('/api/trials');
+    trials=await r.json();
+    filtered=trials;
+    document.getElementById('trialCount').textContent=trials.length;
+    const sel=document.getElementById('trialSel');
+    trials.forEach(t=>{const o=document.createElement('option');o.value=t.sessionId;
+      o.textContent=t.sessionId.slice(0,8)+' · '+t.status+' · '+new Date(t.savedAt).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit'});sel.appendChild(o);});
+    renderTrialList();
+  }catch(e){setSt('Load failed: '+e.message);}
+  document.addEventListener('keydown',e=>{
+    if(e.key==='F1'){e.preventDefault();e.shiftKey?cyclePage():focusFirst();}
+    if(e.key==='F2'){e.preventDefault();document.getElementById('searchBox').focus();}
+    if(e.key==='F4'&&!e.ctrlKey){e.preventDefault();grind();}
+    if(e.key==='Enter'&&!e.ctrlKey&&!e.shiftKey&&e.target.tagName==='INPUT'&&e.target.id!=='searchBox'&&e.target.id!=='trialFilter'){e.preventDefault();runOne();}
+  });
+}
+init();
+function setSt(s){document.getElementById('status').textContent=s;}
+
+// ── Trial list ─────────────────────────────────────────────
+function renderTrialList(){
+  const el=document.getElementById('trialList');el.innerHTML='';
+  filtered.forEach(t=>{
+    const d=document.createElement('div');d.className='itm';
+    const sc=(t.status||'unknown').toLowerCase();
+    const dt=new Date(t.savedAt).toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    d.innerHTML=`<span class="id">${t.sessionId.slice(0,8)}</span><span class="st ${sc}">${t.status||'?'}</span><span class="dt">${dt}</span>`;
+    d.onclick=()=>{document.getElementById('trialSel').value=t.sessionId;loadTrial(t.sessionId);};
+    el.appendChild(d);
+  });
+}
+function filterTrials(){
+  const q=document.getElementById('trialFilter').value.toLowerCase();
+  filtered=trials.filter(t=>t.sessionId.toLowerCase().includes(q)||(t.status||'').toLowerCase().includes(q));
+  renderTrialList();
+}
+
+// ── Load trial ─────────────────────────────────────────────
+async function loadTrial(forceSid){
+  const sid=forceSid||document.getElementById('trialSel').value;
+  if(!sid)return;
+  setSt('Loading '+sid.slice(0,8)+'...');
+  try{
+    const r=await fetch('/api/trials/'+sid);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    detail=await r.json();
+    combos=detail.testCases||[];
+    results=[];pageIdx=0;
+    renderForm();renderResults();renderSource();
+    document.getElementById('keys').style.display='flex';
+    document.getElementById('actionBar').style.display='flex';
+    document.getElementById('btnRun').disabled=false;
+    document.getElementById('btnGrind').disabled=combos.length===0;
+    document.getElementById('btnGrind2').disabled=combos.length===0;
+    setSt('Loaded: '+(detail.systemContext||'').slice(0,50));
+  }catch(e){setSt('Load failed: '+e.message);detail=null;}
+}
+
+// ── Form ────────────────────────────────────────────────────
+function renderForm(){
+  if(!detail){document.getElementById('formBody').innerHTML='<div class="empty">Select a trial.</div>';return;}
+  const el=document.getElementById('formBody');el.innerHTML='';
+  const pages=detail.pages||[];
+  const page=pages[pageIdx]||pages[0];
+  if(!page){el.innerHTML='<div class="empty">No form pages.</div>';return;}
+
+  document.getElementById('pageName').textContent=page.fullName;
+  document.getElementById('pageInfo').textContent=pages.length>1?`Page ${pageIdx+1}/${pages.length} (Shift+F1)`:'';
+
+  // Context line
+  if(detail.systemContext){
+    const ctx=document.createElement('div');ctx.className='ctx';ctx.textContent=detail.systemContext;el.appendChild(ctx);
+  }
+
+  // Universal fields
+  const us=document.createElement('div');us.className='sec';us.textContent='Universal Fields';el.appendChild(us);
+  (detail.universalFields||[]).forEach(f=>el.appendChild(makeField(f.label,f.type,f.name,false,true)));
+
+  // Method fields
+  if(page.fields.length>0){
+    const ms=document.createElement('div');ms.className='sec';ms.textContent=`Method: ${page.component}.${page.method} → ${page.returnType}`;el.appendChild(ms);
+    page.fields.forEach(f=>el.appendChild(makeField(f.label,f.type,f.name,f.isPrimary,false)));
+  }
+
+  // Test cases
+  if(combos.length>0){
+    const ts=document.createElement('div');ts.className='sec';ts.textContent=`Test Cases (${combos.length})`;el.appendChild(ts);
+    combos.forEach((c,i)=>{
+      const tc=document.createElement('div');tc.className='tc';
+      tc.innerHTML=`<span>[${i+1}] ${esc(c.name)}</span><span class="ex">${c.expectedOutput?'→ '+esc(c.expectedOutput):''}</span>`;
+      tc.onclick=()=>{fillFromCombo(c,tc);};
+      el.appendChild(tc);
+    });
+  }
+}
+
+function makeField(label,type,name,isPrim,isUniv){
+  const r=document.createElement('div');r.className='fr';
+  const l=document.createElement('label');
+  let h=label;
+  if(type)h+=' <span class="t">'+type+'</span>';
+  if(isPrim)h+='<span class="p">[primary]</span>';
+  if(isUniv)h+='<span class="u">[univ]</span>';
+  l.innerHTML=h;r.appendChild(l);
+  let inp;
+  if(type&&type.includes('[]')){inp=document.createElement('textarea');}
+  else if(type==='bool'){inp=document.createElement('select');inp.innerHTML='<option value="">—</option><option value="true">true</option><option value="false">false</option>';}
+  else if(type==='date'){inp=document.createElement('input');inp.type='date';}
+  else{inp=document.createElement('input');inp.type=(type==='int'||type==='double')?'number':'text';}
+  inp.className='fld';inp.dataset.name=name;inp.dataset.type=type||'string';
+  inp.placeholder=`Enter ${type||'text'}...`;
+  r.appendChild(inp);return r;
+}
+
+function focusFirst(){const f=document.querySelector('.fld');if(f)f.focus();}
+function cyclePage(){if(!detail||!detail.pages||detail.pages.length<=1)return;pageIdx=(pageIdx+1)%detail.pages.length;renderForm();setSt('Page '+pageIdx+1+': '+detail.pages[pageIdx].fullName);}
+
+function getPrimaryInput(){
+  const p=document.querySelector('.fld[data-name]'); // first field
+  const all=document.querySelectorAll('.fld');
+  // Prefer a method field (non-universal), then first universal
+  for(const f of all){if(f.value)return f.value;}
+  return '';
+}
+
+function fillFromCombo(c,el){
+  // Find the primary method field (first non-universal) and fill it
+  const fields=document.querySelectorAll('.fld');
+  // Fill first field that's a method field (after universal section)
+  // Simplest: fill the first empty field after the universal fields
+  const univCount=(detail?.universalFields||[]).length;
+  if(fields.length>univCount){fields[univCount].value=c.input;}
+  else if(fields.length>0){fields[0].value=c.input;}
+  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act'));
+  if(el)el.classList.add('act');
+}
+
+// ── Source tab ─────────────────────────────────────────────
+function renderSource(){
+  if(!detail||!detail.sourceFiles||detail.sourceFiles.length===0){
+    document.getElementById('sourceBody').innerHTML='<div class="empty">No source code.</div>';return;
+  }
+  const el=document.getElementById('sourceBody');el.innerHTML='';
+  detail.sourceFiles.forEach(f=>{
+    const s=document.createElement('div');s.className='sec';s.textContent=f.path;el.appendChild(s);
+    const pre=document.createElement('pre');pre.style.cssText='background:#131320;color:#a9b1d6;padding:6px;border-radius:3px;font-size:11px;white-space:pre-wrap;word-break:break-all;border:1px solid #2a2b3d;max-height:300px;overflow-y:auto';
+    pre.textContent=f.content;el.appendChild(pre);
+  });
+}
+
+// ── Data tab (DB browser) ───────────────────────────────────
+let dataTab='sessions';
+async function switchTab(tab){
+  document.querySelectorAll('.ftab button').forEach(b=>b.classList.remove('act'));
+  document.getElementById('tab'+tab.charAt(0).toUpperCase()+tab.slice(1)).classList.add('act');
+  document.getElementById('formBody').style.display=tab==='form'?'block':'none';
+  document.getElementById('sourceBody').style.display=tab==='source'?'block':'none';
+  document.getElementById('dataBody').style.display=tab==='data'?'block':'none';
+  if(tab==='data')await loadDataTab();
+}
+
+async function loadDataTab(){
+  const el=document.getElementById('dataBody');
+  el.innerHTML='<div class="empty">Loading...</div>';
+  try{
+    // Table selector
+    const tables=[['posit_state','sessions'],['posit_artifacts','artifacts'],['posit_artifacts','artifact_lineage']];
+    let html='<div class="sec">Tables</div><div style="display:flex;gap:4px;margin-bottom:8px">';
+    tables.forEach(([s,t])=>{const act=(s+'.'+t)===dataTab?'act':'';html+=`<button class="btn ${act}" onclick="dataTab='${s}.${t}';loadDataTab()">${t}</button>`;});
+    html+='</div>';
+    const [schema,table]=dataTab.split('.');
+    const r=await fetch(`/api/db/${schema}/${table}?page=1&pageSize=20`);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    html+=`<div class="ctx">${d.totalRows} rows in ${schema}.${table}</div>`;
+    if(d.rows.length===0){el.innerHTML=html+'<div class="empty">No rows.</div>';return;}
+    // Table
+    const cols=Object.keys(d.rows[0]);
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>';
+    cols.forEach(c=>{html+=`<th style="background:#16161e;color:#565f89;text-align:left;padding:3px 6px;border-bottom:1px solid #2a2b3d;text-transform:uppercase;font-size:9px">${c}</th>`;});
+    html+='</tr></thead><tbody>';
+    d.rows.forEach(row=>{
+      html+='<tr style="cursor:pointer" onclick="showRow(this)">';
+      cols.forEach(c=>{
+        let v=row[c];if(v===null)v='NULL';
+        let cls=v==='NULL'?'color:#565f89;font-style:italic':(c.includes('json')?'color:#9ece6a':(c.includes('id')?'color:#7aa2f7':''));
+        let s=String(v).slice(0,80);if(String(v).length>80)s+='…';
+        html+=`<td style="padding:2px 6px;border-bottom:1px solid #1f2335;${cls}" title="${esc(String(v))}">${esc(s)}</td>`;
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    el.innerHTML=html;
+  }catch(e){el.innerHTML='<div class="empty">Load failed: '+e.message+'</div>';}
+}
+
+function showRow(tr){
+  // Highlight + show full row in right panel
+  document.querySelectorAll('#dataBody tr').forEach(t=>t.style.background='');
+  tr.style.background='#1f2335';
+  const cells=tr.querySelectorAll('td');
+  let html='<div class="sec">Row Detail</div>';
+  tr.querySelectorAll('th,td').forEach((td,i)=>{
+    const name=tr.closest('table').querySelectorAll('th')[i]?.textContent||'';
+    const val=td.getAttribute('title')||td.textContent;
+    html+=`<div class="fr"><label>${name}</label><div style="background:#131320;color:#a9b1d6;padding:4px 6px;border-radius:3px;font-size:11px;white-space:pre-wrap;word-break:break-all;border:1px solid #2a2b3d;max-height:150px;overflow-y:auto">${esc(val)}</div></div>`;
+  });
+  // Show in right panel temporarily
+  document.getElementById('resultsList').innerHTML=html;
+}
+
+// ── Run one test ────────────────────────────────────────────
+async function runOne(){
+  if(!detail)return;
+  const input=getPrimaryInput();
+  if(!input){setSt('No input');return;}
+  setSt('Running...');
+  try{
+    const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sessionId:detail.sessionId,input,expectedOutput:'',expectedExitCode:0,expectedBehavior:'',systemContext:detail.systemContext||'',isStdin:detail.isStdinEntry})});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const res=await r.json();results.push(res);renderResults();setSt('Done: '+res.verdict);
+  }catch(e){setSt('Run failed: '+e.message);}
+}
+
+// ── Grind all ───────────────────────────────────────────────
+async function grind(){
+  if(!detail||combos.length===0)return;
+  botRun=true;botCts={cancelled:false};results=[];renderResults();
+  document.getElementById('btnGrind').disabled=true;document.getElementById('btnGrind2').disabled=true;
+  document.getElementById('btnStop').disabled=false;document.getElementById('btnStop2').disabled=false;
+  document.getElementById('botProgress').style.display='block';
+  for(let i=0;i<combos.length;i++){
+    if(botCts.cancelled)break;
+    document.getElementById('botStatus').textContent=`▶ ${i+1}/${combos.length}`;
+    document.getElementById('botBar').style.width=`${((i+1)/combos.length)*100}%`;
+    focusFirst();await sleep(30);
+    const fields=document.querySelectorAll('.fld');
+    const univCount=(detail.universalFields||[]).length;
+    if(fields.length>univCount)fields[univCount].value=combos[i].input;
+    await sleep(30);
+    try{
+      const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({sessionId:detail.sessionId,input:combos[i].input,expectedOutput:combos[i].expectedOutput,expectedExitCode:combos[i].expectedExitCode,expectedBehavior:combos[i].expectedBehavior,systemContext:detail.systemContext||'',isStdin:detail.isStdinEntry})});
+      if(r.ok){results.push(await r.json());renderResults();}
+    }catch(e){results.push({verdict:'Fail',judgeLayer:'Error',reason:e.message,exitCode:-1,stdout:''});renderResults();}
+    await sleep(50);
+  }
+  botRun=false;
+  document.getElementById('btnGrind').disabled=false;document.getElementById('btnGrind2').disabled=false;
+  document.getElementById('btnStop').disabled=true;document.getElementById('btnStop2').disabled=true;
+  const p=results.filter(r=>r.verdict==='Pass').length;
+  const f=results.filter(r=>r.verdict==='Fail').length;
+  setSt(`Bot: ${p} pass, ${f} fail`);
+}
+
+function stopBot(){if(botCts)botCts.cancelled=true;botRun=false;
+  document.getElementById('btnGrind').disabled=false;document.getElementById('btnGrind2').disabled=false;
+  document.getElementById('btnStop').disabled=true;document.getElementById('btnStop2').disabled=true;setSt('Stopped');}
+
+// ── Results ─────────────────────────────────────────────────
+function renderResults(){
+  const el=document.getElementById('resultsList');el.innerHTML='';
+  if(results.length===0){el.innerHTML='<div class="empty">Results appear here.</div>';document.getElementById('tally').style.display='none';return;}
+  const p=results.filter(r=>r.verdict==='Pass').length;
+  const f=results.filter(r=>r.verdict==='Fail').length;
+  const rv=results.filter(r=>r.verdict==='HumanReview').length;
+  document.getElementById('tally').style.display='flex';
+  document.getElementById('tPass').textContent=p+' pass';
+  document.getElementById('tFail').textContent=f+' fail';
+  document.getElementById('tRev').textContent=rv+' review';
+  results.forEach((r,i)=>{
+    const c=document.createElement('div');c.className='rc '+(r.verdict||'fail').toLowerCase();
+    c.innerHTML=`<div class="rh"><span class="rv ${(r.verdict||'').toLowerCase()}">${r.verdict||'?'}</span><span class="rm">${r.judgeLayer||''} · exit ${r.exitCode} · #${i+1}</span></div>`;
+    if(r.reason){c.innerHTML+=`<div class="rr">${esc(r.reason)}</div>`;}
+    if(r.stdout){c.innerHTML+=`<div class="ro">${esc(r.stdout)}</div>`;}
+    el.appendChild(c);
+  });
+}
+
+// ── Search ──────────────────────────────────────────────────
+async function doSearch(){
+  const q=document.getElementById('searchBox').value;
+  if(!q)return;setSt('Searching...');
+  try{
+    const r=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    srchHits=await r.json();renderSearchResults();setSt(`Found ${srchHits.length} results`);
+  }catch(e){setSt('Search failed: '+e.message);}
+}
+
+function renderSearchResults(){
+  const el=document.getElementById('searchResults');
+  const list=document.getElementById('searchList');
+  if(srchHits.length===0){el.style.display='none';return;}
+  el.style.display='block';list.innerHTML='';
+  srchHits.forEach(h=>{
+    const d=document.createElement('div');d.className='itm';
+    d.innerHTML=`<span class="id">${esc(h.id.slice(0,10))}</span><span class="st" style="color:#bb9af7;background:#1a1a2b">${esc(h.kind)}</span><span class="dt">${esc(h.date)}</span>`;
+    d.onclick=()=>{document.getElementById('searchBox').value=h.id;populateFromSearch(h);};
+    list.appendChild(d);
+  });
+}
+
+function populateFromSearch(h){
+  const name=document.querySelector('.fld[data-name="name"]');
+  if(name){name.value=h.id;name.classList.add('filled');}
+  const notes=document.querySelector('.fld[data-name="notes"]');
+  if(notes){notes.value=h.label+' '+h.date;notes.classList.add('filled');}
+  setSt('Populated from search: '+h.id.slice(0,10));
+}
+</script>
+</body>
+</html>
