@@ -1,6 +1,6 @@
 # QA Phase Redesign — Aug 27, 2026
 
-## Status: DESIGN COMPLETE — ready for implementation
+## Status: STEP 1 COMPLETE (dead code + fixer caps) — steps 2-5 pending
 
 ## Context
 
