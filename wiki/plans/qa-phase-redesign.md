@@ -1,6 +1,6 @@
 # QA Phase Redesign — Aug 27, 2026
 
-## Status: ALL 5 STEPS COMPLETE (dead code + fixer caps, pseudodata bot, three-layer judge, Docker clean room, TUI terminal)
+## Status: STEPS 1-3 COMPLETE (dead code + fixer caps, pseudodata bot, three-layer judge) — steps 4-5 pending
 
 ## Context
 

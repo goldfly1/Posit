@@ -1,15 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Library</OutputType>
     <RootNamespace>Posit.Web</RootNamespace>
+    <AssemblyName>Posit.Web</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Posit.Contracts\Posit.Contracts.csproj" />
+    <ProjectReference Include="..\Posit.Core\Posit.Core.csproj" />
     <ProjectReference Include="..\Posit.Data\Posit.Data.csproj" />
+    <ProjectReference Include="..\Posit.AI\Posit.AI.csproj" />
+    <ProjectReference Include="..\Posit.Phases\Posit.Phases.csproj" />
     <ProjectReference Include="..\Posit.Tools\Posit.Tools.csproj" />
   </ItemGroup>
 

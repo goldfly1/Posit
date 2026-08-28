@@ -8,13 +8,13 @@ namespace Posit.Tools;
 /// Generates Dockerfile.run (multi-stage build), builds the image,
 /// and runs containers per test case.
 /// </summary>
-public static class BotHarnessDocker
+internal static class BotHarnessDocker
 {
     /// <summary>
     /// Generate the Dockerfile.run for multi-stage build:
     /// build stage compiles the solution, runtime stage copies output.
     /// </summary>
-    public static string GenerateDockerfileRun(string cliComponentName)
+    internal static string GenerateDockerfileRun(string cliComponentName)
     {
         var sb = new StringBuilder();
         sb.AppendLine("FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build");
@@ -36,7 +36,7 @@ public static class BotHarnessDocker
     /// <summary>
     /// Build the Docker image from the temp directory.
     /// </summary>
-    public static async Task<DockerResult> BuildAsync(
+    internal static async Task<DockerResult> BuildAsync(
         string dockerPath, string contextDir, string tag, CancellationToken ct = default)
     {
         var dockerfilePath = Path.Combine(contextDir, "Dockerfile.run");
@@ -87,7 +87,7 @@ public static class BotHarnessDocker
     /// Run a container with the given input, capture stdout.
     /// If stdinInput is non-null, pipes it via stdin instead of passing as CLI arg.
     /// </summary>
-    public static async Task<DockerResult> RunContainerAsync(
+    internal static async Task<DockerResult> RunContainerAsync(
         string dockerPath, string tag, string cliComponentName, string input,
         CancellationToken ct = default, string? stdinInput = null)
     {
@@ -155,4 +155,4 @@ public static class BotHarnessDocker
     }
 }
 
-public sealed record DockerResult(bool Success, string Output, int ExitCode);
+internal sealed record DockerResult(bool Success, string Output, int ExitCode);
