@@ -40,8 +40,10 @@ types. Generates typed test data at scale (1K, 10K, 100K records).
 - `IConverter.Convert(double temp, string unit)` → generates "32 F", "0 C", "20 X"
 - `IAnalyzer.CountByLevel(string[] lines, string level)` → generates log lines
 
-The interface IS the spec for the data shape. No LLM call. No guessing from
-test case names. Deterministic, reproducible.
+The interface IS the spec for the data shape. The bot reads interface signatures
+for type shapes AND reads the architect's test case categories (valid input, edge
+case, invalid input, empty) to generate appropriate data for each category. Still
+deterministic, but spec-aware, not just type-aware.
 
 For computable transformations (Type 1: CSV→JSON, temperature conversion), the
 bot also computes expected output. The transformation rule is in the spec — the
@@ -122,7 +124,8 @@ decomposition each run. Restart is the exception handler, not human debugging.
 - LLM test data generation in QaPhase — replaced by deterministic bot
 - LLM failure analysis in BotHarness — removed (diagnostic only, never used)
 - QaModuleResult vestigial records — removed
-- Fuzzy CompareOutput rubber stamp — removed (exact match + invariants only)
+- Fuzzy CompareOutput keyword rubber stamp — replaced with structural check
+  (valid format? right fields? right structure?) instead of keyword matching
 
 ### What Stays
 
