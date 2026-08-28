@@ -144,9 +144,60 @@ decomposition each run. Restart is the exception handler, not human debugging.
 
 ### What's Deferred (separate conversations)
 
-- Frontend-as-pipe: GUI prefab as test runner terminal
+- Frontend-as-pipe: GUI prefab as test runner terminal (see Terminal Architecture below)
 - Per-phase model routing
 - Heuristic check prompt design (refine when we have real outputs to test)
+
+### Terminal Architecture
+
+The carapace defines methods. Terminals render those methods to users. One pipe,
+four terminals. All call the same carapace methods — the carapace doesn't care
+who called it.
+
+| Terminal | Where | QA bot drives it? | Key-mapping? | Priority |
+|----------|-------|-------------------|--------------|----------|
+| **CLI** (pipe) | Data transformers, scripts | ✅ Yes (stdin/args) | No — no fields | ✅ Built |
+| **TUI** (interactive terminal) | Docker QA, servers, SSH | ✅ Yes (keystrokes) | ✅ Yes | **Next** |
+| **GUI** (desktop app) | End-user business software | ❌ Not in Docker | ✅ Yes | Later |
+| **AAI** (AI assist interface) | Human conversational access | ❌ Non-deterministic | No | Later |
+
+#### Key-Mapping Convention (for TUI and GUI)
+
+Standardized so the QA bot always knows where every field is without discovery,
+and every program behaves the same way everywhere:
+
+- **Ctrl+F1** = first page, focus on first field
+- **Tab** = next field (standard accessibility)
+- Every field has a known position in the tab order
+- Pages are standardized — same layout conventions across all programs
+
+This is the carapace doctrine applied to the user interface. The carapace
+standardizes the code interface (method signatures). The key-mapping
+standardizes the user interface (field positions, navigation). Both serve
+the same purpose: the consumer knows where things are without discovery.
+
+#### TUI is the QA Terminal
+
+The QA bot runs in Docker. Docker containers don't have display servers.
+The TUI is what the QA bot actually drives — deterministic keystrokes
+(Ctrl+F1, Tab N times, type data, Enter). No computer vision, no DOM
+inspection, no headless browser. Just keystrokes in a terminal.
+
+The TUI is the first GUI terminal, not a later addition. It's the one QA
+uses. The desktop GUI is a second terminal for humans who want windows.
+
+#### CLI Always Available
+
+Even when a TUI or GUI exists. The carapace methods are always there.
+A hot-shot dev can always write to the command line. Data transformers
+(CSV→JSON, temperature converter) are CLI-only — no GUI needed.
+
+#### AAI is Human-Facing Only
+
+The AAI translates natural language ("show me overdue shipments") into
+carapace method calls (IShipmentTracker.GetOverdue()). Thin wrapper over
+existing interfaces — no new carapace fields, no new infrastructure. But
+it's non-deterministic, so the QA bot never uses it. Build after TUI.
 
 ### Open Questions
 
