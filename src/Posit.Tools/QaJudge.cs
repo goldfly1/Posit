@@ -131,10 +131,13 @@ public sealed class QaJudge
 
         var trimmed = stdout.Trim();
 
-        // Bare type name: one token, dotted identifier, no spaces/newlines.
-        // e.g. "ConfigMerger.MergeResult" — a program that printed a type name.
+        // Bare type name: one token, no spaces/newlines. Matches dotted
+        // identifiers (ConfigMerger.MergeResult), array forms (System.String[],
+        // int[]), and generic forms (List`1). A program that printed a type name.
         if (!trimmed.Contains('\n') && !trimmed.Contains(' ')
-            && Regex.IsMatch(trimmed, @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$"))
+            && Regex.IsMatch(trimmed,
+                @"^[A-Za-z_][A-Za-z0-9_`]*(\.[A-Za-z_][A-Za-z0-9_`]*)*(\[\])?$")
+            && trimmed.Any(char.IsUpper) && trimmed.Length > 2)
             return $"a bare type name ('{trimmed}')";
 
         // Unhandled exception dump
