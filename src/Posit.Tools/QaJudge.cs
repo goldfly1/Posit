@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Posit.AI.Models;
 using Posit.Contracts.Artifacts;
 using Posit.Contracts.Core;
@@ -85,6 +86,12 @@ public sealed class QaJudge
     {
         var behavior = expectedBehavior.ToLowerInvariant();
 
+        // Garbage gate: outputs that prove the program printed the wrong THING
+        // entirely. These are never valid stdout for a tested program.
+        var garbage = ClassifyGarbage(run.Stdout);
+        if (garbage != null)
+            return (false, $"Structural: FAIL — stdout is {garbage}, not program output");
+
         // Error cases: exit code 1, should have error message
         if (behavior.Contains("error") || behavior.Contains("exit") && behavior.Contains("1"))
         {
@@ -110,6 +117,32 @@ public sealed class QaJudge
             return (true, "Structural: PASS (ran successfully with output)");
 
         return (false, $"Structural: FAIL — unexpected state (exit={run.ExitCode}, stdout empty={string.IsNullOrWhiteSpace(run.Stdout)})");
+    }
+
+    /// <summary>
+    /// Classify obviously-wrong output: type names (ConfigMerger.MergeResult),
+    /// unhandled exception dumps, stack traces. Returns a description or null
+    /// if the output doesn't match any garbage pattern.
+    /// </summary>
+    private static string? ClassifyGarbage(string stdout)
+    {
+        if (string.IsNullOrWhiteSpace(stdout))
+            return null; // empty handled by the shape rules
+
+        var trimmed = stdout.Trim();
+
+        // Bare type name: one token, dotted identifier, no spaces/newlines.
+        // e.g. "ConfigMerger.MergeResult" — a program that printed a type name.
+        if (!trimmed.Contains('\n') && !trimmed.Contains(' ')
+            && Regex.IsMatch(trimmed, @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$"))
+            return $"a bare type name ('{trimmed}')";
+
+        // Unhandled exception dump
+        if (trimmed.Contains("Unhandled exception") || trimmed.Contains("Exception:")
+            || trimmed.Contains("at System.") || trimmed.Contains("stack trace"))
+            return "an exception/stack-trace dump";
+
+        return null;
     }
 
     /// <summary>

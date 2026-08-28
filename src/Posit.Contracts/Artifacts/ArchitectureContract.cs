@@ -83,7 +83,25 @@ public record ComponentTestCase(
     string Name,
     string TargetType,
     string Description,
-    string ExpectedBehavior);
+    string ExpectedBehavior)
+{
+    /// <summary>
+    /// Exact input for this test case (file content or stdin line, depending on
+    /// entryType). Empty = QA generates input heuristically from the description.
+    /// </summary>
+    public string Input { get; init; } = "";
+
+    /// <summary>
+    /// Exact stdout expected when the program processes Input. This is the answer
+    /// key for the judge's exact-match layer. Empty = no exact match available.
+    /// </summary>
+    public string ExpectedOutput { get; init; } = "";
+
+    /// <summary>
+    /// Expected exit code for this test case. 0 = success, 1 = error.
+    /// </summary>
+    public int ExpectedExitCode { get; init; } = 0;
+}
 
 public record DataStore(string Id, string Name, DataStoreKind Kind, string Schema, PersistenceKind Persistence);
 public record InterfaceSpec(string Id, string Name, InterfaceDirection Direction, string Protocol, string SchemaRef, AuthSpec Auth);

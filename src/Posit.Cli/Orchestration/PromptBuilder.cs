@@ -76,8 +76,23 @@ public static class PromptBuilder
         sb.AppendLine("    Connections form a chain: each step's output feeds the next. Last step prints the result.");
         sb.AppendLine("  - entryType: \"file\" or \"stdin\" (on the orchestrator)");
         sb.AppendLine("  - branchCondition: error branch description if a step returns isValid bool");
-        sb.AppendLine("  - testCases: [{id, name, targetType, description, expectedBehavior}]");
-        sb.AppendLine("    expectedBehavior = SHAPE of output (\"prints result\", \"prints error and exits 1\"), NOT specific values.");
+        sb.AppendLine("  - testCases: [{id, name, targetType, description, expectedBehavior, input, expectedOutput, expectedExitCode}]");
+        sb.AppendLine("    EVERY test case MUST include a concrete input and the EXACT expected output:");
+        sb.AppendLine("    - input: the exact stdin line or file content this test feeds the program.");
+        sb.AppendLine("    - expectedOutput: the EXACT stdout the program must print for that input,");
+        sb.AppendLine("      character for character. NOT a shape description.");
+        sb.AppendLine("    - expectedExitCode: 0 for success cases, 1 for error cases.");
+        sb.AppendLine("    - expectedBehavior stays as a short human-readable summary of the expected shape.");
+        sb.AppendLine("    These concrete values are the answer key the QA judge compares against.");
+        sb.AppendLine("    A test case without input and expectedOutput cannot be exactly verified — write it anyway with your best concrete values.");
+        sb.AppendLine();
+        sb.AppendLine("    Example testCases for a temperature converter (stdin '32 F' → prints '0 C'):");
+        sb.AppendLine("      {\"id\":\"tc1\", \"name\":\"F to C\", \"targetType\":\"cli\", \"description\":\"Freezing point\",");
+        sb.AppendLine("       \"expectedBehavior\":\"prints converted temperature\",");
+        sb.AppendLine("       \"input\":\"32 F\", \"expectedOutput\":\"0 C\", \"expectedExitCode\":0}");
+        sb.AppendLine("      {\"id\":\"tc4\", \"name\":\"Invalid unit\", \"targetType\":\"cli\", \"description\":\"Bad unit\",");
+        sb.AppendLine("       \"expectedBehavior\":\"prints error and exits 1\",");
+        sb.AppendLine("       \"input\":\"20 X\", \"expectedOutput\":\"Error: unknown unit 'X'\", \"expectedExitCode\":1}");
         sb.AppendLine();
 
         if (registry != null)
@@ -107,7 +122,7 @@ public static class PromptBuilder
         sb.AppendLine("  \"returnType\":\"...\"}], \"csharpInterface\": \"public interface I<Name> { ... }\"|null,");
         sb.AppendLine("  \"connections\": [{\"fromMethod\":\"...\",\"toComponent\":\"...\",");
         sb.AppendLine("  \"toMethod\":\"...\",\"argMappings\":[]}], \"entryType\": \"file\"|\"stdin\", \"branchCondition\": \"...\"|null,");
-        sb.AppendLine("  \"testCases\": [{\"id\":\"...\",\"name\":\"...\",\"targetType\":\"...\",\"description\":\"...\",\"expectedBehavior\":\"...\"}] }],");
+        sb.AppendLine("  \"testCases\": [{\"id\":\"...\",\"name\":\"...\",\"targetType\":\"...\",\"description\":\"...\",\"expectedBehavior\":\"...\",\"input\":\"...\",\"expectedOutput\":\"...\",\"expectedExitCode\":0}] }],");
         sb.AppendLine("  \"deploymentTopology\": \"...\" }");
         return sb.ToString();
     }

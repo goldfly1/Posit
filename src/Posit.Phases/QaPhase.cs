@@ -107,8 +107,12 @@ public sealed class QaPhase : IPhase
             files.Add(new TestDataFile
             {
                 FileName = isStdin ? $"stdin_{files.Count}.txt" : $"testdata_{files.Count}.txt",
-                Content = inputContent,
-                Description = tc.ExpectedBehavior ?? tc.Description
+                // Architect's concrete input/answer key are primary (may be empty
+                // for legacy contracts — then the description heuristic stands).
+                Content = string.IsNullOrWhiteSpace(tc.Input) ? inputContent : tc.Input,
+                Description = tc.ExpectedBehavior ?? tc.Description,
+                ExpectedOutput = tc.ExpectedOutput ?? "",
+                ExpectedExitCode = tc.ExpectedExitCode
             });
         }
 

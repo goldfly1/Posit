@@ -37,6 +37,18 @@ public sealed class PseudodataBot
             var (content, expectedOutput, expectedExitCode) = GenerateForCategory(
                 category, inputShape, transformRule, isStdin, tc, systemContext);
 
+            // Architect's answer key is PRIMARY — overrides bot heuristics.
+            // The architect was prompted to provide concrete input/expectedOutput
+            // per test case; the bot's category generators are the fallback for
+            // test cases that lack them (legacy contracts).
+            if (!string.IsNullOrWhiteSpace(tc.Input))
+                content = tc.Input;
+            if (!string.IsNullOrWhiteSpace(tc.ExpectedOutput))
+            {
+                expectedOutput = tc.ExpectedOutput;
+                expectedExitCode = tc.ExpectedExitCode;
+            }
+
             result.Add(new TestDataFile
             {
                 FileName = isStdin ? $"stdin_{result.Count}.txt" : $"testdata_{result.Count}.txt",

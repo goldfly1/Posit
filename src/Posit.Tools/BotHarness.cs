@@ -200,19 +200,18 @@ public sealed class BotHarness
 
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
                 tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior,
-                verdict.Result == JudgeResult.Pass));
+                verdict.Result == JudgeResult.Pass, verdict));
         }
 
-        var report = QaReport.Build(
-            results.Select((r, i) =>
-            {
-                var tc = testCases[i];
-                var run = new TestCaseRun(r.Output, "", r.Matches ? 0 : 1);
-                return new JudgeVerdict(
-                    r.Matches ? JudgeResult.Pass : JudgeResult.Fail,
-                    JudgeLayer.ExactMatch,
-                    r.Matches ? "Pass" : "Fail");
-            }).ToArray());
+        // Report carries the REAL per-test verdicts (layer + reason) — no rebuild.
+        var report = QaReport.Build([.. results
+            .Where(r => r.Verdict != null)
+            .Select(r => r.Verdict!)]);
+        // If no verdicts were recorded (e.g. all cases failed before judging),
+        // fall back to a failed report so success is never assumed.
+        if (report.Verdicts.Length == 0 && results.Count > 0)
+            report = QaReport.Build([.. results.Select(r => new JudgeVerdict(
+                JudgeResult.Fail, JudgeLayer.ExactMatch, "No verdict recorded"))]);
 
         return new BotHarnessResult(results.All(r => r.Matches), [.. results], tempDir, null, report);
     }
@@ -264,5 +263,5 @@ public sealed class BotHarness
 }
 
 public sealed record BotHarnessResult(bool Success, TestCaseResult[] Results, string? TempDir, string? Error, QaReport? Report = null);
-public sealed record TestCaseResult(string Id, string Name, bool Ran, string Output, string Expected, bool Matches);
+public sealed record TestCaseResult(string Id, string Name, bool Ran, string Output, string Expected, bool Matches, JudgeVerdict? Verdict = null);
 internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string ExpectedOutput = "", int ExpectedExitCode = 0);
