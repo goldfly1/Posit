@@ -153,6 +153,21 @@ public static class WiringGenerator
                 }
             }
             else if (ci == 0 &&
+                     targetSig.ParamTypes.Length == 1 &&
+                     NormalizeType(targetSig.ParamTypes[0]) == "string[]")
+            {
+                // Architect connected Run → logic directly but the logic takes
+                // string[] LINES (e.g. Convert(lines)) and the CLI is file-type.
+                // The default path would split the FILE PATH ('\n' of a path is
+                // empty → array with the path itself → garbage). Read the file's
+                // lines deterministically instead (T3 attempt-1 failure).
+                sb.AppendLine($"            var linesArg = System.IO.File.ReadAllLines(args[0]);");
+                sb.AppendLine($"            var ret{retVarCounter} = {targetClass}.{targetSig.Name}(linesArg);");
+                EmitPrint(sb, targetSig.ReturnType, $"ret{retVarCounter}", isLast: ci == comp.Connections.Length - 1);
+                retVarCounter++;
+                continue;
+            }
+            else if (ci == 0 &&
                      targetSig.ParamTypes.Length > 1 &&
                      targetSig.ParamTypes
                          .All(p => NormalizeType(p) == "string"))
@@ -212,6 +227,7 @@ public static class WiringGenerator
                 else
                 {
                     // Print result if this is the last connection (final output).
+                    // Error-string convention lives inside EmitPrint (both paths).
                     if (ci == comp.Connections.Length - 1)
                         EmitPrint(sb, retType, retVarName, isLast: true);
                 }
@@ -387,7 +403,21 @@ public static class WiringGenerator
         if (!isLast) return;
         var t = NormalizeType(retType);
         if (t is "string" or "int" or "long" or "double" or "bool")
-            sb.AppendLine($"            Console.WriteLine({varName});");
+        {
+            // "Error:" string convention (T3 attempt-2): a string return starting
+            // with "Error:" is a failure — stderr + exit 1. Success prints stdout.
+            if (t == "string")
+            {
+                sb.AppendLine($"            if ({varName}.StartsWith(\"Error:\"))");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                Console.Error.WriteLine({varName});");
+                sb.AppendLine("                return 1;");
+                sb.AppendLine("            }");
+                sb.AppendLine($"            Console.WriteLine({varName});");
+            }
+            else
+                sb.AppendLine($"            Console.WriteLine({varName});");
+        }
         else if (t is "string[]" or "List<string>")
             sb.AppendLine($"            Console.WriteLine(string.Join(\"\\n\", {varName}));");
         else if (t == "Dictionary<string,string>")
