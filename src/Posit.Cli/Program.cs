@@ -189,10 +189,37 @@ internal static class Program
             var bundle = Deserialize<SourceCodeBundle>(bundleArtifact.PayloadJson);
             if (contract == null || bundle == null) break;
 
-            // Build failure feedback for the model
+            // Snapshot for the regression gate: if this fix round makes the score
+            // worse, we restore this payload and the previous harness result.
+            var previousPayload = bundleArtifact.PayloadJson;
+            var previousResult = result;
+            var previousPasses = result.Results.Count(r => r.Matches);
+
+            // Rich failure table: per test case — the INPUT fed, the EXACT expected
+            // output, the actual output, exit codes. The architect's answer key
+            // (Phase A) carries input/expected; the harness result carries actual.
+            // Without the input column the model cannot trace which data broke.
+            var cliCompForFix = contract.Components.FirstOrDefault(c => c.Connections.Length > 0);
+            var contractTcById = (cliCompForFix?.TestCases ?? [])
+                .Concat(contract.Components.SelectMany(c => c.TestCases))
+                .GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
             var failureReport = new List<string>();
             foreach (var tc in testFailures)
-                failureReport.Add($"Test '{tc.Id}': expected '{tc.Expected}', got '{tc.Output}'");
+            {
+                failureReport.Add($"Test '{tc.Id}' ({tc.Name}):");
+                if (contractTcById.TryGetValue(tc.Id, out var ct))
+                {
+                    failureReport.Add($"  Input given to program: '{ct.Input}'");
+                    failureReport.Add($"  Expected stdout: '{(ct.ExpectedOutput.Length > 0 ? ct.ExpectedOutput : tc.Expected)}'");
+                    failureReport.Add($"  Expected exit code: {ct.ExpectedExitCode}");
+                }
+                else
+                {
+                    failureReport.Add($"  Expected stdout: '{tc.Expected}'");
+                }
+                failureReport.Add($"  Actual stdout: '{tc.Output}'");
+                failureReport.Add($"  Verdict: {(tc.Verdict != null ? $"{tc.Verdict.Layer}: {tc.Verdict.Reason}" : "failed")}");
+            }
 
             // Regenerate each logic component with test failure feedback
             var updatedFiles = bundle.Files.ToDictionary(f => f.Path, f => f.Content);
@@ -207,6 +234,21 @@ internal static class Program
                 if (!updatedFiles.TryGetValue(compPath, out var currentCode)) continue;
 
                 Console.Error.WriteLine($"[impl-fixer] Regenerating {comp.Name}...");
+
+                // Retry diversity: attempt 2+ must not resubmit the same logic.
+                // Raise temperature and demand a different approach — same prompt
+                // + same model + same temp = same output (observed: identical
+                // 675-char regenerations in T8).
+                var diversityNote = implRetry > 0
+                    ? $"""
+
+                    ATTEMPT {implRetry + 1} — DIVERSITY REQUIRED:
+                    Your previous fix did NOT resolve these failures. Do NOT submit
+                    the same logic again with cosmetic changes. Take a DIFFERENT
+                    algorithmic approach: re-read the test input format, reconsider
+                    how you parse and transform the data.
+                    """
+                    : "";
 
                 var fixPrompt = $"""
                     You are a Senior C# Developer. Your implementation has a bug — it produces wrong output.
@@ -233,27 +275,37 @@ internal static class Program
                     4. Output ONLY the C# class file — no markdown fences, no explanations.
                     5. Include `using` directives at the top.
                     6. Put the class in `namespace {comp.Name}`.
-                    7. Re-read the ORIGINAL SPEC carefully — make sure your input parsing matches the spec's input format exactly.
+                    7. Re-read the ORIGINAL SPEC carefully — make sure your input parsing matches the spec's input format exactly.{diversityNote}
                     """;
 
+                // Retry diversity: higher temperature on attempt 2+ — same prompt
+                // + same model + same temp = same output (observed in T8: two
+                // identical 675-char regenerations).
+                var fixTemperature = implRetry > 0 ? 0.7 : 0.3;
                 var fixPromptTemplate = new PromptTemplate
                 {
                     PhaseId = new PhaseId("impl-fix"), Version = new PromptVersion("1.0.0"),
                     SystemPrompt = fixPrompt, OutputFormatSpec = "raw C# source code",
-                    ModelTier = ModelTier.Fast, Temperature = 0.3, MaxOutputTokens = 8192,
+                    ModelTier = ModelTier.Fast, Temperature = fixTemperature, MaxOutputTokens = 8192,
                     OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "CSharpSource",
                     Status = PromptStatus.Active
                 };
+                var fixModelRoute = new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
+                    ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = fixTemperature };
                 var fixResult = await gateway.GenerateAsync(
-                    new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
-                        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.3 },
+                    fixModelRoute,
                     fixPromptTemplate,
                     new PhaseContext
                     {
                         SessionId = sessionId, PhaseId = new PhaseId("impl-fix"),
                         Prompt = fixPromptTemplate,
-                        ModelRoute = new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
-                            ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.3 },
+                        // Full fix context goes in the USER prompt — the channel
+                        // the gateway sends as the actual user turn. Leaving it
+                        // null made userLen=132 ("Respond according to the system
+                        // instructions") while the context sat in the system
+                        // prompt. The "═══" marker routes it verbatim.
+                        UserRequest = fixPrompt,
+                        ModelRoute = fixModelRoute,
                         BudgetRemaining = new BudgetRemaining { Amount = 10m, Cap = 10m }
                     },
                     CancellationToken.None);
@@ -294,6 +346,17 @@ internal static class Program
                 Console.Error.WriteLine($"[qa] {result.Report.Summary}");
             foreach (var tc in result.Results)
                 Console.Error.WriteLine($"  {tc.Id}: {(tc.Matches ? "PASS" : "FAIL")} — {tc.Output}");
+
+            // Regression gate: a fix that makes the score worse is auto-reverted.
+            // Fixers must never leave the pipeline worse than they found it.
+            var newPasses = result.Results.Count(r => r.Matches);
+            if (newPasses < previousPasses)
+            {
+                Console.Error.WriteLine($"[impl-fixer] REGRESSION: {previousPasses}→{newPasses} passing — reverting fix and stopping loop");
+                await repo.StageAsync(bundleArtifact with { PayloadJson = previousPayload });
+                result = previousResult;
+                break;
+            }
         }
 
         return result.Success ? 0 : 1;
