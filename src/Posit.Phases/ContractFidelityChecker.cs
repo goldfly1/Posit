@@ -20,13 +20,25 @@ public static class ContractFidelityChecker
     // Action verbs the spec may use — matched case-insensitively as substrings
     // against the union of method names, test-case names, and test-case descriptions.
     // Extended as new trials surface new verbs.
+    //
+    // NOTE: "print", "read", "write" are I/O verbs — they describe the CLI
+    // orchestrator's job (handled by EmitPrint / the entry harness), not logic
+    // decomposition. Counting them as action verbs would force a degenerate
+    // single-method spec like "convert and print" to decompose into two methods
+    // when one (ConvertTemperature) is the correct shape (T6 rack evidence).
+    // They remain in the COVERAGE check (a method/test mentioning them is fine)
+    // but are EXCLUDED from the degenerate-contract verb count.
     private static readonly string[] ActionVerbs =
     [
         "filter", "count", "parse", "merge", "convert", "validate", "sort",
-        "format", "transform", "read", "write", "export", "import", "analyze",
+        "format", "transform", "export", "import", "analyze",
         "aggregate", "group", "search", "replace", "split", "detect", "check",
-        "calculate", "compare", "extract", "load", "save", "print",
+        "calculate", "compare", "extract", "load", "save",
     ];
+
+    // I/O verbs excluded from the degenerate-contract verb count (they're the
+    // orchestrator's responsibility, not logic decomposition).
+    private static readonly string[] IoVerbs = ["print", "read", "write"];
 
     /// <summary>
     /// Check contract fidelity against the original spec text.
@@ -39,11 +51,14 @@ public static class ContractFidelityChecker
             return errors; // No spec to check against — skip (e.g., smoke tests)
 
         // ── Check 1: Spec-verb coverage ──
+        // Scan both action verbs AND I/O verbs for coverage, but only action
+        // verbs count toward the degenerate-contract verb total (Check 2).
+        var allScanVerbs = ActionVerbs.Concat(IoVerbs).ToArray();
         var specLower = specText.ToLowerInvariant();
         var foundVerbs = new HashSet<string>();
         var missingVerbs = new List<string>();
 
-        foreach (var verb in ActionVerbs)
+        foreach (var verb in allScanVerbs)
         {
             if (!specLower.Contains(verb))
                 continue; // Spec doesn't use this verb — irrelevant
@@ -102,19 +117,23 @@ public static class ContractFidelityChecker
         }
 
         // ── Check 2: Degenerate contract rejection ──
-        // If the spec has ≥2 distinct action verbs but the contract has 1 logic
-        // component with 1 method, the architect collapsed a multi-step spec.
+        // If the spec has ≥2 distinct ACTION verbs (I/O verbs excluded — "print"
+        // is the orchestrator's job) but the contract has 1 logic component with
+        // 1 method, the architect collapsed a multi-step spec.
+        var foundActionVerbs = foundVerbs
+            .Where(v => !IoVerbs.Contains(v))
+            .ToList();
         var logicComponents = contract.Components
             .Where(c => c.Classification != ModuleClassification.IoShell)
             .ToList();
         var totalLogicMethods = logicComponents.Sum(c => c.MethodSignatures.Length);
 
-        if (foundVerbs.Count >= 2 && logicComponents.Count == 1 && totalLogicMethods == 1)
+        if (foundActionVerbs.Count >= 2 && logicComponents.Count == 1 && totalLogicMethods == 1)
         {
             var methodName = logicComponents[0].MethodSignatures[0]?.Name ?? "?";
             errors.Add(new FidelityError(
                 "degenerate-contract",
-                $"Spec has {foundVerbs.Count} action verbs ({string.Join(", ", foundVerbs)}) "
+                $"Spec has {foundActionVerbs.Count} action verbs ({string.Join(", ", foundActionVerbs)}) "
                 + $"but the contract has ONE logic component with ONE method "
                 + $"('{methodName}'). A multi-verb spec needs decomposition into "
                 + $"multiple methods or components — one method cannot cover "
