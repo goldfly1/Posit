@@ -99,9 +99,17 @@ public static class BotHarnessDocker
         if (stdinInput != null)
             args += " -i";
         args += $" posit-run-{safeTag.ToLowerInvariant()}";
-        // Only pass input as CLI arg if no stdin piping
+        // Only pass input as CLI arg if no stdin piping.
+        // ARG-ARRAY DISCIPLINE: the harness builds ONE composite string
+        // ("testdata_tc1.txt ERROR") — quoting that composite welds both args
+        // into a single argv element (T8 rack regression, '/app/testdata_tc1.txt
+        // ERROR' not found). Split back into argv elements HERE and quote each
+        // individually; the harness keeps its composite form.
         if (!string.IsNullOrEmpty(input) && stdinInput == null)
-            args += $" {EscapeShellArg(input)}";
+        {
+            foreach (var part in SplitCompositeArg(input))
+                args += $" {EscapeShellArg(part)}";
+        }
 
         var psi = new ProcessStartInfo
         {
@@ -158,6 +166,19 @@ public static class BotHarnessDocker
         if (arg.Contains(' ') || arg.Contains('"') || arg.Contains('\t'))
             return "\"" + arg.Replace("\"", "\\\"") + "\"";
         return arg;
+    }
+
+    /// <summary>
+    /// Split the harness's composite cliArg ("testdata_tc1.txt ERROR") back into
+    /// argv elements. The harness joins file paths + CliArgs with single spaces
+    /// (BotHarness.cs multi-file and scalar branches); a composite containing a
+    /// SPACE INSIDE an element (quoted path) is not currently producible by the
+    /// harness — CliArgs are space-separated plain words by contract.
+    /// </summary>
+    internal static string[] SplitCompositeArg(string composite)
+    {
+        if (string.IsNullOrEmpty(composite)) return [];
+        return composite.Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 }
 
