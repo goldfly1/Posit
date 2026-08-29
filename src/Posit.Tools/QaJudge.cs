@@ -29,14 +29,18 @@ public sealed class QaJudge
     /// </summary>
     public async Task<JudgeVerdict> JudgeAsync(
         TestCaseRun run,
-        string expectedOutput,
+        string? expectedOutput,
         int expectedExitCode,
         string expectedBehavior,
         string spec,
         CancellationToken ct = default)
     {
-        // Layer 1: Exact match (deterministic)
-        if (!string.IsNullOrEmpty(expectedOutput))
+        // Layer 1: Exact match (deterministic).
+        // expectedOutput == null → no key available, fall to structural.
+        // expectedOutput == ""  → the key IS the empty string: empty stdout +
+        // expectedExitCode must match exactly (T12 tc3: merged-empty → '' exit 0
+        // is a PASS; the structural layer would wrongly demand non-empty output).
+        if (expectedOutput != null)
         {
             var exactMatch = run.Stdout.Trim().Equals(expectedOutput.Trim(), StringComparison.Ordinal)
                              && run.ExitCode == expectedExitCode;
@@ -47,7 +51,8 @@ public sealed class QaJudge
         }
 
         // Layer 2: Structural check (deterministic)
-        // If no exact expected output, check structural validity:
+        // Only for cases with NO answer key. If no exact expected output, check
+        // structural validity:
         // - Error cases (exit code 1) must have non-empty stderr or error in stdout
         // - Success cases (exit code 0) must have non-empty stdout
         var structuralPass = CheckStructural(run, expectedBehavior);

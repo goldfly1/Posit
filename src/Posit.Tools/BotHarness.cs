@@ -294,7 +294,10 @@ public sealed class BotHarness
             var cases = component.TestCases.Select((tc, i) =>
             {
                 var key = $"tc{i + 1}";
-                var expectedOutput = testSuite?.ExpectedOutputs?.TryGetValue(key, out var eo) == true ? eo : "";
+                // Null = no answer key in the suite (structural layer judges).
+                // "" = the key IS the empty string (exact match on empty stdout).
+                var expectedOutput = testSuite?.ExpectedOutputs?.TryGetValue(key, out var eo) == true
+                    ? eo : null;
                 var expectedExit = testSuite?.ExpectedExitCodes?.TryGetValue(key, out var ee) == true ? ee : 0;
                 // Input = the architect's CONCRETE input (Phase A contract field),
                 // not the prose Description. The old mapping put Description here,
@@ -325,4 +328,4 @@ public sealed record TestCaseResult(string Id, string Name, bool Ran, string Out
     /// </summary>
     public string FedInput { get; init; } = "";
 }
-internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string ExpectedOutput = "", int ExpectedExitCode = 0);
+internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string? ExpectedOutput = null, int ExpectedExitCode = 0);
