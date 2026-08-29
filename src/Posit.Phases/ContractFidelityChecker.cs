@@ -140,7 +140,29 @@ public static class ContractFidelityChecker
                 + $"parse+filter+count (or equivalent). Re-decompose the spec."));
         }
 
-        // ── Check 3: Output-shape mismatch ──
+        // ── Check 3: Connection completeness ──
+        // Every logic component must appear as a ToComponent in some connection.
+        // T10 rack: architect declared a ProductCsvProcessor logic component but
+        // connected CLI → FileIO.ReadFile → print, bypassing the logic entirely.
+        // The program printed raw file content because no transformation ran.
+        var connectedComponents = contract.Components
+            .Where(c => c.Connections is { Length: > 0 })
+            .SelectMany(c => c.Connections)
+            .Select(conn => conn.ToComponent)
+            .ToHashSet();
+        foreach (var logic in logicComponents)
+        {
+            if (!connectedComponents.Contains(logic.Name))
+            {
+                errors.Add(new FidelityError(
+                    "unconnected-logic",
+                    $"Logic component '{logic.Name}' is declared but never called in any "
+                    + $"connection. Every logic component must appear as a connection target "
+                    + $"(ToComponent). The connection chain must include all logic components."));
+            }
+        }
+
+        // ── Check 4: Output-shape mismatch ──
         // If the spec demands formatted output (contains a print-format hint like
         // 'LEVEL: N' or 'key=value') but no test case carries OutputFormat, warn.
         // This is a soft check (warning, not hard fail) — the architect might
