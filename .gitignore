@@ -14,3 +14,4 @@ obj/
 .posit/staging/
 .posit/output/
 .posit/backups/*.sql.gz
+__pycache__/
