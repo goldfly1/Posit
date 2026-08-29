@@ -171,20 +171,35 @@ public static class WiringGenerator
                 // ConvertTemperature(fileContent0) got "" because stdin has no args).
                 var argCount = targetSig.ParamTypes.Length;
                 var argExprs = new List<string>();
+                var seenFileParam = false;
                 for (var ai = 0; ai < argCount; ai++)
                 {
                     var pt = NormalizeType(targetSig.ParamTypes[ai]);
                     if (pt == "string[]")
                     {
+                        // string[] params always read a file (T3 lines, T12 lines).
                         var lv = $"linesArg{ai}";
                         sb.AppendLine($"            var {lv} = args.Length > {ai} ? System.IO.File.ReadAllLines(args[{ai}]) : Array.Empty<string>();");
                         argExprs.Add(lv);
+                        seenFileParam = true;
                     }
-                    else
+                    else if (!seenFileParam)
                     {
+                        // FIRST string param (before any string[] seen): file content.
                         var fv = $"fileContent{ai}";
                         sb.AppendLine($"            var {fv} = args.Length > {ai} ? System.IO.File.ReadAllText(args[{ai}]) : \"\";");
                         argExprs.Add(fv);
+                        seenFileParam = true;
+                    }
+                    else
+                    {
+                        // SUBSEQUENT string params are SCALAR CLI args, not files
+                        // (T8 a1: level 'ERROR' was File.ReadAllText'd and the count
+                        // collapsed to 0). File-entry CLI conventions: file args
+                        // first, literal scalars after. Pass args[i] through.
+                        var sv = $"scalarArg{ai}";
+                        sb.AppendLine($"            var {sv} = args.Length > {ai} ? args[{ai}] : \"\";");
+                        argExprs.Add(sv);
                     }
                 }
                 var isInstanceTarget = targetComp.Classification != ModuleClassification.IoShell;
