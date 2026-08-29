@@ -149,8 +149,14 @@ public static class BotHarnessDocker
 
     private static string EscapeShellArg(string arg)
     {
-        // Docker passes args to the ENTRYPOINT directly. Don't add quotes —
-        // they become part of the argument value, causing FileNotFoundException.
+        // Real escaping (was a no-op — worked only because every arg so far was
+        // space-free; a content-bearing or spaced arg smashed into one argv).
+        // ProcessStartInfo.Arguments → docker CLI → ENTRYPOINT argv: quote the
+        // whole arg and double any inner quotes. Docker's argv split respects
+        // the quotes; the doubled quotes survive as literal quotes in argv.
+        if (string.IsNullOrEmpty(arg)) return arg;
+        if (arg.Contains(' ') || arg.Contains('"') || arg.Contains('\t'))
+            return "\"" + arg.Replace("\"", "\\\"") + "\"";
         return arg;
     }
 }

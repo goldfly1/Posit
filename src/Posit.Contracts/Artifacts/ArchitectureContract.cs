@@ -110,6 +110,17 @@ public record ComponentTestCase(
     /// AFTER the testdata file path in harness invocation order.
     /// </summary>
     public string CliArgs { get; init; } = "";
+
+    /// <summary>
+    /// Output ROLE for the CLI's final print (T8 'ERROR: 2' / 'No entries' class).
+    /// Optional template for value outputs: '{value}' is replaced by the computed
+    /// result, e.g. 'ERROR: {value}'. Prefix text for empty results: e.g.
+    /// 'No entries' prints when the empty-output program result collates to empty.
+    /// Null = print the raw value (current default). The emitter reads this from
+    /// the FIRST test case that sets it (all cases share one final print site).
+    /// </summary>
+    public string? OutputFormat { get; init; }
+    public string? EmptyOutputText { get; init; }
 }
 
 public record DataStore(string Id, string Name, DataStoreKind Kind, string Schema, PersistenceKind Persistence);

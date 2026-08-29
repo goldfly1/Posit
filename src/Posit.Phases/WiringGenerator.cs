@@ -43,8 +43,13 @@ public static class WiringGenerator
         sb.AppendLine("    {");
 
         var isCli = comp.Connections.Length > 0;
+        // Output role: the CLI component's test cases may carry OutputFormat /
+        // EmptyOutputText (T8 'ERROR: {value}' / 'No entries'). All cases share
+        // one final print site — first non-null wins.
+        var outputFormat = comp.TestCases.FirstOrDefault(tc => tc.OutputFormat is not null)?.OutputFormat;
+        var emptyText = comp.TestCases.FirstOrDefault(tc => tc.EmptyOutputText is not null)?.EmptyOutputText;
         if (isCli)
-            EmitCliWiring(sb, comp, contract, implSignatures, stubSignatures);
+            EmitCliWiring(sb, comp, contract, implSignatures, stubSignatures, outputFormat, emptyText);
         else
             EmitNonCliWiring(sb, comp, contract, implSignatures, stubSignatures);
 
@@ -57,7 +62,8 @@ public static class WiringGenerator
 
     private static void EmitCliWiring(
         StringBuilder sb, Component comp, ArchitectureContract contract,
-        Dictionary<string, List<CsMethodSignature>> impl, Dictionary<string, List<CsMethodSignature>> stubs)
+        Dictionary<string, List<CsMethodSignature>> impl, Dictionary<string, List<CsMethodSignature>> stubs,
+        string? outputFormat = null, string? emptyText = null)
     {
         sb.AppendLine("        public static int Main(string[] args)");
         sb.AppendLine("        {");
@@ -81,7 +87,7 @@ public static class WiringGenerator
 
         sb.AppendLine("            try");
         sb.AppendLine("            {");
-        AppendConnectionCalls(sb, comp, contract, impl, stubs, isStdin ? "inputLine" : "args[0]");
+        AppendConnectionCalls(sb, comp, contract, impl, stubs, isStdin ? "inputLine" : "args[0]", outputFormat, emptyText);
         sb.AppendLine("                return 0;");
         sb.AppendLine("            }");
         sb.AppendLine("            catch (System.IO.FileNotFoundException ex)");
@@ -110,7 +116,7 @@ public static class WiringGenerator
     private static void AppendConnectionCalls(
         StringBuilder sb, Component comp, ArchitectureContract contract,
         Dictionary<string, List<CsMethodSignature>> impl, Dictionary<string, List<CsMethodSignature>> stubs,
-        string entryVar)
+        string entryVar, string? outputFormat = null, string? emptyText = null)
     {
         // Linear chaining: output of step N feeds into step N+1.
         var prevRet = entryVar;
@@ -163,43 +169,70 @@ public static class WiringGenerator
                      targetSig.ParamTypes
                          .All(p => NormalizeType(p) == "string[]" || NormalizeType(p) == "string"))
             {
-                // Architect connected Run → logic directly and the logic takes
-                // file-shaped params (string content or string[] lines, any count).
-                // FILE-TYPE CLIs ONLY (isStdinEntry guard): on a stdin entry the
-                // input var is the stdin line, not file args — routing it through
-                // File.ReadAllText(args[0]) produced 'Error: empty input' (T6 a3:
-                // ConvertTemperature(fileContent0) got "" because stdin has no args).
+                // Architect connected Run → logic directly on a FILE-entry CLI.
+                // ROLE-DISPATCH (not shape-guessing): every param is classified and
+                // the emission follows the role. Roles:
+                //   Lines   (string[])      → ReadAllLines(args[i])       [T3/T12]
+                //   Path    (string)        → args[i] RAW — the callee opens the
+                //                             file itself (IoShell stubs like
+                //                             ReadFile(path)); reading it as content
+                //                             then handing content to a path param
+                //                             was the T8 a3 double-read.
+                //   Content (string)        → ReadAllText(args[i]); only the FIRST
+                //                             content-role param consumes the file
+                //                             arg slot at its index.
+                //   Scalar  (string)        → args[i] passthrough (filter words etc).
+                // File arg slots are consumed in declared order; a Path param and a
+                // Content param each eat one slot, Scalars eat their own slot raw.
                 var argCount = targetSig.ParamTypes.Length;
                 var argExprs = new List<string>();
-                var seenFileParam = false;
+                var contentTaken = false;
                 for (var ai = 0; ai < argCount; ai++)
                 {
-                    var pt = NormalizeType(targetSig.ParamTypes[ai]);
-                    if (pt == "string[]")
+                    var role = ClassifyParamRole(conn.ToMethod, targetComp, targetSig, ai);
+                    switch (role)
                     {
-                        // string[] params always read a file (T3 lines, T12 lines).
-                        var lv = $"linesArg{ai}";
-                        sb.AppendLine($"            var {lv} = args.Length > {ai} ? System.IO.File.ReadAllLines(args[{ai}]) : Array.Empty<string>();");
-                        argExprs.Add(lv);
-                        seenFileParam = true;
-                    }
-                    else if (!seenFileParam)
-                    {
-                        // FIRST string param (before any string[] seen): file content.
-                        var fv = $"fileContent{ai}";
-                        sb.AppendLine($"            var {fv} = args.Length > {ai} ? System.IO.File.ReadAllText(args[{ai}]) : \"\";");
-                        argExprs.Add(fv);
-                        seenFileParam = true;
-                    }
-                    else
-                    {
-                        // SUBSEQUENT string params are SCALAR CLI args, not files
-                        // (T8 a1: level 'ERROR' was File.ReadAllText'd and the count
-                        // collapsed to 0). File-entry CLI conventions: file args
-                        // first, literal scalars after. Pass args[i] through.
-                        var sv = $"scalarArg{ai}";
-                        sb.AppendLine($"            var {sv} = args.Length > {ai} ? args[{ai}] : \"\";");
-                        argExprs.Add(sv);
+                        case ParamRole.Lines:
+                        {
+                            var lv = $"linesArg{ai}";
+                            sb.AppendLine($"            var {lv} = args.Length > {ai} ? System.IO.File.ReadAllLines(args[{ai}]) : Array.Empty<string>();");
+                            argExprs.Add(lv);
+                            break;
+                        }
+                        case ParamRole.Path:
+                        {
+                            // Callee opens the file — pass the path through untouched.
+                            var pv = $"pathArg{ai}";
+                            sb.AppendLine($"            var {pv} = args.Length > {ai} ? args[{ai}] : \"\";");
+                            argExprs.Add(pv);
+                            break;
+                        }
+                        case ParamRole.Content when !contentTaken:
+                        {
+                            var fv = $"fileContent{ai}";
+                            sb.AppendLine($"            var {fv} = args.Length > {ai} ? System.IO.File.ReadAllText(args[{ai}]) : \"\";");
+                            argExprs.Add(fv);
+                            contentTaken = true;
+                            break;
+                        }
+                        case ParamRole.Content:
+                        {
+                            // Second Content-role param on a Logic target: the file
+                            // slot pattern can't express two contents — demote to
+                            // scalar rather than silently double-read (T12 two-file
+                            // specs use Lines/string[] instead).
+                            goto default;
+                        }
+                        default:
+                        {
+                            // Scalar CLI arg (or a second Content param demoted because
+                            // the file slot was already consumed — a 2 Content-param
+                            // spec is expressed as two string[] (Lines) per T12).
+                            var sv = $"scalarArg{ai}";
+                            sb.AppendLine($"            var {sv} = args.Length > {ai} ? args[{ai}] : \"\";");
+                            argExprs.Add(sv);
+                            break;
+                        }
                     }
                 }
                 var isInstanceTarget = targetComp.Classification != ModuleClassification.IoShell;
@@ -212,7 +245,8 @@ public static class WiringGenerator
                     receiver = instanceVar;
                 }
                 sb.AppendLine($"            var ret{retVarCounter} = {receiver}.{targetSig.Name}({string.Join(", ", argExprs)});");
-                EmitPrint(sb, targetSig.ReturnType, $"ret{retVarCounter}", isLast: ci == comp.Connections.Length - 1);
+                EmitPrint(sb, targetSig.ReturnType, $"ret{retVarCounter}", isLast: ci == comp.Connections.Length - 1,
+                    outputFormat, emptyText);
                 // Chain state MUST advance here — a subsequent connection (e.g.
                 // MergeConfigs(ParseIni(...), ...)) feeds on this return value.
                 // Missing this made the T12 corpus case emit args[0] instead of ret0.
@@ -261,7 +295,7 @@ public static class WiringGenerator
                     // Print result if this is the last connection (final output).
                     // Error-string convention lives inside EmitPrint (both paths).
                     if (ci == comp.Connections.Length - 1)
-                        EmitPrint(sb, retType, retVarName, isLast: true);
+                        EmitPrint(sb, retType, retVarName, isLast: true, outputFormat, emptyText);
                 }
 
                 prevRet = retVarName;
@@ -454,10 +488,75 @@ public static class WiringGenerator
     /// (custom classes) is JSON-serialized. Raw WriteLine on ANY non-scalar
     /// prints its TYPE NAME — the T12 'ConfigMerger.MergeResult' failure.
     /// </summary>
-    private static void EmitPrint(StringBuilder sb, string retType, string varName, bool isLast)
+    private static void EmitPrint(StringBuilder sb, string retType, string varName, bool isLast,
+        string? outputFormat = null, string? emptyText = null)
     {
         if (!isLast) return;
         var t = NormalizeType(retType);
+        // Output ROLE (role-dispatch refactor #3): OutputFormat='ERROR: {value}' /
+        // EmptyOutputText='No entries' turn a raw value print into a formatted one.
+        // Applied on top of ANY type branch — the template/empty text wraps the
+        // collated value expression.
+        if (outputFormat is not null || emptyText is not null)
+        {
+            // Collated value expression per type (same shapes as the plain branch).
+            string rawExpr = t switch
+            {
+                "string" or "int" or "long" or "double" or "bool" => varName,
+                "string[]" or "List<string>" => $"string.Join(\"\\n\", {varName})",
+                "Dictionary<string,string>" => $"string.Join(\"\\n\", {varName}.Select(kv => kv.Key + \"=\" + kv.Value))",
+                _ => $"System.Text.Json.JsonSerializer.Serialize({varName})",
+            };
+            // Emptiness expression: collection Count/Length, string Length, and —
+            // for numeric counts — the value ITSELF (count==0 means "no entries":
+            // T8 tc2 'No entries' on an empty log with int CountByLevel return).
+            var countExpr = t switch
+            {
+                "string[]" => $"{varName}.Length",
+                "List<string>" => $"{varName}.Count",
+                "Dictionary<string,string>" => $"{varName}.Count",
+                "string" => $"{varName}.Length",
+                "int" or "long" => varName,
+                _ => null,
+            };
+            if (emptyText is not null && countExpr is not null)
+            {
+                sb.AppendLine($"            if ({countExpr} == 0)");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                Console.WriteLine(\"{emptyText}\");");
+                sb.AppendLine("                return 0;");
+                sb.AppendLine("            }");
+            }
+            // Format template: replace {value} with the value expression spliced
+            // into the string. Avoids trailing ' + ""' leftovers.
+            string printExpr;
+            if (outputFormat is not null)
+            {
+                var pieces = outputFormat.Split("{value}");
+                var head = pieces[0];
+                var tail = pieces.Length > 1 ? pieces[1] : "";
+                printExpr = (head, tail) switch
+                {
+                    ("", "") => varName,                      // template was just {value}
+                    (_, "") => $"\"{head}\" + {varName}",      // value at end (T8 'ERROR: {value}')
+                    ("", _) => $"{varName} + \"{tail}\"",      // value at start
+                    _ => $"\"{head}\" + {varName} + \"{tail}\"",
+                };
+            }
+            else
+                printExpr = rawExpr;
+            // Error convention only applies to raw unformatted strings.
+            if (t == "string" && outputFormat is null)
+            {
+                sb.AppendLine($"            if ({varName}.StartsWith(\"Error:\"))");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                Console.Error.WriteLine({varName});");
+                sb.AppendLine("                return 1;");
+                sb.AppendLine("            }");
+            }
+            sb.AppendLine($"            Console.WriteLine({printExpr});");
+            return;
+        }
         if (t is "string" or "int" or "long" or "double" or "bool")
         {
             // "Error:" string convention (T3 attempt-2): a string return starting
@@ -551,6 +650,55 @@ public static class WiringGenerator
             "string[]" => "Array.Empty<string>()",
             _ => $"default({type})"
         };
+
+    // ── Role classification (role-dispatch refactor) ───────────────────────────
+
+    /// <summary>What a file-entry CLI parameter actually IS, independent of its C# type.</summary>
+    internal enum ParamRole { Lines, Path, Content, Scalar }
+
+    /// <summary>
+    /// Stub method names that OPEN a file themselves (their string param is a
+    /// PATH, not content). Matched case-insensitively against the connection's
+    /// target method; the param-name signal backs it up.
+    /// </summary>
+    private static readonly string[] PathOpeningMethods =
+        ["ReadFile", "ReadText", "ReadTextFile", "LoadFile", "OpenFile", "ParseFile", "ReadAllText"];
+
+    /// <summary>
+    /// Classify param i of a direct Run→logic/stub call on a file-entry CLI.
+    /// Order matters:
+    ///   1. string[] → Lines (always a file of lines: T3/T12).
+    ///   2. IoShell target + path-shaped method/param → Path (callee opens it).
+    ///   3. Logic component, string, first such param → Content (we open it).
+    ///   4. everything else → Scalar.
+    /// IoShell + non-path-shaped string (e.g. a stub filter word) → Scalar via (3)'s
+    /// component-classification gate, NOT Content — content means "we read it".
+    /// </summary>
+    internal static ParamRole ClassifyParamRole(
+        string toMethod, Component targetComp, CsMethodSignature sig, int paramIndex)
+    {
+        if (NormalizeType(sig.ParamTypes[paramIndex]) == "string[]")
+            return ParamRole.Lines;
+
+        if (targetComp.Classification == ModuleClassification.IoShell)
+        {
+            // On a stub, a string param is a PATH when the method is a known
+            // file-op or the param says so; otherwise it's a scalar input.
+            var looksPathy = PathOpeningMethods.Any(m =>
+                toMethod.Equals(m, StringComparison.OrdinalIgnoreCase));
+            var paramName = paramIndex < sig.ParamNames.Length
+                ? sig.ParamNames[paramIndex] : "";
+            var nameSaysPath = paramName.Contains("path", StringComparison.OrdinalIgnoreCase)
+                || paramName.Contains("file", StringComparison.OrdinalIgnoreCase);
+            if (looksPathy || nameSaysPath)
+                return ParamRole.Path;
+            return ParamRole.Scalar;
+        }
+
+        // Logic component: first string param is Content, rest Scalar — the
+        // a529667 boundary, now expressed as a role instead of positional state.
+        return ParamRole.Content;
+    }
 
     /// <summary>
     /// True when param i receives an explicit literal via argMappings (architect's

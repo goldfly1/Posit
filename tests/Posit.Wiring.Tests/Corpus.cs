@@ -196,13 +196,10 @@ namespace LogFilter {
                 extraFiles: [("LogFilter/LogFilter.cs", impl)]);
         },
 
-        // ── Case 5: T8 known-gap documentation — IoShell stub path double-read ──
-        // NOT yet fixed (role-dispatch refactor is the fix): the file-param rule
-        // reads args[0] as CONTENT, then hands it to an IoShell stub whose param
-        // is a PATH (FileIO.ReadFile(path)). This corpus case exists to document
-        // the shape and fail the gate the day the fix lands with different
-        // semantics than expected — it asserts the CURRENT behavior so the
-        // role-dispatch refactor must consciously update this case.
+        // ── Case 5: T8 role-dispatch — IoShell stub PATH param (double-read FIX) ──
+        // Was the T8 a3 double-read bug: file rule read args[0] as CONTENT then
+        // handed it to FileIO.ReadFile(path). Role-dispatch classifies that param
+        // as Path → args[0] passes through RAW; the callee opens the file itself.
         ["T8_stub_path_double_read"] = () =>
         {
             var stub = """
@@ -224,12 +221,63 @@ namespace LogTools {
             { SystemContext = "file read", Components = [comp, logicComp] };
             var wire = WiringGenerator.Generate(comp, contract,
                 StubSigs("LogTools", "FileIO", "ReadFile", "string", [("string", "path")]), []);
-            // CURRENT (buggy) behavior — asserted so a future fix flips this loudly:
-            if (!wire.Contains("File.ReadAllText(args[0])"))
-                throw new InvalidOperationException("unexpected: double-read case changed shape before role-dispatch fix");
-            if (!wire.Contains("ReadFile(fileContent0)"))
-                throw new InvalidOperationException("unexpected: double-read case changed shape before role-dispatch fix");
+            // FIXED behavior: path passes through RAW — no content double-read.
+            if (!wire.Contains("ReadFile(pathArg0)"))
+                throw new InvalidOperationException("role-dispatch regression: stub path param must receive args[0] raw (pathArg0), not file content");
+            if (wire.Contains("ReadAllText(args[0])"))
+                throw new InvalidOperationException("role-dispatch regression: emitter must NOT read the file when the callee is a path-opening stub");
             return WriteProject("LogCli", "LogCli", stub, stub: stub, wire: wire);
+        },
+
+        // ── Case 6: Output role (role-dispatch #3) — formatted + empty text ──────
+        // T8 tc1/tc2 shape: int count return, OutputFormat 'ERROR: {value}',
+        // EmptyOutputText 'No entries'. Asserts the emitted print site formats
+        // the value and special-cases empty with the prefix text.
+        ["T8_output_format"] = () =>
+        {
+            var impl = """
+namespace LogFilter {
+    public interface ILogFilter { int CountByLevel(string content, string level); }
+    public class LogFilter : ILogFilter {
+        public int CountByLevel(string content, string level) {
+            if (string.IsNullOrEmpty(content)) return 0;
+            var n = 0;
+            foreach (var line in content.Split('\n'))
+                if (line.Split(' ') is { Length: >= 2 } parts && parts[1] == level) n++;
+            return n;
+        }
+    }
+}
+""";
+            var comp = new Component("cli", "LogCli", "orchestrator", ["Run"], "", [], 0, "C#")
+            {
+                EntryType = "file",
+                Connections = [new ConnectionSpec("Run", "LogFilter", "CountByLevel", [])],
+                TestCases =
+                [
+                    new ComponentTestCase("tc2", "empty log", "cli", "prints No entries", "prints fallback text")
+                    {
+                        Input = "", ExpectedOutput = "No entries", ExpectedExitCode = 0,
+                        CliArgs = "INFO", OutputFormat = "ERROR: {value}", EmptyOutputText = "No entries",
+                    },
+                ],
+            };
+            var logicComp = new Component("logic", "LogFilter", "counts", ["CountByLevel"], "", ["LogCli"], 1, "C#")
+            { Classification = ModuleClassification.Logic };
+            var contract = new ArchitectureContract
+            { SystemContext = "log level counting", Components = [comp, logicComp] };
+            var wire = WiringGenerator.Generate(comp, contract,
+                ImplSigs("LogFilter", "CountByLevel", "int", [("string", "content"), ("string", "level")]), []);
+            if (!wire.Contains("if (ret"))
+                throw new InvalidOperationException("output-role regression: emptiness branch missing (counter-derived var — regex-free sanity check)");
+            if (!wire.Contains(".Length == 0") && !wire.Contains("== 0)"))
+                throw new InvalidOperationException("output-role regression: emptiness condition missing");
+            if (!wire.Contains("Console.WriteLine(\"No entries\")"))
+                throw new InvalidOperationException("output-role regression: emptyOutputText print missing");
+            if (!wire.Contains("\"ERROR: \" + ret"))
+                throw new InvalidOperationException("output-role regression: outputFormat template not applied to value");
+            return WriteProject("LogCli", "LogCli", impl, wire: wire,
+                extraFiles: [("LogFilter/LogFilter.cs", impl)]);
         },
     };
 
