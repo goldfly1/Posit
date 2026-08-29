@@ -74,6 +74,19 @@ public sealed class ArchitecturePhase : IPhase
             return Fail(context, listing, result);
         }
 
+        // Phase E: contract-fidelity gate — does the contract actually COVER
+        // the spec's intent? Rejects degenerate contracts (1-component collapse
+        // of a multi-verb spec) and missing-verb contracts before they waste
+        // the impl/QA/harness cycle. T8 a3 root cause: architect produced
+        // FileIO.ReadFile for a parse→filter→count spec — well-formed but
+        // semantically empty.
+        var fidelityErrors = ContractFidelityChecker.Check(contract, context.UserRequest);
+        if (fidelityErrors.Count > 0)
+        {
+            var fidelityMsg = ContractFidelityChecker.FormatErrors(fidelityErrors);
+            return Fail(context, fidelityMsg, result);
+        }
+
         // Type chain check — validate data flow types
         var chainErrors = TypeChainChecker.CheckPreImpl(contract);
         if (chainErrors.Count > 0)
