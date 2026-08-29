@@ -152,6 +152,85 @@ namespace TempConverter {
                              [("double", "temp"), ("string", "fromUnit"), ("string", "toUnit")]), []),
                 extraFiles: [("TempConverter/TempConverter.cs", impl)]);
         },
+
+        // ── Case 4: T8 file/scalar boundary (commit a529667) ──────────────────
+        // File-entry CLI where the logic takes (string fileContent, string scalar).
+        // First string param reads the file via ReadAllText; the SUBSEQUENT string
+        // param must be args[i] PASSTHROUGH — not File.ReadAllText'd (T8 a1/a2
+        // read the level word as a path → count 0). Asserts the emitted wire.
+        ["T8_file_scalar_mix"] = () =>
+        {
+            var impl = """
+namespace LogFilter {
+    public interface ILogFilter { int CountByLevel(string content, string level); }
+    public class LogFilter : ILogFilter {
+        public int CountByLevel(string content, string level) {
+            if (string.IsNullOrEmpty(content)) return 0;
+            var n = 0;
+            foreach (var line in content.Split('\n'))
+                if (line.Split(' ') is { Length: >= 2 } parts && parts[1] == level) n++;
+            return n;
+        }
+    }
+}
+""";
+            var comp = new Component("cli", "LogCli", "orchestrator", ["Run"], "", [], 0, "C#")
+            {
+                EntryType = "file",
+                Connections = [new ConnectionSpec("Run", "LogFilter", "CountByLevel", [])],
+            };
+            var logicComp = new Component("logic", "LogFilter", "counts", ["CountByLevel"], "", ["LogCli"], 1, "C#")
+            { Classification = ModuleClassification.Logic };
+            var contract = new ArchitectureContract
+            { SystemContext = "log level counting", Components = [comp, logicComp] };
+            var wire = WiringGenerator.Generate(comp, contract,
+                ImplSigs("LogFilter", "CountByLevel", "int", [("string", "content"), ("string", "level")]), []);
+            // Deterministic assertions on the emitted wiring (shape AND absence):
+            if (!wire.Contains("File.ReadAllText(args[0])"))
+                throw new InvalidOperationException("a529667 regression: first string param must read file content");
+            if (!wire.Contains("scalarArg1 = args.Length > 1 ? args[1]"))
+                throw new InvalidOperationException("a529667 regression: second string param must be scalar args[1] passthrough");
+            if (wire.Contains("ReadAllText(args[1])"))
+                throw new InvalidOperationException("a529667 regression: scalar arg must NOT be read as a file");
+            return WriteProject("LogCli", "LogCli", impl, wire: wire,
+                extraFiles: [("LogFilter/LogFilter.cs", impl)]);
+        },
+
+        // ── Case 5: T8 known-gap documentation — IoShell stub path double-read ──
+        // NOT yet fixed (role-dispatch refactor is the fix): the file-param rule
+        // reads args[0] as CONTENT, then hands it to an IoShell stub whose param
+        // is a PATH (FileIO.ReadFile(path)). This corpus case exists to document
+        // the shape and fail the gate the day the fix lands with different
+        // semantics than expected — it asserts the CURRENT behavior so the
+        // role-dispatch refactor must consciously update this case.
+        ["T8_stub_path_double_read"] = () =>
+        {
+            var stub = """
+using System.IO;
+namespace LogTools {
+    public static class FileIO {
+        public static string ReadFile(string path) => File.ReadAllText(path);
+    }
+}
+""";
+            var comp = new Component("cli", "LogCli", "orchestrator", ["Run"], "", [], 0, "C#")
+            {
+                EntryType = "file",
+                Connections = [new ConnectionSpec("Run", "LogTools", "ReadFile", [])],
+            };
+            var logicComp = new Component("logic", "LogTools", "reads", ["ReadFile"], "", ["LogCli"], 1, "C#")
+            { Classification = ModuleClassification.IoShell };
+            var contract = new ArchitectureContract
+            { SystemContext = "file read", Components = [comp, logicComp] };
+            var wire = WiringGenerator.Generate(comp, contract,
+                StubSigs("LogTools", "FileIO", "ReadFile", "string", [("string", "path")]), []);
+            // CURRENT (buggy) behavior — asserted so a future fix flips this loudly:
+            if (!wire.Contains("File.ReadAllText(args[0])"))
+                throw new InvalidOperationException("unexpected: double-read case changed shape before role-dispatch fix");
+            if (!wire.Contains("ReadFile(fileContent0)"))
+                throw new InvalidOperationException("unexpected: double-read case changed shape before role-dispatch fix");
+            return WriteProject("LogCli", "LogCli", stub, stub: stub, wire: wire);
+        },
     };
 
     // ── helpers ────────────────────────────────────────────────────────────────
