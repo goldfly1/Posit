@@ -50,13 +50,12 @@ public sealed class ArchitecturePhase : IPhase
         // wiki examples at the tail. Putting them in the user prompt alongside the
         // spec makes them visible as "here's how to decompose THIS spec."
         var prompt = context.Prompt;
+        var originalSpec = context.UserRequest ?? "";  // save before wiki injection
         if (!string.IsNullOrWhiteSpace(wikiExamples))
         {
-            var userRequest = context.UserRequest ?? "";
-            prompt = prompt with { SystemPrompt = prompt.SystemPrompt };
             // Prepend wiki examples to the user request — the model sees the
             // patterns BEFORE the spec, then adapts them to the spec.
-            context = context with { UserRequest = wikiExamples + "\n\n---\n\nSpec to decompose:\n" + userRequest };
+            context = context with { UserRequest = wikiExamples + "\n\n---\n\nSpec to decompose:\n" + originalSpec };
         }
 
         var result = await _model.GenerateAsync(
@@ -88,7 +87,7 @@ public sealed class ArchitecturePhase : IPhase
         // the impl/QA/harness cycle. T8 a3 root cause: architect produced
         // FileIO.ReadFile for a parse→filter→count spec — well-formed but
         // semantically empty.
-        var fidelityErrors = ContractFidelityChecker.Check(contract, context.UserRequest);
+        var fidelityErrors = ContractFidelityChecker.Check(contract, originalSpec);
         if (fidelityErrors.Count > 0)
         {
             var fidelityMsg = ContractFidelityChecker.FormatErrors(fidelityErrors);
