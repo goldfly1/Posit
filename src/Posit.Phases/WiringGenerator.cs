@@ -429,9 +429,15 @@ public static class WiringGenerator
                 sb.AppendLine($"            Console.WriteLine({varName});");
         }
         else if (t is "string[]" or "List<string>")
-            sb.AppendLine($"            Console.WriteLine(string.Join(\"\\n\", {varName}));");
+        {
+            // Empty collection → print NOTHING: string.Join on [] returns "",
+            // but WriteLine adds a bare '\n' that breaks byte-exact QA keys
+            // expecting empty output (T12 tc3: merged-empty → stdout truly empty).
+            var countProp = t == "string[]" ? "Length" : "Count";
+            sb.AppendLine($"            if ({varName}.{countProp} > 0) Console.WriteLine(string.Join(\"\\n\", {varName}));");
+        }
         else if (t == "Dictionary<string,string>")
-            sb.AppendLine($"            Console.WriteLine(string.Join(\"\\n\", {varName}.Select(kv => kv.Key + \"=\" + kv.Value)));");
+            sb.AppendLine($"            if ({varName}.Count > 0) Console.WriteLine(string.Join(\"\\n\", {varName}.Select(kv => kv.Key + \"=\" + kv.Value)));");
         else
             sb.AppendLine($"            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize({varName}));");
     }
