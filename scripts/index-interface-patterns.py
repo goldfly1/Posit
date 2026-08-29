@@ -28,7 +28,11 @@ def main():
         fname = os.path.basename(fpath)
         stem = fname.replace(".md", "")
         content = open(fpath, encoding="utf-8").read()
-        emb = get_embedding(content)
+        # Use first 4000 chars for embedding (nomic-embed-text has input limits;
+        # the full content goes into the DB, but the embedding only needs the
+        # problem shape + spec verbs to match on spec similarity)
+        embed_text = content[:4000]
+        emb = get_embedding(embed_text)
         if not emb:
             print(f"WARNING: no embedding for {fname}")
             continue
