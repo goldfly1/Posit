@@ -12,14 +12,12 @@ public sealed class ArchitecturePhase : IPhase
     private readonly IModelGateway _model;
     private readonly PatternRegistry _registry;
     private readonly WikiSearcher _wiki;
-    private readonly ProvenContractSearcher _proven;
 
     public ArchitecturePhase(IModelGateway model, PatternRegistry registry)
     {
         _model = model;
         _registry = registry;
         _wiki = new WikiSearcher(new HttpClient());
-        _proven = new ProvenContractSearcher(new HttpClient());
     }
 
     public PhaseId Id { get; } = new("architecture");
@@ -36,7 +34,8 @@ public sealed class ArchitecturePhase : IPhase
 
     public async Task<PhaseResult> ExecuteAsync(PhaseContext context, CancellationToken ct = default)
     {
-        // Pre-generation wiki search: find relevant C# pattern examples
+        // Pre-generation wiki search: find relevant C# pattern examples AND
+        // proven contract examples (both indexed in wiki.wiki_chunks).
         var wikiExamples = "";
         var searchQuery = context.UserRequest ?? "";
         if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -46,17 +45,6 @@ public sealed class ArchitecturePhase : IPhase
                 Console.Error.WriteLine("[architecture] pre-generation wiki search returned examples");
         }
 
-        // Pre-generation proven-contract search: find similar SUCCESSFUL trial
-        // contracts as few-shot examples. These are complete JSON worked examples
-        // the model can adapt — stronger signal than abstract pattern descriptions.
-        var provenExamples = "";
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            provenExamples = await _proven.SearchAsync(searchQuery, limit: 2, ct);
-            if (!string.IsNullOrWhiteSpace(provenExamples))
-                Console.Error.WriteLine("[architecture] pre-generation proven-contract search returned examples");
-        }
-
         // Inject wiki examples into the USER prompt, not the system prompt tail.
         // System-prompt injection suffers "lost in the middle" — the model reads
         // 9.5K chars of architecture instructions, forms its plan, and ignores the
@@ -64,16 +52,9 @@ public sealed class ArchitecturePhase : IPhase
         // spec makes them visible as "here's how to decompose THIS spec."
         var prompt = context.Prompt;
         var originalSpec = context.UserRequest ?? "";  // save before injection
-        var injection = "";
-        if (!string.IsNullOrWhiteSpace(provenExamples))
-            injection += provenExamples + "\n\n";
         if (!string.IsNullOrWhiteSpace(wikiExamples))
-            injection += wikiExamples + "\n\n";
-        if (!string.IsNullOrWhiteSpace(injection))
         {
-            // Prepend proven examples + wiki patterns to the user request —
-            // the model sees them BEFORE the spec, then adapts them.
-            context = context with { UserRequest = injection + "---\n\nSpec to decompose:\n" + originalSpec };
+            context = context with { UserRequest = wikiExamples + "\n\n---\n\nSpec to decompose:\n" + originalSpec };
         }
 
         var result = await _model.GenerateAsync(

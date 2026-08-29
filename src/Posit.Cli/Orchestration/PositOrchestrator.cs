@@ -133,14 +133,13 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
     private static ModelRoute GetModelForPhase(PhaseId phaseId)
     {
         // Per-phase model roster (Phase F):
-        //   Architecture  → glm-5.3:cloud (Frontier reasoning — decomposition
-        //     is the bottleneck; 5.3 needs 32K max tokens because its thinking
-        //     field consumes output budget before the visible JSON response)
-        //   Everything else → deepseek-v4-flash:cloud (Fast — proven on 8/12
-        //     trials, high-frequency, speed-critical)
+        //   Architecture  → deepseek-v4-pro:cloud (Frontier — produces clean
+        //     JSON contracts in 5s; glm-5.3 tested at 32K but its thinking field
+        //     consumed all output tokens and produced malformed JSON)
+        //   Everything else → deepseek-v4-flash:cloud (Fast — proven, speed-critical)
         var (modelId, tier, temp, maxTokens) = phaseId.Value switch
         {
-            "architecture" => ("glm-5.3:cloud", ModelTier.Frontier, 0.3, 32768),
+            "architecture" => ("deepseek-v4-pro:cloud", ModelTier.Frontier, 0.3, 16384),
             _ => ("deepseek-v4-flash:cloud", ModelTier.Fast, 0.2, 16384)
         };
         return new ModelRoute
