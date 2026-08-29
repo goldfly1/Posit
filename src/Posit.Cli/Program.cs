@@ -292,9 +292,9 @@ internal static class Program
                 // ImplFixer seat: glm-5.2:cloud (Phase F roster) — stronger at
                 // reasoning about WHY a test failed (diagnosis, not just code
                 // generation). Low frequency (0-2 calls/trial), free (no token
-                // billing), already installed.
+                // billing), already installed. 16K gives thinking room.
                 var fixModelRoute = new ModelRoute { Tier = ModelTier.Standard, ProviderId = "ollama",
-                    ModelId = "glm-5.2:cloud", MaxOutputTokens = 8192, Temperature = fixTemperature };
+                    ModelId = "glm-5.2:cloud", MaxOutputTokens = 16384, Temperature = fixTemperature };
                 var fixResult = await gateway.GenerateAsync(
                     fixModelRoute,
                     fixPromptTemplate,
@@ -608,7 +608,7 @@ internal static class Program
     private static ModelRoute GetModelForFixer() => new()
     {
         Tier = ModelTier.Fast, ProviderId = "ollama",
-        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 4096, Temperature = 0.1
+        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.1
     };
 
     /// <summary>
