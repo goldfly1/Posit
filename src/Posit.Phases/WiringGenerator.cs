@@ -70,6 +70,9 @@ public static class WiringGenerator
         {
             sb.AppendLine("            var inputLine = Console.ReadLine() ?? \"\";");
             sb.AppendLine("            if (string.IsNullOrEmpty(inputLine)) { Console.Error.WriteLine(\"Error: no input provided.\"); return 1; }");
+            // Multi-token stdin (T6 a2): '32 F' = value + unit(s). Split once;
+            // consumers index tokens[] by parameter position.
+            sb.AppendLine("            var tokens = inputLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);");
         }
         else
         {
@@ -255,12 +258,31 @@ public static class WiringGenerator
         {
             if (i == 0)
             {
+                // Stdin entry: first param may be a NUMBER parsed from token 0
+                // ('32 F' → 32), not the raw line. Raw line only fits string params.
+                if (prevRet == "inputLine" &&
+                    (targetSig.ParamTypes[i] == "double" || targetSig.ParamTypes[i] == "int" || targetSig.ParamTypes[i] == "long"))
+                {
+                    parts.Add($"{targetSig.ParamTypes[i]}.Parse(tokens[0])");
+                    continue;
+                }
                 var converted = ConvertType(prevType, targetSig.ParamTypes[i], prevRet);
                 // Never silently default the FIRST chained param: if conversion
                 // fails the chain is broken — emit the raw var and let the
                 // compiler complain (fixable) instead of wrong behavior. Raw var
                 // works whenever the types actually match (normalized compare).
                 parts.Add(converted ?? prevRet);
+            }
+            else if (prevType == "string" &&
+                     (prevRet == "inputLine" || prevRet == "stdinLine") &&
+                     targetSig.ParamTypes[i] == "string" &&
+                     !IsLiteralFilled(i, conn, targetSig))
+            {
+                // Stdin "value unit" decomposition (T6 a2): a stdin line like
+                // '32 F' carries N whitespace-separated tokens; token 0 went to
+                // the first param, token i goes to this string param. Prevents
+                // the empty-"" convention from discarding real units.
+                parts.Add($"tokens[{i}]");
             }
             else
             {
@@ -505,4 +527,16 @@ public static class WiringGenerator
             "string[]" => "Array.Empty<string>()",
             _ => $"default({type})"
         };
+
+    /// <summary>
+    /// True when param i receives an explicit literal via argMappings (architect's
+    /// routing decision) — token decomposition must not override it.
+    /// </summary>
+    private static bool IsLiteralFilled(int paramIndex, ConnectionSpec conn, CsMethodSignature targetSig)
+    {
+        if (paramIndex >= conn.ArgMappings.Length) return false;
+        var mapping = conn.ArgMappings[paramIndex];
+        var arrowIdx = mapping.IndexOf("->");
+        return arrowIdx >= 0 && mapping[(arrowIdx + 2)..].Trim() == targetSig.ParamNames[paramIndex];
+    }
 }
