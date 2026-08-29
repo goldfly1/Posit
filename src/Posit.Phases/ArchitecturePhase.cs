@@ -40,7 +40,7 @@ public sealed class ArchitecturePhase : IPhase
         var searchQuery = context.UserRequest ?? "";
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            wikiExamples = await _wiki.SearchAsync(searchQuery, limit: 5, ct);
+            wikiExamples = await _wiki.SearchAsync(searchQuery, limit: 15, ct);
             if (!string.IsNullOrWhiteSpace(wikiExamples))
                 Console.Error.WriteLine("[architecture] pre-generation wiki search returned examples");
         }
