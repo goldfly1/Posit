@@ -131,13 +131,22 @@ public static class ContractFidelityChecker
         if (foundActionVerbs.Count >= 2 && logicComponents.Count == 1 && totalLogicMethods == 1)
         {
             var methodName = logicComponents[0].MethodSignatures[0]?.Name ?? "?";
-            errors.Add(new FidelityError(
-                "degenerate-contract",
-                $"Spec has {foundActionVerbs.Count} action verbs ({string.Join(", ", foundActionVerbs)}) "
-                + $"but the contract has ONE logic component with ONE method "
-                + $"('{methodName}'). A multi-verb spec needs decomposition into "
-                + $"multiple methods or components — one method cannot cover "
-                + $"parse+filter+count (or equivalent). Re-decompose the spec."));
+            // Exempt combined methods: if the method name itself contains
+            // multiple action verbs (e.g. ValidateAndMerge, ParseAndValidate),
+            // it's an intentional combined method, not a degenerate collapse.
+            // The bool-chain-mismatch check explicitly recommends this pattern.
+            var methodLower = methodName.ToLowerInvariant();
+            var verbsInName = foundActionVerbs.Count(v => methodLower.Contains(v));
+            if (verbsInName < 2)
+            {
+                errors.Add(new FidelityError(
+                    "degenerate-contract",
+                    $"Spec has {foundActionVerbs.Count} action verbs ({string.Join(", ", foundActionVerbs)}) "
+                    + $"but the contract has ONE logic component with ONE method "
+                    + $"('{methodName}'). A multi-verb spec needs decomposition into "
+                    + $"multiple methods or components — one method cannot cover "
+                    + $"parse+filter+count (or equivalent). Re-decompose the spec."));
+            }
         }
 
         // ── Check 3: Connection completeness ──
