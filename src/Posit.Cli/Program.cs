@@ -208,7 +208,7 @@ internal static class Program
                     failureReport.Add($"  Input actually fed to program: '{tc.FedInput}'");
                     if (tc.FedInput != ct.Input)
                         failureReport.Add($"  (NOTE: architect's intended input was '{ct.Input}' — pseudodata differed. Debug against the input actually fed.)");
-                    failureReport.Add($"  Expected stdout: '{(ct.ExpectedOutput.Length > 0 ? ct.ExpectedOutput : tc.Expected)}'");
+                    failureReport.Add($"  Expected stdout: '{(!string.IsNullOrEmpty(ct.ExpectedOutput) ? ct.ExpectedOutput : tc.Expected)}'");
                     failureReport.Add($"  Expected exit code: {ct.ExpectedExitCode}");
                 }
                 else

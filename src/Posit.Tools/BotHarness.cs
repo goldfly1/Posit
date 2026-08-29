@@ -224,7 +224,7 @@ public sealed class BotHarness
                 contract.SystemContext, ct);
 
             results.Add(new TestCaseResult(tc.Id, tc.Name, runResult.Success, runResult.Output,
-                tc.ExpectedOutput.Length > 0 ? tc.ExpectedOutput : tc.ExpectedBehavior,
+                string.IsNullOrEmpty(tc.ExpectedOutput) ? tc.ExpectedBehavior : tc.ExpectedOutput,
                 verdict.Result == JudgeResult.Pass, verdict) { FedInput = fedInput });
         }
 

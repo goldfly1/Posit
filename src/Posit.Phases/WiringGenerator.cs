@@ -153,39 +153,49 @@ public static class WiringGenerator
                 }
             }
             else if (ci == 0 &&
-                     targetSig.ParamTypes.Length == 1 &&
-                     NormalizeType(targetSig.ParamTypes[0]) == "string[]")
-            {
-                // Architect connected Run → logic directly but the logic takes
-                // string[] LINES (e.g. Convert(lines)) and the CLI is file-type.
-                // The default path would split the FILE PATH ('\n' of a path is
-                // empty → array with the path itself → garbage). Read the file's
-                // lines deterministically instead (T3 attempt-1 failure).
-                sb.AppendLine($"            var linesArg = System.IO.File.ReadAllLines(args[0]);");
-                sb.AppendLine($"            var ret{retVarCounter} = {targetClass}.{targetSig.Name}(linesArg);");
-                EmitPrint(sb, targetSig.ReturnType, $"ret{retVarCounter}", isLast: ci == comp.Connections.Length - 1);
-                retVarCounter++;
-                continue;
-            }
-            else if (ci == 0 &&
-                     targetSig.ParamTypes.Length > 1 &&
+                     targetSig.ParamTypes.Length >= 1 &&
                      targetSig.ParamTypes
-                         .All(p => NormalizeType(p) == "string"))
+                         .All(p => NormalizeType(p) == "string[]" || NormalizeType(p) == "string"))
             {
-                // Architect connected Run → logic directly but the logic takes
-                // MULTIPLE string file CONTENTS (e.g. Merge(content1, content2))
-                // and the CLI is file-type (args are file paths). Read each arg's
-                // file into a content var (deterministic — no stub hop needed).
+                // Architect connected Run → logic directly and the logic takes
+                // file-shaped params (string content or string[] lines, any count).
+                // For each string[] param: read that arg's file as LINES (T3 a1);
+                // for each string param: read that arg's file as CONTENT (T12).
+                // args[i] for i-th param — deterministic, no stub hop needed.
                 var argCount = targetSig.ParamTypes.Length;
                 var argExprs = new List<string>();
                 for (var ai = 0; ai < argCount; ai++)
                 {
-                    var fv = $"fileContent{ai}";
-                    sb.AppendLine($"            var {fv} = args.Length > {ai} ? System.IO.File.ReadAllText(args[{ai}]) : \"\";");
-                    argExprs.Add(fv);
+                    var pt = NormalizeType(targetSig.ParamTypes[ai]);
+                    if (pt == "string[]")
+                    {
+                        var lv = $"linesArg{ai}";
+                        sb.AppendLine($"            var {lv} = args.Length > {ai} ? System.IO.File.ReadAllLines(args[{ai}]) : Array.Empty<string>();");
+                        argExprs.Add(lv);
+                    }
+                    else
+                    {
+                        var fv = $"fileContent{ai}";
+                        sb.AppendLine($"            var {fv} = args.Length > {ai} ? System.IO.File.ReadAllText(args[{ai}]) : \"\";");
+                        argExprs.Add(fv);
+                    }
                 }
-                sb.AppendLine($"            var ret{retVarCounter} = {targetClass}.{targetSig.Name}({string.Join(", ", argExprs)});");
+                var isInstanceTarget = targetComp.Classification != ModuleClassification.IoShell;
+                var receiver = targetClass;
+                if (isInstanceTarget)
+                {
+                    var instanceVar = $"inst_{conn.ToComponent}";
+                    if (!sb.ToString().Contains($"var {instanceVar} ="))
+                        sb.AppendLine($"            var {instanceVar} = new global::{targetClass.Replace('.', '.')}();".Replace("global::global::", "global::"));
+                    receiver = instanceVar;
+                }
+                sb.AppendLine($"            var ret{retVarCounter} = {receiver}.{targetSig.Name}({string.Join(", ", argExprs)});");
                 EmitPrint(sb, targetSig.ReturnType, $"ret{retVarCounter}", isLast: ci == comp.Connections.Length - 1);
+                // Chain state MUST advance here — a subsequent connection (e.g.
+                // MergeConfigs(ParseIni(...), ...)) feeds on this return value.
+                // Missing this made the T12 corpus case emit args[0] instead of ret0.
+                prevRet = $"ret{retVarCounter}";
+                prevType = targetSig.ReturnType;
                 retVarCounter++;
                 continue;
             }

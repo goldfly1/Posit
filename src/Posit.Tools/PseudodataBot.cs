@@ -43,8 +43,12 @@ public sealed class PseudodataBot
             // test cases that lack them (legacy contracts).
             if (!string.IsNullOrWhiteSpace(tc.Input))
                 content = tc.Input;
-            if (!string.IsNullOrWhiteSpace(tc.ExpectedOutput))
+            if (tc.ExpectedOutput != null)
             {
+                // Architect answered this case — take the key verbatim, including
+                // a deliberately empty expected output (T12 tc3 lesson: IsNullOrWhiteSpace
+                // conflated "empty output is correct" with "no answer given", letting
+                // GenerateEmpty's exit-1 heuristic overwrite the architect's exit 0).
                 expectedOutput = tc.ExpectedOutput;
                 expectedExitCode = tc.ExpectedExitCode;
             }

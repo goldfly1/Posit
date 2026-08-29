@@ -93,9 +93,11 @@ public record ComponentTestCase(
 
     /// <summary>
     /// Exact stdout expected when the program processes Input. This is the answer
-    /// key for the judge's exact-match layer. Empty = no exact match available.
+    /// key for the judge's exact-match layer. Null = no exact match available
+    /// (bot heuristics apply). Empty string = the expected output IS the empty
+    /// string (T12 tc3: empty inputs legitimately produce empty merged config).
     /// </summary>
-    public string ExpectedOutput { get; init; } = "";
+    public string? ExpectedOutput { get; init; }
 
     /// <summary>
     /// Expected exit code for this test case. 0 = success, 1 = error.
