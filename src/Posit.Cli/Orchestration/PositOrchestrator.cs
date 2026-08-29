@@ -138,15 +138,15 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         //     multi-verb specs into type-correct contracts in 3 retries)
         //   Everything else → deepseek-v4-flash:cloud (Fast — proven on 8/12
         //     trials, high-frequency, speed-critical)
-        var (modelId, tier, temp) = phaseId.Value switch
+        var (modelId, tier, temp, maxTokens) = phaseId.Value switch
         {
-            "architecture" => ("glm-5.3:cloud", ModelTier.Frontier, 0.3),
-            _ => ("deepseek-v4-flash:cloud", ModelTier.Fast, 0.2)
+            "architecture" => ("glm-5.3:cloud", ModelTier.Frontier, 0.3, 16384),
+            _ => ("deepseek-v4-flash:cloud", ModelTier.Fast, 0.2, 8192)
         };
         return new ModelRoute
         {
             Tier = tier, ProviderId = "ollama",
-            ModelId = modelId, MaxOutputTokens = 8192, Temperature = temp
+            ModelId = modelId, MaxOutputTokens = maxTokens, Temperature = temp
         };
     }
 
