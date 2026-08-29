@@ -162,7 +162,57 @@ public static class ContractFidelityChecker
             }
         }
 
-        // ── Check 4: Output-shape mismatch ──
+        // ── Check 4: Bool-return type-chain mismatch ──
+        // The #1 recurring architecture failure: Validate returns bool but the
+        // next method in the chain expects data (string[], string, etc.).
+        // The TypeChainChecker catches this too, but its error message is generic.
+        // This check gives a SPECIFIC correction: "return DATA from validation,
+        // not bool. Use Result<T> or combine validate+merge into one method."
+        foreach (var comp in contract.Components)
+        {
+            if (comp.Connections is not { Length: > 1 }) continue;
+            for (var i = 0; i < comp.Connections.Length - 1; i++)
+            {
+                var conn = comp.Connections[i];
+                var targetComp = contract.Components.FirstOrDefault(c => c.Name == conn.ToComponent);
+                if (targetComp == null) continue;
+                var targetSig = targetComp.MethodSignatures
+                    .FirstOrDefault(m => m.Name == conn.ToMethod);
+                if (targetSig == null) continue;
+
+                // Check if this method returns bool and the NEXT method's first
+                // param expects a different type
+                var retType = NormalizeReturnType(targetSig.ReturnType);
+                if (retType != "bool") continue;
+
+                var nextConn = comp.Connections[i + 1];
+                var nextComp = contract.Components.FirstOrDefault(c => c.Name == nextConn.ToComponent);
+                if (nextComp == null) continue;
+                var nextSig = nextComp.MethodSignatures
+                    .FirstOrDefault(m => m.Name == nextConn.ToMethod);
+                if (nextSig == null) continue;
+
+                if (nextSig.Params.Length > 0)
+                {
+                    var nextFirstType = nextSig.Params[0].Type;
+                    // bool → string/string[]/int/double/etc. = mismatch
+                    if (nextFirstType != "bool")
+                    {
+                        errors.Add(new FidelityError(
+                            "bool-chain-mismatch",
+                            $"Component '{conn.ToComponent}' method '{conn.ToMethod}' returns bool, "
+                            + $"but the next step '{nextConn.ToComponent}.{nextConn.ToMethod}' expects "
+                            + $"'{nextFirstType}'. bool CANNOT chain into data. "
+                            + $"FIX: Either (a) return the validated DATA (e.g. string[] or Result<T>) "
+                            + $"from the validation method so the chain continues, or (b) combine "
+                            + $"validation and the next step into ONE method that returns the result. "
+                            + $"Do NOT use bool as a return type in a data pipeline chain."));
+                    }
+                }
+            }
+        }
+
+        // ── Check 5: Output-shape mismatch ──
         // If the spec demands formatted output (contains a print-format hint like
         // 'LEVEL: N' or 'key=value') but no test case carries OutputFormat, warn.
         // This is a soft check (warning, not hard fail) — the architect might
@@ -170,6 +220,22 @@ public static class ContractFidelityChecker
         // TODO: enable when OutputFormat is proven on more trials.
 
         return errors;
+    }
+
+    // ── Helpers ──
+
+    private static string NormalizeReturnType(string type)
+    {
+        if (string.IsNullOrEmpty(type)) return type;
+        var t = type.Trim().Replace(" ", "");
+        if (t.StartsWith("System.", StringComparison.OrdinalIgnoreCase))
+            t = t[(t.LastIndexOf('.') + 1)..];
+        if (t.Equals("Boolean", StringComparison.OrdinalIgnoreCase)) return "bool";
+        if (t.Equals("Int32", StringComparison.OrdinalIgnoreCase)) return "int";
+        if (t.Equals("Int64", StringComparison.OrdinalIgnoreCase)) return "long";
+        if (t.Equals("Double", StringComparison.OrdinalIgnoreCase)) return "double";
+        if (t.Equals("String", StringComparison.OrdinalIgnoreCase)) return "string";
+        return t.ToLowerInvariant();
     }
 
     public static string FormatErrors(List<FidelityError> errors) =>
