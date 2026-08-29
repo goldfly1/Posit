@@ -189,7 +189,15 @@ public static class WiringGenerator
                 var contentTaken = false;
                 for (var ai = 0; ai < argCount; ai++)
                 {
+                    // Slot-aware classification: contentTaken carries state — once
+                    // ANY file-consuming slot (Lines/Path/Content) has been taken,
+                    // a later string param on a Logic component is a SCALAR, not a
+                    // second Content. T8 rack: (string[] lines, string level) —
+                    // level was Content-classified and File.ReadAllText'd ('/app/
+                    // ERROR' not found) because Lines hadn't set contentTaken.
                     var role = ClassifyParamRole(conn.ToMethod, targetComp, targetSig, ai);
+                    if (contentTaken && role == ParamRole.Content)
+                        role = ParamRole.Scalar;
                     switch (role)
                     {
                         case ParamRole.Lines:
@@ -197,6 +205,7 @@ public static class WiringGenerator
                             var lv = $"linesArg{ai}";
                             sb.AppendLine($"            var {lv} = args.Length > {ai} ? System.IO.File.ReadAllLines(args[{ai}]) : Array.Empty<string>();");
                             argExprs.Add(lv);
+                            contentTaken = true;
                             break;
                         }
                         case ParamRole.Path:
@@ -205,6 +214,7 @@ public static class WiringGenerator
                             var pv = $"pathArg{ai}";
                             sb.AppendLine($"            var {pv} = args.Length > {ai} ? args[{ai}] : \"\";");
                             argExprs.Add(pv);
+                            contentTaken = true;
                             break;
                         }
                         case ParamRole.Content when !contentTaken:
