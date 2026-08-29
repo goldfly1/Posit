@@ -86,6 +86,10 @@ public static class PromptBuilder
         sb.AppendLine("    - expectedOutput: the EXACT stdout the program must print for that input,");
         sb.AppendLine("      character for character. NOT a shape description.");
         sb.AppendLine("    - expectedExitCode: 0 for success cases, 1 for error cases.");
+        sb.AppendLine("    - cliArgs: EXTRA scalar CLI arguments for file-entry CLIs, space-separated,");
+        sb.AppendLine("      e.g. a filter word (T8 log analyzer: cliArgs \"ERROR\" selects level).");
+        sb.AppendLine("      The FIRST arg position is always the testdata file path — cliArgs come AFTER it.");
+        sb.AppendLine("      Omit (or \"\") when the program takes no args beyond the data file.");
         sb.AppendLine("    - expectedBehavior stays as a short human-readable summary of the expected shape.");
         sb.AppendLine("    These concrete values are the answer key the QA judge compares against.");
         sb.AppendLine("    A test case without input and expectedOutput cannot be exactly verified — write it anyway with your best concrete values.");
@@ -133,7 +137,7 @@ public static class PromptBuilder
         sb.AppendLine("  \"returnType\":\"...\"}], \"csharpInterface\": \"public interface I<Name> { ... }\"|null,");
         sb.AppendLine("  \"connections\": [{\"fromMethod\":\"...\",\"toComponent\":\"...\",");
         sb.AppendLine("  \"toMethod\":\"...\",\"argMappings\":[]}], \"entryType\": \"file\"|\"stdin\", \"branchCondition\": \"...\"|null,");
-        sb.AppendLine("  \"testCases\": [{\"id\":\"...\",\"name\":\"...\",\"targetType\":\"...\",\"description\":\"...\",\"expectedBehavior\":\"...\",\"input\":\"...\",\"expectedOutput\":\"...\",\"expectedExitCode\":0}] }],");
+        sb.AppendLine("  \"testCases\": [{\"id\":\"...\",\"name\":\"...\",\"targetType\":\"...\",\"description\":\"...\",\"expectedBehavior\":\"...\",\"input\":\"...\",\"expectedOutput\":\"...\",\"expectedExitCode\":0,\"cliArgs\":\"\"}] }],");
         sb.AppendLine("  \"deploymentTopology\": \"...\" }");
         return sb.ToString();
     }

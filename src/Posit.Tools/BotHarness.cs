@@ -206,12 +206,16 @@ public sealed class BotHarness
                         args.Add($"testdata_{tc.Id}_{pi}{ext}");
                     }
                     cliArg = string.Join(" ", args);
+                    // Scalar args beyond the data files (T8: level filter word).
+                    if (!string.IsNullOrWhiteSpace(tc.CliArgs)) cliArg += $" {tc.CliArgs}";
                 }
                 else
                 {
                     var ext = testData.StartsWith("[") || testData.StartsWith("{") ? ".json"
                         : (testData.Contains(",") && testData.Contains("\n") ? ".csv" : ".txt");
                     cliArg = $"testdata_{tc.Id}{ext}";
+                    // Scalar args beyond the data file (T8: level filter word).
+                    if (!string.IsNullOrWhiteSpace(tc.CliArgs)) cliArg += $" {tc.CliArgs}";
                 }
             }
             var runResult = await BotHarnessDocker.RunContainerAsync(
@@ -302,7 +306,7 @@ public sealed class BotHarness
                 // Input = the architect's CONCRETE input (Phase A contract field),
                 // not the prose Description. The old mapping put Description here,
                 // which fed prose into the program when no pseudodata file existed.
-                return new TestCaseInfo(tc.Id, tc.Name, tc.Input, tc.ExpectedBehavior, expectedOutput, expectedExit);
+                return new TestCaseInfo(tc.Id, tc.Name, tc.Input, tc.ExpectedBehavior, expectedOutput, expectedExit, tc.CliArgs);
             }).ToArray();
             return cases;
         }
@@ -328,4 +332,4 @@ public sealed record TestCaseResult(string Id, string Name, bool Ran, string Out
     /// </summary>
     public string FedInput { get; init; } = "";
 }
-internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string? ExpectedOutput = null, int ExpectedExitCode = 0);
+internal sealed record TestCaseInfo(string Id, string Name, string Input, string ExpectedBehavior, string? ExpectedOutput = null, int ExpectedExitCode = 0, string CliArgs = "");

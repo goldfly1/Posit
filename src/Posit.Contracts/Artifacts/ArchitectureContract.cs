@@ -103,6 +103,13 @@ public record ComponentTestCase(
     /// Expected exit code for this test case. 0 = success, 1 = error.
     /// </summary>
     public int ExpectedExitCode { get; init; } = 0;
+
+    /// <summary>
+    /// Extra scalar CLI args for file-entry CLIs beyond the data file (T8: the
+    /// level filter word). Empty = only the data file path is passed. Appended
+    /// AFTER the testdata file path in harness invocation order.
+    /// </summary>
+    public string CliArgs { get; init; } = "";
 }
 
 public record DataStore(string Id, string Name, DataStoreKind Kind, string Schema, PersistenceKind Persistence);
