@@ -116,6 +116,8 @@ public static class WiringGenerator
         var prevRet = entryVar;
         var prevType = "string";
         var retVarCounter = 0;
+        // Stdin entry: entryVar is the raw stdin line — file-arg routing must not fire.
+        var isStdinEntry = entryVar == "inputLine";
 
         for (var ci = 0; ci < comp.Connections.Length; ci++)
         {
@@ -156,15 +158,17 @@ public static class WiringGenerator
                 }
             }
             else if (ci == 0 &&
+                     !isStdinEntry &&
                      targetSig.ParamTypes.Length >= 1 &&
                      targetSig.ParamTypes
                          .All(p => NormalizeType(p) == "string[]" || NormalizeType(p) == "string"))
             {
                 // Architect connected Run → logic directly and the logic takes
                 // file-shaped params (string content or string[] lines, any count).
-                // For each string[] param: read that arg's file as LINES (T3 a1);
-                // for each string param: read that arg's file as CONTENT (T12).
-                // args[i] for i-th param — deterministic, no stub hop needed.
+                // FILE-TYPE CLIs ONLY (isStdinEntry guard): on a stdin entry the
+                // input var is the stdin line, not file args — routing it through
+                // File.ReadAllText(args[0]) produced 'Error: empty input' (T6 a3:
+                // ConvertTemperature(fileContent0) got "" because stdin has no args).
                 var argCount = targetSig.ParamTypes.Length;
                 var argExprs = new List<string>();
                 for (var ai = 0; ai < argCount; ai++)
