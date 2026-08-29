@@ -289,8 +289,12 @@ internal static class Program
                     OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "CSharpSource",
                     Status = PromptStatus.Active
                 };
-                var fixModelRoute = new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
-                    ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = fixTemperature };
+                // ImplFixer seat: glm-5.2:cloud (Phase F roster) — stronger at
+                // reasoning about WHY a test failed (diagnosis, not just code
+                // generation). Low frequency (0-2 calls/trial), free (no token
+                // billing), already installed.
+                var fixModelRoute = new ModelRoute { Tier = ModelTier.Standard, ProviderId = "ollama",
+                    ModelId = "glm-5.2:cloud", MaxOutputTokens = 8192, Temperature = fixTemperature };
                 var fixResult = await gateway.GenerateAsync(
                     fixModelRoute,
                     fixPromptTemplate,
@@ -596,7 +600,10 @@ internal static class Program
     }
 
     /// <summary>
-    /// Model route for the WireFixer — same model as the rest of the pipeline.
+    /// Model route for the WireFixer — deepseek-v4-flash:cloud (Fast tier).
+    /// WireFixer handles compile errors (mechanical, high-frequency) — stays on
+    /// flash. The ImplFixer (logic failures, low-frequency reasoning) uses
+    /// glm-5.2:cloud via the hardcoded route in the harness section above.
     /// </summary>
     private static ModelRoute GetModelForFixer() => new()
     {
