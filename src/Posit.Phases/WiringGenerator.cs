@@ -258,7 +258,12 @@ public static class WiringGenerator
     private static string BuildChainedArgs(ConnectionSpec conn, string prevRet, string prevType, CsMethodSignature targetSig)
     {
         var parts = new List<string>();
-        for (var i = 0; i < targetSig.ParamNames.Length; i++)
+        // Names and types must be parallel arrays; a malformed signature (contract
+        // bug upstream) must not crash the emitter with IndexOutOfRange — bound on
+        // the types array since arg expressions are type-driven (names only used
+        // for argMappings matching, guarded below).
+        var n = Math.Min(targetSig.ParamNames.Length, targetSig.ParamTypes.Length);
+        for (var i = 0; i < n; i++)
         {
             if (i == 0)
             {
