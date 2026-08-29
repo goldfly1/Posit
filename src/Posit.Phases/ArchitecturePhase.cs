@@ -44,11 +44,19 @@ public sealed class ArchitecturePhase : IPhase
                 Console.Error.WriteLine("[architecture] pre-generation wiki search returned examples");
         }
 
-        // Inject wiki examples into the system prompt
+        // Inject wiki examples into the USER prompt, not the system prompt tail.
+        // System-prompt injection suffers "lost in the middle" — the model reads
+        // 9.5K chars of architecture instructions, forms its plan, and ignores the
+        // wiki examples at the tail. Putting them in the user prompt alongside the
+        // spec makes them visible as "here's how to decompose THIS spec."
         var prompt = context.Prompt;
         if (!string.IsNullOrWhiteSpace(wikiExamples))
         {
-            prompt = prompt with { SystemPrompt = prompt.SystemPrompt + "\n" + wikiExamples };
+            var userRequest = context.UserRequest ?? "";
+            prompt = prompt with { SystemPrompt = prompt.SystemPrompt };
+            // Prepend wiki examples to the user request — the model sees the
+            // patterns BEFORE the spec, then adapts them to the spec.
+            context = context with { UserRequest = wikiExamples + "\n\n---\n\nSpec to decompose:\n" + userRequest };
         }
 
         var result = await _model.GenerateAsync(
