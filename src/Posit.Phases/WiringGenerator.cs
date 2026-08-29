@@ -352,6 +352,20 @@ public static class WiringGenerator
                 // the empty-"" convention from discarding real units.
                 parts.Add($"tokens[{i}]");
             }
+            else if (i > 0 &&
+                     prevRet != "inputLine" && prevRet != "stdinLine" &&
+                     targetSig.ParamTypes[i] == "string" &&
+                     !IsLiteralFilled(i, conn, targetSig) &&
+                     !conn.ArgMappings.Any(m => m.Contains(targetSig.ParamNames[i])))
+            {
+                // File-entry CLI chained path: scalar CLI arg passthrough.
+                // The direct file-param branch (role-dispatch) handles this via
+                // Scalar role, but the CHAINED path (ParseLines→FilterByLevel→
+                // CountEntries) falls here. Without this, FilterByLevel(ret1, "")
+                // drops the level arg (T8 Phase E rack: fidelity gate forced a
+                // 3-method chain, revealing this gap). args[i] is the scalar.
+                parts.Add($"args.Length > {i} ? args[{i}] : \"\"");
+            }
             else
             {
                 // Remaining params: try argMappings, then defaults
