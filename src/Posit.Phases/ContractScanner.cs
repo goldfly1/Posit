@@ -182,6 +182,21 @@ public static class ContractScanner
             }
         }
 
+        // Single-line interface with // comments: trailing comments swallow the
+        // closing braces (comments run to end-of-LINE, and there IS no line end).
+        // T6 a1: '... // test: 20 X to C -> null } }' compiled as CS1513 — both
+        // '}' were comment text. Any interface with comments must be multi-line.
+        var hasComments = iface.Contains("//");
+        var lineCount = iface.Split('\n').Length;
+        if (hasComments && lineCount < 3)
+        {
+            errors.Add(new ScanError(comp.Name, "csharpInterface", "(single-line)",
+                "contains // comments but fewer than 3 lines — the trailing comment " +
+                "swallows the closing braces (comments end at end-of-line). Put every " +
+                "'{', '}', and ';' on its own line with real newlines.",
+                []));
+        }
+
         return errors;
     }
 

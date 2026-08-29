@@ -60,6 +60,10 @@ public static class PromptBuilder
         sb.AppendLine("      - Use native C# types (string, int, bool, string[], etc.)");
         sb.AppendLine("      - Add XML doc comments describing each method's contract");
         sb.AppendLine("      - Test cases as comments: // test: <description> → <expected>");
+        sb.AppendLine("      - MULTIPLE LINES with real newlines (\\n in the JSON string):");
+        sb.AppendLine("        every '{', '}', and ';' on its own line. A single-line interface");
+        sb.AppendLine("        makes the trailing // test: comments swallow the closing braces");
+        sb.AppendLine("        and the file will not compile.");
         sb.AppendLine("    Example interface:");
         sb.AppendLine("      namespace TempConverter {");
         sb.AppendLine("          public interface ITempConverter {");
