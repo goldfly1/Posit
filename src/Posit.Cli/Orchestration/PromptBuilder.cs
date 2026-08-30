@@ -79,7 +79,12 @@ public static class PromptBuilder
         sb.AppendLine("    fromMethod = method on THIS orchestrator (usually \"Run\"). toComponent = component Name. toMethod = their method.");
         sb.AppendLine("    Connections form a chain: each step's output feeds the next. Last step prints the result.");
         sb.AppendLine("  - entryType: \"file\" or \"stdin\" (on the orchestrator)");
-        sb.AppendLine("  - branchCondition: error branch description if a step returns isValid bool");
+        sb.AppendLine("  - branchCondition: SET THIS when the spec has error cases. If any test case has");
+        sb.AppendLine("    expectedExitCode 1 (error), describe the error branch here, e.g.");
+        sb.AppendLine("    'if input is empty: print Error: file is empty, exit 1'. The wiring generator");
+        sb.AppendLine("    reads this to emit an if-branch that checks the condition and prints the");
+        sb.AppendLine("    error message with exit 1 instead of the normal output path.");
+        sb.AppendLine("    Leave null ONLY when all test cases have exitCode 0 (no error path).");
         sb.AppendLine("  - testCases: [{id, name, targetType, description, expectedBehavior, input, expectedOutput, expectedExitCode}]");
         sb.AppendLine("    EVERY test case MUST include a concrete input and the EXACT expected output:");
         sb.AppendLine("    - input: the exact stdin line or file content this test feeds the program.");
