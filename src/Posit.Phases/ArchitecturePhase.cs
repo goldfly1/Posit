@@ -57,6 +57,38 @@ public sealed class ArchitecturePhase : IPhase
             context = context with { UserRequest = wikiExamples + "\n\n---\n\nSpec to decompose:\n" + originalSpec };
         }
 
+        // Surgical-edit retry (hot-potato): if this is a retry (attempt > 0) and
+        // we have the previous contract + correction signal, inject them so the
+        // architect EDITS the previous contract instead of regenerating from
+        // scratch. The correction signal contains the specific gate failure
+        // (e.g. "ValidateColumnCounts returns bool but Merge expects string[]").
+        var isRetry = context.AttemptNumber > 0;
+        var previousContract = context.PreviousOutput ?? "";
+        var correctionSignal = context.CorrectionSignal.Length > 0
+            ? string.Join("\n", context.CorrectionSignal) : "";
+        if (isRetry && !string.IsNullOrWhiteSpace(previousContract) && !string.IsNullOrWhiteSpace(correctionSignal))
+        {
+            var editInstruction = $"""
+                --- SURGICAL EDIT REQUIRED ---
+
+                Your PREVIOUS contract (attempt {context.AttemptNumber - 1}) had this issue:
+
+                {correctionSignal}
+
+                Here is your previous contract JSON:
+                ```json
+                {previousContract}
+                ```
+
+                FIX the specific issue above. Keep everything else the same.
+                Return the FULL corrected contract JSON. Do NOT start from scratch — EDIT the previous contract.
+                ---
+                """;
+            // Replace the wiki examples with the edit instruction — on retries,
+            // the surgical fix is more important than seeing patterns again.
+            context = context with { UserRequest = editInstruction + "\n\n---\n\nSpec to decompose:\n" + originalSpec };
+        }
+
         var result = await _model.GenerateAsync(
             context.ModelRoute, prompt, context, ct);
 
