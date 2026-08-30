@@ -42,6 +42,23 @@ public static class ContractFidelityChecker
     // rather than a verb ("format the output") — causes false positives.
     private static readonly string[] IoVerbs = ["print", "read", "write", "format"];
 
+    // ── CC limit (escalates on retry) ──
+    // Default is 5 (force clean decomposition). The ArchitecturePhase bumps
+    // this to 8, then 12, as retries exhaust. Reset to 5 at the start of
+    // each session/trial via ResetCcLimit().
+    private static int _currentCcLimit = 5;
+
+    /// <summary>
+    /// Set the CC limit for the next Check() call. Called by ArchitecturePhase
+    /// to escalate the limit on retries (5 → 8 → 12).
+    /// </summary>
+    public static void SetCcLimit(int limit) => _currentCcLimit = limit;
+
+    /// <summary>
+    /// Reset CC limit to default (5). Called at the start of each trial.
+    /// </summary>
+    public static void ResetCcLimit() => _currentCcLimit = 5;
+
     /// <summary>
     /// Check contract fidelity against the original spec text.
     /// Returns a list of fidelity errors (empty = pass).
@@ -223,7 +240,56 @@ public static class ContractFidelityChecker
             }
         }
 
-        // ── Check 5: Output-shape mismatch ──
+        // ── Check 5: Cyclomatic complexity (implied) ──
+        // Count decision-relevant keywords in the spec that relate to each
+        // logic component's method. If a method's implied CC exceeds the limit,
+        // reject with decomposition guidance. The limit escalates on retry
+        // (passed via a static field — see SetCcLimit below).
+        var ccLimit = _currentCcLimit;
+        var decisionKeywords = new[]
+        {
+            "if", "when", "case", "each", "or", "either", "unless",
+            "except", "while", "for", "switch", "otherwise", "else"
+        };
+        // Split spec into sentences for attribution
+        var sentences = specLower.Split(['.', '\n', ';'], StringSplitOptions.RemoveEmptyEntries);
+        foreach (var comp in logicComponents)
+        {
+            foreach (var ms in comp.MethodSignatures)
+            {
+                var methodName = ms.Name.ToLowerInvariant();
+                // Find spec sentences that mention this method's purpose
+                // (match on method name verbs or the method name itself)
+                var methodKeywords = methodName.Split(['_', ' '], StringSplitOptions.RemoveEmptyEntries);
+                var relevantSentences = sentences
+                    .Where(s => methodKeywords.Any(kw => s.Contains(kw)))
+                    .ToArray();
+                if (relevantSentences.Length == 0)
+                    continue; // Can't attribute — skip
+                // Count decision keywords in relevant sentences
+                var combined = string.Join(" ", relevantSentences);
+                var cc = 1; // Base complexity
+                foreach (var kw in decisionKeywords)
+                {
+                    var count = System.Text.RegularExpressions.Regex.Matches(
+                        combined, $@"\b{kw}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count;
+                    cc += count;
+                }
+                if (cc > ccLimit)
+                {
+                    errors.Add(new FidelityError(
+                        "cc-over-limit",
+                        $"Method '{comp.Name}.{ms.Name}' has implied cyclomatic complexity CC={cc} "
+                        + $"(limit={ccLimit}). The spec describes {cc - 1} decision points for this method. "
+                        + $"Split into smaller methods, each with CC≤{ccLimit}. "
+                        + $"For example: separate the '{string.Join("'/'", methodKeywords)}' logic into "
+                        + $"a parsing step and a decision step, or split multi-branch logic into "
+                        + $"separate methods per branch."));
+                }
+            }
+        }
+
+        // ── Check 6: Output-shape mismatch ──
         // If the spec demands formatted output (contains a print-format hint like
         // 'LEVEL: N' or 'key=value') but no test case carries OutputFormat, warn.
         // This is a soft check (warning, not hard fail) — the architect might

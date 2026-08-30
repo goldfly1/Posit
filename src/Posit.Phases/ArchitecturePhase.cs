@@ -125,12 +125,32 @@ public sealed class ArchitecturePhase : IPhase
         // the impl/QA/harness cycle. T8 a3 root cause: architect produced
         // FileIO.ReadFile for a parse→filter→count spec — well-formed but
         // semantically empty.
+        // Also: Check 5 enforces cyclomatic complexity limits (CC≤5 default,
+        // escalating to 8, then 12 on retries) to force clean decomposition.
         var fidelityErrors = ContractFidelityChecker.Check(contract, originalSpec);
         if (fidelityErrors.Count > 0)
         {
             var fidelityMsg = ContractFidelityChecker.FormatErrors(fidelityErrors);
+            // CC escalation: if the only errors are cc-over-limit, bump the limit
+            // for the next retry. This gives the architect a second chance with
+            // more room before giving up entirely.
+            var ccErrors = fidelityErrors.Where(e => e.Rule == "cc-over-limit").ToList();
+            if (ccErrors.Count > 0 && ccErrors.Count == fidelityErrors.Count)
+            {
+                // All errors are CC — escalate
+                var currentLimit = context.AttemptNumber switch
+                {
+                    <= 2 => 8,   // After 2 attempts at CC=5, try CC=8
+                    <= 4 => 12,  // After 2 more attempts at CC=8, try CC=12
+                    _ => 100,    // Give up limiting — let it through
+                };
+                ContractFidelityChecker.SetCcLimit(currentLimit);
+                Console.Error.WriteLine($"[architecture] CC limit escalated to {currentLimit} (attempt {context.AttemptNumber})");
+            }
             return Fail(context, fidelityMsg, result);
         }
+        // CC passed at current limit — reset for next trial
+        ContractFidelityChecker.ResetCcLimit();
 
         // Type chain check — validate data flow types
         var chainErrors = TypeChainChecker.CheckPreImpl(contract);
