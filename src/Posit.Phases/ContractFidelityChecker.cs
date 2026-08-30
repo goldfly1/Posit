@@ -38,7 +38,9 @@ public static class ContractFidelityChecker
 
     // I/O verbs excluded from the degenerate-contract verb count (they're the
     // orchestrator's responsibility, not logic decomposition).
-    private static readonly string[] IoVerbs = ["print", "read", "write"];
+    // "format" is included because it's frequently a noun ("in the format X")
+    // rather than a verb ("format the output") — causes false positives.
+    private static readonly string[] IoVerbs = ["print", "read", "write", "format"];
 
     /// <summary>
     /// Check contract fidelity against the original spec text.
