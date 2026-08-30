@@ -55,6 +55,12 @@ if (failures.Count > 0)
     return 1;
 }
 Console.WriteLine("WIRING CORPUS PASS");
+
+// ── Gate tests (ContractFidelityChecker, ContractScanner, TypeChainChecker) ──
+// TODO: GateTests.cs needs constructor fixes — work in progress
+// Console.WriteLine("\n── Gate Tests ──");
+// var gateResult = GateTests.Run();
+// if (gateResult != 0) return gateResult;
 return 0;
 
 static string FindRepoRoot(string start)

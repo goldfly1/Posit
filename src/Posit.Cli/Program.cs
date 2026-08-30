@@ -289,12 +289,12 @@ internal static class Program
                     OutputFormat = OutputFormat.PlainText, OutputSchemaRef = "CSharpSource",
                     Status = PromptStatus.Active
                 };
-                // ImplFixer seat: glm-5.2:cloud (Phase F roster) — stronger at
-                // reasoning about WHY a test failed (diagnosis, not just code
-                // generation). Low frequency (0-2 calls/trial), free (no token
-                // billing), already installed. 16K gives thinking room.
-                var fixModelRoute = new ModelRoute { Tier = ModelTier.Standard, ProviderId = "ollama",
-                    ModelId = "glm-5.2:cloud", MaxOutputTokens = 16384, Temperature = fixTemperature };
+                // ImplFixer seat: deepseek-v4-flash:cloud — same model as implementation
+                // (consistency: the fixer sees the same code style it's fixing). Was
+                // glm-5.2:cloud but that burned compute with outsized token costs for
+                // a job that's just "regenerate C# with error feedback".
+                var fixModelRoute = new ModelRoute { Tier = ModelTier.Fast, ProviderId = "ollama",
+                    ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 16384, Temperature = fixTemperature };
                 var fixResult = await gateway.GenerateAsync(
                     fixModelRoute,
                     fixPromptTemplate,
