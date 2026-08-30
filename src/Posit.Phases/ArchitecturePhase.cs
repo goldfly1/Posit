@@ -141,7 +141,7 @@ public sealed class ArchitecturePhase : IPhase
                 var currentLimit = context.AttemptNumber switch
                 {
                     <= 2 => 8,   // After 2 attempts at CC=5, try CC=8
-                    <= 4 => 12,  // After 2 more attempts at CC=8, try CC=12
+                    <= 4 => 10,  // After 2 more attempts at CC=8, try CC=10 (McCabe's standard threshold, NIST SP 500-235)
                     _ => 100,    // Give up limiting — let it through
                 };
                 ContractFidelityChecker.SetCcLimit(currentLimit);
