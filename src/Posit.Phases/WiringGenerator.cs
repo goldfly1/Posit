@@ -87,6 +87,33 @@ public static class WiringGenerator
 
         sb.AppendLine("            try");
         sb.AppendLine("            {");
+
+        // BranchCondition: if the architect set an error branch, emit a check
+        // before the normal path. The condition is a natural-language string —
+        // we look for key patterns: "if X is empty", "if X is null", "if X is 0".
+        if (!string.IsNullOrWhiteSpace(comp.BranchCondition))
+        {
+            var bc = comp.BranchCondition.ToLowerInvariant();
+            // Extract the error message from the branch condition text
+            // Pattern: "print 'Error: ...' " or "print \"Error: ...\""
+            var errorMsgMatch = System.Text.RegularExpressions.Regex.Match(
+                comp.BranchCondition, @"print\s+['""](.+?)['""]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var errorMsg = errorMsgMatch.Success ? errorMsgMatch.Groups[1].Value : "Error: condition failed";
+
+            // Determine what to check: empty input, empty result, or null
+            if (bc.Contains("empty") && isStdin)
+            {
+                // Check stdin input before the connection chain
+                sb.AppendLine($"            if (string.IsNullOrEmpty(inputLine)) {{ Console.WriteLine(\"{errorMsg}\"); return 1; }}");
+            }
+            else if (bc.Contains("empty") && !isStdin)
+            {
+                // Check file content before the chain — args[0] is the file path
+                sb.AppendLine($"            var entryContent = System.IO.File.ReadAllText(args[0]);");
+                sb.AppendLine($"            if (string.IsNullOrEmpty(entryContent)) {{ Console.WriteLine(\"{errorMsg}\"); return 1; }}");
+            }
+        }
+
         AppendConnectionCalls(sb, comp, contract, impl, stubs, isStdin ? "inputLine" : "args[0]", outputFormat, emptyText);
         sb.AppendLine("                return 0;");
         sb.AppendLine("            }");
@@ -234,15 +261,27 @@ public static class WiringGenerator
                             goto default;
                         }
                         default:
-                        {
-                            // Scalar CLI arg (or a second Content param demoted because
-                            // the file slot was already consumed — a 2 Content-param
-                            // spec is expressed as two string[] (Lines) per T12).
-                            var sv = $"scalarArg{ai}";
-                            sb.AppendLine($"            var {sv} = args.Length > {ai} ? args[{ai}] : \"\";");
-                            argExprs.Add(sv);
-                            break;
-                        }
+                            {
+                                // Scalar CLI arg (or a second Content param demoted because
+                                // the file slot was already consumed — a 2 Content-param
+                                // spec is expressed as two string[] (Lines) per T12).
+                                var sv = $"scalarArg{ai}";
+                                var paramType = NormalizeType(targetSig.ParamTypes[ai]);
+                                if (paramType == "int" || paramType == "long")
+                                {
+                                    sb.AppendLine($"            var {sv} = args.Length > {ai} ? int.Parse(args[{ai}]) : 0;");
+                                }
+                                else if (paramType == "double")
+                                {
+                                    sb.AppendLine($"            var {sv} = args.Length > {ai} ? double.Parse(args[{ai}]) : 0.0;");
+                                }
+                                else
+                                {
+                                    sb.AppendLine($"            var {sv} = args.Length > {ai} ? args[{ai}] : \"\";");
+                                }
+                                argExprs.Add(sv);
+                                break;
+                            }
                     }
                 }
                 var isInstanceTarget = targetComp.Classification != ModuleClassification.IoShell;
