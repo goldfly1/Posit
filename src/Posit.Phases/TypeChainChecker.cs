@@ -59,6 +59,60 @@ public static class TypeChainChecker
     {
         var errors = new List<TypeChainError>();
 
+        // ── Type collision check ──
+        // Scan all components for non-native type names used in method signatures.
+        // If the same type name appears in two different components, the Docker
+        // build will fail with CS0433 ("type exists in both"). T10 root cause:
+        // PriceConverter defined in both PriceConverter and ProductFilter.
+        var nativeTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "string", "int", "long", "double", "bool", "void", "object",
+            "string[]", "List<string>", "Dictionary<string,string>"
+        };
+        var typeOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var comp in contract.Components)
+        {
+            if (comp.Classification == ModuleClassification.IoShell) continue;
+            var typesInComp = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ms in comp.MethodSignatures)
+            {
+                // Check return type
+                var retType = ms.ReturnType?.Trim() ?? "";
+                if (!string.IsNullOrEmpty(retType) && !nativeTypes.Contains(retType))
+                    typesInComp.Add(retType);
+                // Check param types
+                foreach (var p in ms.Params)
+                {
+                    var pType = p.Type?.Trim() ?? "";
+                    if (!string.IsNullOrEmpty(pType) && !nativeTypes.Contains(pType))
+                        typesInComp.Add(pType);
+                }
+            }
+            // Also check shared types
+            if (comp.SharedTypes is { Length: > 0 })
+            {
+                foreach (var st in comp.SharedTypes)
+                    typesInComp.Add(st.TypeName);
+            }
+            foreach (var typeName in typesInComp)
+            {
+                if (typeOwners.TryGetValue(typeName, out var existingOwner))
+                {
+                    if (existingOwner != comp.Name)
+                    {
+                        errors.Add(new TypeChainError(
+                            comp.Name, 0, comp.Name, "",
+                            typeName, existingOwner, "", typeName));
+                    }
+                }
+                else
+                {
+                    typeOwners[typeName] = comp.Name;
+                }
+            }
+        }
+
+        // ── Connection type chain check ──
         foreach (var comp in contract.Components)
         {
             if (comp.Connections.Length < 2) continue;
