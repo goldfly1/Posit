@@ -140,7 +140,7 @@ public sealed class PositOrchestrator(PhaseController controller, FsmReducer fsm
         var (modelId, tier, temp, maxTokens) = phaseId.Value switch
         {
             "architecture" => ("deepseek-v4-pro:cloud", ModelTier.Frontier, 0.3, 16384),
-            _ => ("deepseek-v4-flash:cloud", ModelTier.Fast, 0.2, 16384)
+            _ => ("deepseek-v4-flash:cloud", ModelTier.Fast, 0.0, 16384)
         };
         return new ModelRoute
         {

@@ -28,7 +28,7 @@ public static class PromptBuilder
         {
             PhaseId = phaseId, Version = new PromptVersion("1.0.0"),
             SystemPrompt = system, OutputFormatSpec = format,
-            ModelTier = ModelTier.Fast, Temperature = 0.2, MaxOutputTokens = 8192,
+            ModelTier = ModelTier.Fast, Temperature = 0.0, MaxOutputTokens = 8192,
             OutputFormat = OutputFormat.Json, OutputSchemaRef = "ArchitectureContract",
             Status = PromptStatus.Active
         };

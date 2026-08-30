@@ -72,7 +72,7 @@ public sealed class ArchitecturePhase : IPhase
         // own previous answer. Higher temperature forces diversity.
         if (isRetry && !string.IsNullOrWhiteSpace(previousContract) && !string.IsNullOrWhiteSpace(correctionSignal))
         {
-            context = context with { ModelRoute = context.ModelRoute with { Temperature = 0.7 } };
+            context = context with { ModelRoute = context.ModelRoute with { Temperature = 0.3 } };
             var editInstruction = $"""
                 --- SURGICAL EDIT REQUIRED ---
 

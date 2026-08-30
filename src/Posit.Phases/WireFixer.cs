@@ -54,7 +54,7 @@ public sealed class WireFixer
             SystemPrompt = systemPrompt,
             OutputFormatSpec = "Fixed C# source code only (complete Wire.cs file)",
             ModelTier = ModelTier.Fast,
-            Temperature = 0.1,
+            Temperature = 0.0,
             MaxOutputTokens = 4096,
             OutputFormat = OutputFormat.PlainText,
             OutputSchemaRef = "WireCs",

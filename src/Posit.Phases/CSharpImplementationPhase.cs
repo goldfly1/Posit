@@ -221,7 +221,7 @@ public sealed class CSharpImplementationPhase : IPhase
                 SystemPrompt = systemPrompt,
                 OutputFormatSpec = "raw C# source code",
                 ModelTier = ModelTier.Fast,
-                Temperature = attempt == 1 ? 0.2 : 0.3,
+                Temperature = 0.0, // translation, not creation — determinism over flexibility
                 MaxOutputTokens = 8192,
                 OutputFormat = OutputFormat.PlainText,
                 OutputSchemaRef = "CSharpSource",

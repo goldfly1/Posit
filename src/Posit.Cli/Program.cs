@@ -280,7 +280,7 @@ internal static class Program
                 // Retry diversity: higher temperature on attempt 2+ — same prompt
                 // + same model + same temp = same output (observed in T8: two
                 // identical 675-char regenerations).
-                var fixTemperature = implRetry > 0 ? 0.7 : 0.3;
+                var fixTemperature = 0.1; // targeted fixes, not creative leaps
                 var fixPromptTemplate = new PromptTemplate
                 {
                     PhaseId = new PhaseId("impl-fix"), Version = new PromptVersion("1.0.0"),
@@ -608,7 +608,7 @@ internal static class Program
     private static ModelRoute GetModelForFixer() => new()
     {
         Tier = ModelTier.Fast, ProviderId = "ollama",
-        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.1
+        ModelId = "deepseek-v4-flash:cloud", MaxOutputTokens = 8192, Temperature = 0.0
     };
 
     /// <summary>
