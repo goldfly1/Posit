@@ -168,15 +168,23 @@ public static class ContractScanner
         }
 
         // Check for method bodies (interface should be signatures only)
-        // A body is `{ <statements> }` after a method signature. Look for implementation indicators.
-        var bodyIndicators = new[] { "var ", "while ", "for ", "return " };
+        // A body is `{ <statements> }` after a method signature. Look for
+        // implementation indicators as WHOLE WORDS (not substrays — "for "
+        // inside "foreach" or "Format" causes false positives).
+        var bodyIndicators = new[] { "for", "while", "foreach", "switch", "var", "return" };
         foreach (var indicator in bodyIndicators)
         {
-            if (iface.Contains(indicator, StringComparison.OrdinalIgnoreCase))
+            // Match as a whole word: preceded by non-letter and followed by
+            // non-letter (or space/paren/brace). This avoids matching "for"
+            // inside "foreach", "Format", "Information", "transform", etc.
+            var pattern = $"\\b{indicator}\\b";
+            if (System.Text.RegularExpressions.Regex.IsMatch(iface, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             {
-                errors.Add(new ScanError(comp.Name, "csharpInterface", indicator.Trim(),
+                // But don't match "for" in "foreach" — check word boundary properly
+                // Regex \b already handles this: \bfor\b won't match "foreach"
+                errors.Add(new ScanError(comp.Name, "csharpInterface", indicator,
                     $"found in interface — the interface must be SIGNATURES ONLY. " +
-                    $"C#Impl fills in the bodies. Remove '{indicator.Trim()}' statements from the interface.",
+                    $"C#Impl fills in the bodies. Remove '{indicator}' statements from the interface.",
                     []));
                 break;
             }
