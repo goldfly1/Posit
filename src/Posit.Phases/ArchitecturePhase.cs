@@ -104,6 +104,12 @@ public sealed class ArchitecturePhase : IPhase
         if (contract == null)
             return Fail(context, "Failed to parse ArchitectureContract from model output", result);
 
+        // Sanitize: strip implementation lines (for/while/if/var/return) from
+        // C# interface fields. The model sometimes puts loop bodies in the
+        // interface (signatures-only). The ContractScanner rejects them, but the
+        // model can't fix them on retry. Strip them deterministically instead.
+        contract = SanitizeContractInterfaces(contract);
+
         // Write C# interface files to staging for logic components
         var composeErrors = WriteInterfaces(contract, context);
         if (composeErrors.Count > 0)
@@ -191,6 +197,61 @@ public sealed class ArchitecturePhase : IPhase
         }
 
         return errors;
+    }
+
+    /// <summary>
+    /// Strip implementation lines from C# interface fields.
+    /// The model sometimes puts for/while/if/var/return blocks in the interface
+    /// (which should be signatures only). This removes lines containing
+    /// implementation keywords, keeping only namespace/interface/method
+    /// declarations, braces, doc comments, and test-case comments.
+    /// </summary>
+    private static ArchitectureContract SanitizeContractInterfaces(ArchitectureContract contract)
+    {
+        var implKeywords = new[] { "for ", "while ", "if ", "var ", "return ", "foreach ", "switch " };
+        var sanitized = new List<Component>();
+        foreach (var comp in contract.Components)
+        {
+            if (comp.Classification == ModuleClassification.IoShell || string.IsNullOrWhiteSpace(comp.CSharpInterface))
+            {
+                sanitized.Add(comp);
+                continue;
+            }
+            var iface = comp.CSharpInterface;
+            var lines = iface.Split('\n');
+            var kept = new List<string>();
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                // Keep structural lines (namespace, interface, braces, comments, blank)
+                if (string.IsNullOrWhiteSpace(trimmed) ||
+                    trimmed.StartsWith("//") ||
+                    trimmed.StartsWith("namespace") ||
+                    trimmed.StartsWith("public interface") ||
+                    trimmed.StartsWith("{") ||
+                    trimmed.StartsWith("}") ||
+                    trimmed.StartsWith("///") ||
+                    trimmed.StartsWith("using"))
+                {
+                    kept.Add(line);
+                    continue;
+                }
+                // Keep method signatures (lines with '(' and ')' and ';' or no body)
+                if (trimmed.Contains("(") && (trimmed.Contains(")") || trimmed.Contains(";")))
+                {
+                    kept.Add(line);
+                    continue;
+                }
+                // Strip implementation lines (for, while, if, var, return, etc.)
+                var isImpl = implKeywords.Any(k => trimmed.StartsWith(k, StringComparison.OrdinalIgnoreCase));
+                if (isImpl)
+                    continue; // skip implementation lines
+                // Keep anything else (might be method params on continuation lines)
+                kept.Add(line);
+            }
+            sanitized.Add(comp with { CSharpInterface = string.Join("\n", kept) });
+        }
+        return contract with { Components = [.. sanitized] };
     }
 
     private static string GetStagingDir(PhaseContext context) =>
