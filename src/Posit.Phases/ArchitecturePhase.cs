@@ -66,8 +66,13 @@ public sealed class ArchitecturePhase : IPhase
         var previousContract = context.PreviousOutput ?? "";
         var correctionSignal = context.CorrectionSignal.Length > 0
             ? string.Join("\n", context.CorrectionSignal) : "";
+        // On retries, bump temperature to break deterministic regurgitation.
+        // v4-pro at temp=0.3 produces byte-identical output across retries —
+        // the correction signal is received but the model can't escape its
+        // own previous answer. Higher temperature forces diversity.
         if (isRetry && !string.IsNullOrWhiteSpace(previousContract) && !string.IsNullOrWhiteSpace(correctionSignal))
         {
+            context = context with { ModelRoute = context.ModelRoute with { Temperature = 0.7 } };
             var editInstruction = $"""
                 --- SURGICAL EDIT REQUIRED ---
 
