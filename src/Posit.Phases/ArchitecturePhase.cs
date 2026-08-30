@@ -208,7 +208,7 @@ public sealed class ArchitecturePhase : IPhase
     /// </summary>
     private static ArchitectureContract SanitizeContractInterfaces(ArchitectureContract contract)
     {
-        var implKeywords = new[] { "for ", "while ", "if ", "var ", "return ", "foreach ", "switch " };
+        var implKeywords = new[] { "for", "while", "if", "var", "return", "foreach", "switch" };
         var sanitized = new List<Component>();
         foreach (var comp in contract.Components)
         {
@@ -242,8 +242,11 @@ public sealed class ArchitecturePhase : IPhase
                     kept.Add(line);
                     continue;
                 }
-                // Strip implementation lines (for, while, if, var, return, etc.)
-                var isImpl = implKeywords.Any(k => trimmed.StartsWith(k, StringComparison.OrdinalIgnoreCase));
+                // Strip implementation lines — match keywords as whole words
+                // (regex \b) so "for(" (no space) is caught, and "Format" is NOT.
+                var isImpl = implKeywords.Any(k =>
+                    System.Text.RegularExpressions.Regex.IsMatch(
+                        trimmed, $@"\b{k}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
                 if (isImpl)
                     continue; // skip implementation lines
                 // Keep anything else (might be method params on continuation lines)
