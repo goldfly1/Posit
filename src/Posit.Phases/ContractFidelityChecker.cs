@@ -289,12 +289,47 @@ public static class ContractFidelityChecker
             }
         }
 
-        // ── Check 6: Output-shape mismatch ──
-        // If the spec demands formatted output (contains a print-format hint like
-        // 'LEVEL: N' or 'key=value') but no test case carries OutputFormat, warn.
-        // This is a soft check (warning, not hard fail) — the architect might
-        // return a pre-formatted string from the logic itself.
-        // TODO: enable when OutputFormat is proven on more trials.
+        // ── Check 6: Non-native return type without OutputFormat ──
+        // If a logic method returns a type that's NOT in our native set
+        // (string, int, double, bool, string[], List<string>, Dictionary),
+        // the EmitPrint will serialize it as JSON — which almost never
+        // matches the spec's expected output. The method should return
+        // a native type (usually string with the formatted output inline)
+        // OR the contract should carry OutputFormat.
+        var nativeTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "string", "int", "long", "double", "bool", "string[]", "List<string>",
+            "Dictionary<string,string>", "void", "bool"
+        };
+        foreach (var comp in logicComponents)
+        {
+            // Check if this component is the LAST in any connection chain
+            // (its output goes to the print site)
+            var isLastInChain = contract.Components
+                .Any(c => c.Connections is { Length: > 0 } &&
+                          c.Connections[^1].ToComponent == comp.Name);
+            if (!isLastInChain) continue;
+
+            foreach (var ms in comp.MethodSignatures)
+            {
+                var retType = ms.ReturnType?.Trim() ?? "";
+                if (string.IsNullOrEmpty(retType) || nativeTypes.Contains(retType))
+                    continue;
+                // Check if any test case has OutputFormat
+                var hasOutputFormat = comp.TestCases.Any(tc => !string.IsNullOrWhiteSpace(tc.OutputFormat));
+                if (!hasOutputFormat)
+                {
+                    errors.Add(new FidelityError(
+                        "non-native-return-no-format",
+                        $"Method '{comp.Name}.{ms.Name}' returns non-native type '{retType}' "
+                        + $"but no test case carries outputFormat. EmitPrint will serialize this "
+                        + $"as JSON (e.g. {{\"Field\":\"value\"}}) which won't match the spec's "
+                        + $"expected output. FIX: Either (a) change the return type to 'string' "
+                        + $"and build the formatted output inside the method, or (b) set outputFormat "
+                        + $"on the test cases to specify how the value should be printed."));
+                }
+            }
+        }
 
         return errors;
     }
