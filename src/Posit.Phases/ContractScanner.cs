@@ -169,25 +169,29 @@ public static class ContractScanner
 
         // Check for method bodies (interface should be signatures only)
         // A body is `{ <statements> }` after a method signature. Look for
-        // implementation indicators as WHOLE WORDS (not substrays — "for "
-        // inside "foreach" or "Format" causes false positives).
+        // implementation indicators as WHOLE WORDS — but ONLY in code lines,
+        // not in comments (/// or //). "for" in "override file1 for duplicate
+        // keys" (a doc comment) is a preposition, not a loop keyword.
         var bodyIndicators = new[] { "for", "while", "foreach", "switch", "var", "return" };
         foreach (var indicator in bodyIndicators)
         {
-            // Match as a whole word: preceded by non-letter and followed by
-            // non-letter (or space/paren/brace). This avoids matching "for"
-            // inside "foreach", "Format", "Information", "transform", etc.
-            var pattern = $"\\b{indicator}\\b";
-            if (System.Text.RegularExpressions.Regex.IsMatch(iface, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            // Check each line, skipping comments
+            foreach (var line in iface.Split('\n'))
             {
-                // But don't match "for" in "foreach" — check word boundary properly
-                // Regex \b already handles this: \bfor\b won't match "foreach"
-                errors.Add(new ScanError(comp.Name, "csharpInterface", indicator,
-                    $"found in interface — the interface must be SIGNATURES ONLY. " +
-                    $"C#Impl fills in the bodies. Remove '{indicator}' statements from the interface.",
-                    []));
-                break;
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("//") || trimmed.StartsWith("///") || trimmed.StartsWith("/*") || trimmed.StartsWith("*"))
+                    continue; // skip comment lines
+                var pattern = $@"\b{indicator}\b";
+                if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    errors.Add(new ScanError(comp.Name, "csharpInterface", indicator,
+                        $"found in interface — the interface must be SIGNATURES ONLY. " +
+                        $"C#Impl fills in the bodies. Remove '{indicator}' statements from the interface.",
+                        []));
+                    goto nextIndicator; // break out of line loop, report once per indicator
+                }
             }
+            nextIndicator:;
         }
 
         // Single-line interface with // comments: trailing comments swallow the

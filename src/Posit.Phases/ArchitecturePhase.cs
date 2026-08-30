@@ -104,10 +104,6 @@ public sealed class ArchitecturePhase : IPhase
         if (contract == null)
             return Fail(context, "Failed to parse ArchitectureContract from model output", result);
 
-        // Sanitize: strip implementation lines (for/while/if/var/return) from
-        // C# interface fields. The model sometimes puts loop bodies in the
-        // interface (signatures-only). The ContractScanner rejects them, but the
-        // model can't fix them on retry. Strip them deterministically instead.
         contract = SanitizeContractInterfaces(contract);
 
         // Write C# interface files to staging for logic components
