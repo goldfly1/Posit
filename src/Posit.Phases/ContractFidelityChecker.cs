@@ -290,33 +290,61 @@ public static class ContractFidelityChecker
         }
 
         // ── Check 6: Non-native return type without OutputFormat ──
-        // If a logic method returns a type that's NOT in our native set
-        // (string, int, double, bool, string[], List<string>, Dictionary),
-        // the EmitPrint will serialize it as JSON — which almost never
-        // matches the spec's expected output. The method should return
-        // a native type (usually string with the formatted output inline)
-        // OR the contract should carry OutputFormat.
+        // If the LAST logic method in a connection chain returns a type that's
+        // NOT in our native set, EmitPrint will serialize it as JSON. Also
+        // catches numeric returns when the spec's expected output has a prefix
+        // format (T8: int return + 'ERROR: 2' expected → prints '2').
+        // Test cases live on the ORCHESTRATOR component, not the logic component —
+        // so we gather ExpectedOutput from the orchestrator that calls this method.
         var nativeTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "string", "int", "long", "double", "bool", "string[]", "List<string>",
-            "Dictionary<string,string>", "void", "bool"
+            "Dictionary<string,string>", "void"
         };
+        // Collect all test-case expected outputs from orchestrator components
+        var allExpectedOutputs = contract.Components
+            .Where(c => c.Connections is { Length: > 0 })
+            .SelectMany(c => c.TestCases)
+            .Where(tc => !string.IsNullOrWhiteSpace(tc.ExpectedOutput))
+            .Select(tc => tc.ExpectedOutput!)
+            .ToList();
+        var hasAnyFormattedExpected = allExpectedOutputs.Any(eo =>
+            System.Text.RegularExpressions.Regex.IsMatch(eo, @"^[A-Za-z]+:\s*\S"));
         foreach (var comp in logicComponents)
         {
             // Check if this component is the LAST in any connection chain
-            // (its output goes to the print site)
             var isLastInChain = contract.Components
                 .Any(c => c.Connections is { Length: > 0 } &&
                           c.Connections[^1].ToComponent == comp.Name);
             if (!isLastInChain) continue;
 
+            // Check if any test case (on ANY component) has OutputFormat
+            var hasOutputFormat = contract.Components
+                .SelectMany(c => c.TestCases)
+                .Any(tc => !string.IsNullOrWhiteSpace(tc.OutputFormat));
+
             foreach (var ms in comp.MethodSignatures)
             {
                 var retType = ms.ReturnType?.Trim() ?? "";
                 if (string.IsNullOrEmpty(retType) || nativeTypes.Contains(retType))
+                {
+                    // Native type — but check if it's numeric and the expected
+                    // output has a prefix format (T8: int + 'ERROR: 2')
+                    var isNumericReturn = retType is "int" or "long" or "double";
+                    if (isNumericReturn && hasAnyFormattedExpected && !hasOutputFormat)
+                    {
+                        errors.Add(new FidelityError(
+                            "missing-output-format",
+                            $"Method '{comp.Name}.{ms.Name}' returns '{retType}' but the spec's "
+                            + $"expected output has a prefix format (e.g. 'ERROR: 2'). The raw "
+                            + $"number will be printed as '{retType}' value, not the formatted "
+                            + $"output. FIX: Set outputFormat on the test cases to 'PREFIX: {{value}}' "
+                            + $"where PREFIX is the actual word from the expected output "
+                            + $"(e.g. 'ERROR: {{value}}')."));
+                    }
                     continue;
-                // Check if any test case has OutputFormat
-                var hasOutputFormat = comp.TestCases.Any(tc => !string.IsNullOrWhiteSpace(tc.OutputFormat));
+                }
+                // Non-native type without OutputFormat
                 if (!hasOutputFormat)
                 {
                     errors.Add(new FidelityError(
