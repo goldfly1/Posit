@@ -236,19 +236,21 @@ public sealed class ArchitecturePhase : IPhase
                     kept.Add(line);
                     continue;
                 }
+                // Strip implementation lines — match keywords as whole words
+                // (regex \b) so "for(" (no space) is caught, and "Format" is NOT.
+                // Check this BEFORE the method-signature check — a for loop has
+                // ( and ) so it would pass as a "method signature" if checked first.
+                var isImpl = implKeywords.Any(k =>
+                    System.Text.RegularExpressions.Regex.IsMatch(
+                        trimmed, $@"\b{k}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+                if (isImpl)
+                    continue; // skip implementation lines
                 // Keep method signatures (lines with '(' and ')' and ';' or no body)
                 if (trimmed.Contains("(") && (trimmed.Contains(")") || trimmed.Contains(";")))
                 {
                     kept.Add(line);
                     continue;
                 }
-                // Strip implementation lines — match keywords as whole words
-                // (regex \b) so "for(" (no space) is caught, and "Format" is NOT.
-                var isImpl = implKeywords.Any(k =>
-                    System.Text.RegularExpressions.Regex.IsMatch(
-                        trimmed, $@"\b{k}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
-                if (isImpl)
-                    continue; // skip implementation lines
                 // Keep anything else (might be method params on continuation lines)
                 kept.Add(line);
             }
