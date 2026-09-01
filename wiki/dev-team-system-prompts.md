@@ -250,6 +250,19 @@ QA compares: CLI output == GUI output == expected output → PASS
 
 The shell eliminates the WiringGenerator's biggest weakness: ParamRole classification (guessing whether a string param is a file path, content, or scalar). The shell knows exactly how to parse input into method params because it *generated the fields from the method signatures.* No guessing. The shell IS the wiring — deterministic, template-driven.
 
+### GUI page model
+
+The GUI shell supports 24 pages with infinite vertical scroll per page:
+- **Ctrl+F1 through Ctrl+F12** — pages 1-12
+- **Ctrl+Shift+F1 through Ctrl+Shift+F12** — pages 13-24
+- **Page Down / Page Up** — scroll within a page
+- **F1-F12** — field/button hot-keys within the current page
+- **Enter** — submit / activate current field
+
+Page 1 is reserved for human-facing info (program name, description, status). Pages 2-24 are generated from the contract — each page holds fields and buttons for one component or one test case group. The bot navigates by page + field index, never by visual position.
+
+The key map IS the API. The bot sees: "Ctrl+F2, Page Down 3, F3, type 'hello world', Enter, read output field." Layout, color, spacing are a presentation layer applied later — they don't affect determinism. Pinstriping and color tone are the last step, after the program works.
+
 ### Entry types the shell handles
 
 | Entry type | CLI shell | GUI shell | Key map |
