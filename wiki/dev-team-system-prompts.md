@@ -198,6 +198,79 @@ You are the Memory Keeper for Posit. After every trial (pass or fail), you extra
 
 ---
 
+## The Shell Architecture
+
+Every VPosit program ships with three components in Docker:
+
+```
+Generated program/
+  Components/          ← business logic (different every time)
+  Shells/
+    CliShell.cs        ← full CLI: every flag, every prompt (template — same every time)
+    GuiShell.cs        ← simple GUI: hot-key driven, same key maps (template — same every time)
+  Wire.cs              ← wiring (deterministic from contract)
+```
+
+### The Trireme Principle applied to shells
+
+The shells ARE triremes — captured, reverse-engineered, mass-produced. Every program gets the same shell skeleton. The only thing that changes is which methods the shell calls and how many fields it generates.
+
+### How shells work
+
+1. **Shell is parameterized by the contract.** The contract's method signatures determine the fields:
+   - 2 file-path params → CLI generates `--file1 <path> --file2 <path>`, GUI generates 2 file-picker fields (F1, F2)
+   - 1 scalar param → CLI generates `--level <word>`, GUI generates 1 text field (F3)
+   - stdin entry → CLI reads from stdin, GUI generates 1 text input field + Enter
+   - N return values → GUI generates N output fields, CLI prints to stdout
+
+2. **QA route is auto-generated from test cases.** The Architect defines test cases with concrete input/expected output. A route generator reads those and produces a key sequence:
+   - "Press F1, type 'hello world', press Enter, read output field 1, compare to 'HELLO WORLD'"
+   - No human writes routes — they're derived from test cases deterministically
+
+3. **Cross-validation is built-in.** Run the same pseudodata through both CLI and GUI. If outputs differ, the shell has a bug (not the logic). The shell tests itself every QA run.
+
+4. **Both paths crunch the same logic.** CLI and GUI are two doors to the same room. Pseudodata goes in either door, the logic processes it, the result comes out. QA compares to expected output → PASS or FAIL.
+
+### The QA flow
+
+```
+Program generated → Docker container has: logic + CLI shell + GUI shell
+                                    ↓
+QA agent generates route from test cases (deterministic)
+                                    ↓
+QA bot drives CLI (flags/args) AND GUI (key presses) with pseudodata
+                                    ↓
+Both paths produce output through the same logic
+                                    ↓
+QA compares: CLI output == GUI output == expected output → PASS
+             Any mismatch → FAIL (shell bug or logic bug, isolated by cross-check)
+```
+
+### Why this helps solve coding
+
+The shell eliminates the WiringGenerator's biggest weakness: ParamRole classification (guessing whether a string param is a file path, content, or scalar). The shell knows exactly how to parse input into method params because it *generated the fields from the method signatures.* No guessing. The shell IS the wiring — deterministic, template-driven.
+
+### Entry types the shell handles
+
+| Entry type | CLI shell | GUI shell | Key map |
+|---|---|---|---|
+| File (args[0]) | `--file <path>` or positional arg | File picker field (F1) | F1 → browse, Enter → submit |
+| Two files | `--file1 <path> --file2 <path>` | Two file pickers (F1, F2) | F1, F2 → browse, Enter → submit |
+| Stdin line | Read from stdin | Text input field (F1) | F1 → type, Enter → submit |
+| Scalar arg | `--level <word>` | Text field (F2) | F2 → type, Enter → submit |
+| Error path | Print error to stderr, exit 1 | Display error in output field | Read output field → compare |
+
+### Shell templates as VPosit artifacts
+
+The shell templates are part of VPosit itself — they live in `VPosit/patterns/shells/`:
+- `CliShell.template.cs` — parameterized by method signatures, generates flags
+- `GuiShell.template.cs` — parameterized by method signatures, generates fields + key maps
+- `RouteGenerator.cs` — reads test cases from contract, produces QA routes
+
+These are written once, verified once, and reused for every generated program.
+
+---
+
 ## Model Roster Summary
 
 | Role | Model | Temp | Tokens | Why |
